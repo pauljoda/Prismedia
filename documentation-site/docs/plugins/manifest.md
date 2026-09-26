@@ -25,6 +25,7 @@ kinds and identify actions it serves.
   "version": "0.3.0",
   "runtime": "dotnet-process",
   "entry": "dist/Prismedia.Plugin.OpenLibrary.dll",
+  "icon": "assets/icon.svg",
   "compat": {
     "pluginApiMin": "2.0.0",
     "pluginApiMax": null,
@@ -71,11 +72,28 @@ kinds and identify actions it serves.
 | `version` | string | Artifact SemVer. |
 | `runtime` | string | Runtime code — see [Runtimes](#runtimes). |
 | `entry` | string | Entry artifact path, relative to the manifest directory when not rooted. |
+| `icon` | string? | Packaged SVG or PNG path — see [Plugin icons](#plugin-icons). |
 | `compat.pluginApiMin` / `compat.pluginApiMax` | string / string? | Plugin-protocol version bounds. `null` max means "no upper bound". |
 | `compat.prismediaMin` / `compat.prismediaMax` | string / string? | Prismedia application version bounds. |
 | `auth` | object[] | Credential fields the plugin requests — see [Auth fields](#auth-fields). |
 | `isNsfw` | boolean | Whether imported metadata should be marked NSFW by default. |
 | `supports` | object[] | Entity kinds and identify actions the plugin serves — see [Entity support](#entity-support). |
+
+## Plugin icons
+
+Set `icon` to a package-relative SVG or PNG path, such as `assets/icon.svg`, and
+include that file in the plugin archive. Maintained community packages require an
+icon. Older third-party manifests may omit it and use Prismedia's default icon.
+
+Use a clean upstream logo and retain its attribution and asset terms. Icons are
+limited to 256 KiB. SVGs must be passive vector artwork without scripts, embedded
+documents, stylesheets, or external resources. Paths cannot leave the package or
+traverse symlinks. The host serves validated assets from its own origin; drawing
+an icon never installs or runs plugin code.
+
+The registry index uses a path relative to the index location, such as
+`plugins/example/assets/icon.svg`. The package manifest continues to use the
+path relative to its own directory. The build tool generates this index path.
 
 ## Runtimes
 
@@ -83,6 +101,52 @@ kinds and identify actions it serves.
 | --- | --- | --- |
 | `dotnet-process` | Compiled plugin assembly, e.g. `dist/MyPlugin.dll`. | Executed by the .NET plugin process runner. |
 | `stash-compat` | A standard Stash YAML scraper definition. | Executed natively by Prismedia's Stash-compat engine. You normally never write this manifest by hand — installing a scraper from the CommunityScrapers index synthesizes it (with a `stash-` id prefix). See [Stash Compatibility](./stash-compat.md). |
+
+## Installed versions and active work
+
+Installation records the selected package version and paths. Discovering or downloading
+a newer package does not activate it. Saving credentials and repeating an installation
+preserve that selection. If its files disappear, Prismedia reports the installed entry
+as unavailable instead of silently executing another version; an explicit update can
+select an available compatible package.
+
+Updates wait until the plugin's accepted transfers, manager requests, manager actions,
+initial library associations, and ownership handoffs have finished or been resolved.
+This includes disabled Connections and transfers waiting for import acknowledgement
+or review. Automatic updates defer these plugins and continue with other packages.
+New work acceptance and package changes share a database lock across API and worker
+processes. Packages downloaded before a deferred update remain available for a later
+attempt, while the installed version stays selected.
+
+An activated update invalidates each Connection's previous capability test. Test the
+Connection again before using it; credentials, remote installation identity, library
+bindings, and operation history remain intact. Removal requires disabled Connections,
+no unfinished connected work, and no mapped external libraries. Inactive historical
+transfers are retained independently of installed provider configuration.
+
+## Invocation limits
+
+Native `dotnet-process` plugins may declare an `execution` policy:
+
+```json
+"execution": {
+  "maxConcurrentInvocations": 1,
+  "minimumStartIntervalMs": 1100
+}
+```
+
+Prismedia enforces this policy at the executable boundary across API and worker
+processes, metadata and integration calls, and every Connection using the same plugin.
+PostgreSQL stores active invocation reservations and the next permitted start time.
+Different plugins have independent budgets. Queued identification also uses its
+existing scheduling limits; interactive calls cannot bypass the executable budget.
+
+Waiting for a slot respects cancellation and counts against the 60-second invocation
+deadline. Successful, failed, and cancelled child processes release their slot;
+releasing capacity does not erase the minimum start interval. If a host stops before
+cleanup, its reservation expires after two minutes. Admission fails closed when
+PostgreSQL is unavailable. These are process admission limits, not a per-HTTP-request
+limiter inside the plugin or an operating-system sandbox.
 
 ## Auth fields
 

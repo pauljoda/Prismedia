@@ -38,6 +38,7 @@
   } from "$lib/entities/entity-picker-search";
   import EntityCastAndCrewSection from "./EntityCastAndCrewSection.svelte";
   import EntityDetailLinks from "./EntityDetailLinks.svelte";
+  import SourceAttribution from "$lib/components/integrations/SourceAttribution.svelte";
   import type { EntityDetailSection } from "./entity-detail-types";
 
   interface Props {
@@ -282,6 +283,17 @@
     {/if}
     {@render sectionContent(section)}
   </section>
+{/if}
+
+{#if (section.id === "source" || section.id === "sources") && cardFull.acquisitionAttribution}
+  <div class="min-w-0 space-y-3">
+    {#if cardFull.acquisitionAttribution.unavailable}
+      <p role="status" class="text-sm text-text-muted">Some saved source attribution is unavailable.</p>
+    {/if}
+    {#each cardFull.acquisitionAttribution.items as source (source.operationId)}
+      <SourceAttribution attribution={source.attribution} />
+    {/each}
+  </div>
 {/if}
 
 <style>

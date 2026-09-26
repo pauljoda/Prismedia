@@ -15,7 +15,17 @@ namespace Prismedia.Infrastructure.Media.Persistence;
 public sealed partial class LibraryScanPersistenceService {
     // ── Stale entity cleanup ──
 
-    public async Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+    public async Task<int> RemoveStalePlayableVideosByRootAsync(
+        Guid rootId,
+        IReadOnlySet<string> validPaths,
+        CancellationToken cancellationToken,
+        bool authoritativeSnapshot = true) {
+        var isExternalLibrary = await _db.ExternalLibraryMounts.AsNoTracking()
+            .AnyAsync(mount => mount.LibraryRootId == rootId, cancellationToken);
+        if (isExternalLibrary && !authoritativeSnapshot) {
+            return 0;
+        }
+
         var playableCodes = EntityKindRegistry.All
             .OfType<IPlayableVideoKindDefinition>()
             .Select(definition => definition.Kind.ToCode())
@@ -50,7 +60,51 @@ public sealed partial class LibraryScanPersistenceService {
         }
 
         videoIds = videoIds.Distinct().ToList();
+        if (isExternalLibrary) {
+            return await MarkMissingExternalSourcesUnavailableAsync(
+                videoIds,
+                rootPath,
+                validPaths,
+                cancellationToken);
+        }
         return await RemoveStaleEntitiesBySourcePath(videoIds, validPaths, cancellationToken);
+    }
+
+    private async Task<int> MarkMissingExternalSourcesUnavailableAsync(
+        IReadOnlyCollection<Guid> candidateIds,
+        string? rootPath,
+        IReadOnlySet<string> validPaths,
+        CancellationToken cancellationToken) {
+        if (candidateIds.Count == 0 || string.IsNullOrWhiteSpace(rootPath)) {
+            return 0;
+        }
+
+        var sources = await _db.EntityFiles
+            .Where(file => candidateIds.Contains(file.EntityId)
+                && file.Role == EntityFileRole.Source
+                && !_db.ManagedSourceBindings.Any(binding => binding.EntityId == file.EntityId))
+            .ToArrayAsync(cancellationToken);
+        var missing = sources.Where(source =>
+                LibraryScanPathRules.IsPathUnderRoot(source.Path, rootPath)
+                && !validPaths.Contains(source.Path)
+                && !SourcePathExists(source.Path))
+            .ToArray();
+        if (missing.Length == 0) {
+            return 0;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var source in missing) {
+            source.Role = EntityFileRole.UnavailableSource;
+            source.UpdatedAt = now;
+        }
+        var entityIds = missing.Select(source => source.EntityId).Distinct().ToArray();
+        var entities = await _db.Entities.Where(entity => entityIds.Contains(entity.Id)).ToArrayAsync(cancellationToken);
+        foreach (var entity in entities) {
+            entity.UpdatedAt = now;
+        }
+        await SaveChangesWithLifecycleAsync(cancellationToken);
+        return entityIds.Length;
     }
 
     public async Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {

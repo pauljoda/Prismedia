@@ -46,7 +46,7 @@ export interface SingleFileBookProgressDisplay {
  *
  * PDF readers save `unit: "page"` with a 0-based page `index` and a page-count `total`,
  * so a "Page N of M" position is meaningful. EPUB readers save `unit: "cfi"` with a
- * 0..`total` reading fraction (total = 10000), so only a percentage is meaningful.
+ * 0..`total` reading fraction over the server's readable position total, so only a percentage is meaningful.
  *
  * Returns null when the book has never been opened (no saved position) or when the
  * progress capability lacks a usable total.

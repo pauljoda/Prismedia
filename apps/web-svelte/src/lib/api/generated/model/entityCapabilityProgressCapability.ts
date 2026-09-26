@@ -5,8 +5,11 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityCapabilityProgressCapabilityKind } from './entityCapabilityProgressCapabilityKind';
+import type { EntityCapabilityProgressCapabilityLastModality } from './entityCapabilityProgressCapabilityLastModality';
+import type { ModalityProgress } from './modalityProgress';
 import type { ProgressUnit } from './progressUnit';
 import type { ReaderMode } from './readerMode';
+import type { SeparateProgress } from './separateProgress';
 
 export interface EntityCapabilityProgressCapability {
   kind: EntityCapabilityProgressCapabilityKind;
@@ -43,4 +46,8 @@ export interface EntityCapabilityProgressCapability {
   consumedTotal?: number | string | null;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
   consumedPercent?: number | string;
+  lastModality?: EntityCapabilityProgressCapabilityLastModality;
+  /** @nullable */
+  checkpoints?: ModalityProgress[] | null;
+  separate?: null | SeparateProgress;
 }

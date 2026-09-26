@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media.Books;
 using Prismedia.Infrastructure.Processes;
 
 namespace Prismedia.Infrastructure.Media.Processing;
@@ -180,10 +181,17 @@ public sealed class MediaProbeService {
                 }
 
                 var chapterTags = chapter.GetPropertyOrDefault("tags");
-                var chapterTitle = chapterTags.GetStringOrDefault("title")
-                    ?? chapterTags.GetStringOrDefault("TITLE")
-                    ?? $"Chapter {index + 1}";
-                chapterResults.Add(new AudioChapterProbeResult(index, chapterTitle, start.Value, end.Value));
+                var declaredTitle = chapterTags.GetStringOrDefault("title")
+                    ?? chapterTags.GetStringOrDefault("TITLE");
+                // An untitled chapter keeps a display placeholder but is marked untitled, so the
+                // placeholder can never be mistaken for a title that proves chapter identity.
+                var untitled = string.IsNullOrWhiteSpace(declaredTitle);
+                chapterResults.Add(new AudioChapterProbeResult(
+                    index,
+                    untitled ? SourceChapterMarker.PlaceholderTitle(index) : declaredTitle!,
+                    start.Value,
+                    end.Value,
+                    untitled));
             }
         }
 
@@ -425,11 +433,17 @@ public sealed record AudioProbeResult(
     IReadOnlyList<AudioChapterProbeResult>? Chapters = null);
 
 /// <summary>One embedded chapter window reported by ffprobe for an audiobook source.</summary>
+/// <param name="Index">Chapter index reported by the container.</param>
+/// <param name="Title">Declared title, or a display placeholder when <paramref name="Untitled"/>.</param>
+/// <param name="StartSeconds">Chapter start.</param>
+/// <param name="EndSeconds">Chapter end.</param>
+/// <param name="Untitled">Whether the container declared no title for the chapter.</param>
 public sealed record AudioChapterProbeResult(
     int Index,
     string Title,
     double StartSeconds,
-    double EndSeconds);
+    double EndSeconds,
+    bool Untitled = false);
 
 public sealed record SubtitleStreamInfo(
     int StreamIndex,

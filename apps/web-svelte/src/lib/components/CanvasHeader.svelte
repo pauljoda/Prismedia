@@ -15,6 +15,7 @@
     movies: "Movies",
     videos: "Videos",
     people: "People",
+    urls: "Import from URL",
   };
 
   function segmentLabel(seg: string): string {

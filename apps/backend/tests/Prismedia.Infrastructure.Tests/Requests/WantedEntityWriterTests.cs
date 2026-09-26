@@ -2,9 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
+using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
+using Prismedia.Infrastructure.Integrations;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
@@ -18,6 +20,46 @@ namespace Prismedia.Infrastructure.Tests.Requests;
 /// delete (including pruning an author placeholder that lost its last wanted book).
 /// </summary>
 public sealed class WantedEntityWriterTests {
+    [Fact]
+    public async Task ManagedComicIssueWriterKeepsExactLabelAndReusesTheWantedWork() {
+        await using var db = CreateContext();
+        var writer = new EfManagedComicIssueWriter(Writer(db), db);
+        var series = new ExternalIdentity(ExternalIdProviders.ComicVine, "4050-1");
+        var issue = new ExternalIdentity(ExternalIdProviders.ComicVine, "4000-2");
+
+        var first = await writer.EnsureAsync(series, "Run", issue, "Half issue", "½", default);
+        var replay = await writer.EnsureAsync(series, "Run", issue, "Half issue", "½", default);
+
+        Assert.Equal(first, replay);
+        Assert.False(first.HasFile);
+        Assert.Equal(first.SeriesEntityId,
+            (await db.Entities.AsNoTracking().SingleAsync(row => row.Id == first.IssueEntityId)).ParentEntityId);
+        Assert.Equal("½", Assert.Single(await db.EntityPositions.AsNoTracking().ToArrayAsync()).Label);
+        Assert.Equal(ComicInstallmentKind.Issue,
+            (await db.ComicInstallmentDetails.AsNoTracking().SingleAsync(row => row.EntityId == first.IssueEntityId)).InstallmentKind);
+        await Assert.ThrowsAsync<ArgumentException>(() => writer.EnsureAsync(
+            series, "Run", issue, "Half issue", "0.5", default));
+    }
+
+    [Fact]
+    public async Task ManagedComicIssueWriterCompletesAnExistingFilelessShell() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(db, EntityKind.ComicSeries.ToCode(), "Run", isWanted: true);
+        var issueId = AddEntity(db, EntityKind.ComicInstallment.ToCode(), "Issue 13", isWanted: true,
+            parentEntityId: seriesId);
+        AddExternalId(db, seriesId, ExternalIdProviders.ComicVine, "4050-1");
+        AddExternalId(db, issueId, ExternalIdProviders.ComicVine, "4000-13");
+        await db.SaveChangesAsync();
+
+        var result = await new EfManagedComicIssueWriter(Writer(db), db).EnsureAsync(
+            new(ExternalIdProviders.ComicVine, "4050-1"), "Run",
+            new(ExternalIdProviders.ComicVine, "4000-13"), "Issue 13", "13", default);
+
+        Assert.Equal((seriesId, issueId, false), result);
+        Assert.Equal(ComicInstallmentKind.Issue,
+            (await db.ComicInstallmentDetails.AsNoTracking().SingleAsync(row => row.EntityId == issueId)).InstallmentKind);
+    }
+
     [Fact]
     public async Task EnsureCreatesAWantedBookSkeletonWithProviderIdAndRootlessDetail() {
         await using var db = CreateContext();
@@ -56,10 +98,13 @@ public sealed class WantedEntityWriterTests {
         Assert.Equal(1, await db.Entities.AsNoTracking().CountAsync());
     }
 
-    [Fact]
-    public async Task EnsurePromotesAFilelessProviderEntityToWantedWhenItIsRequested() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EnsurePromotesAFilelessProviderEntityToWantedWhenItIsRequested(bool archived) {
         await using var db = CreateContext();
         var entityId = AddEntity(db, EntityKind.Book.ToCode(), "Elantris", isWanted: false);
+        (await db.Entities.FindAsync(entityId))!.IsLibraryArchived = archived;
         AddExternalId(db, entityId, "openlibrary", "W1");
         await db.SaveChangesAsync();
 
@@ -73,6 +118,7 @@ public sealed class WantedEntityWriterTests {
 
         Assert.False(result.Created);
         Assert.False(result.HasRequestedRendition);
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == entityId)).IsLibraryArchived);
         Assert.True(await db.Entities.AsNoTracking()
             .Where(row => row.Id == entityId)
             .Select(row => row.IsWanted)
@@ -482,6 +528,72 @@ public sealed class WantedEntityWriterTests {
         Assert.Equal(2, artwork.Length);
         Assert.Equal([firstUrl, secondUrl], artwork.Select(file => file.Path).ToArray());
         Assert.All(artwork, file => Assert.Equal(FileSourceKind.Custom.ToCode(), file.Source));
+    }
+
+    [Fact]
+    public async Task DeferredArtworkApplyPersistsManagerPersonIdentityRoleAndHeadshot() {
+        await using var db = CreateContext();
+        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), "Reviewed Movie", isWanted: true);
+        await db.SaveChangesAsync();
+        var headshot = "https://images.test/people/101.jpg";
+        var person = new EntityMetadataProposal(
+            "manager:person:101",
+            "radarr",
+            EntityKind.Person,
+            null,
+            "Connected catalog",
+            new EntityMetadataPatch(
+                "Lead Actor",
+                null,
+                new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "101" },
+                ["https://www.themoviedb.org/person/101"],
+                [],
+                null,
+                [],
+                new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                new Dictionary<string, int>(),
+                null),
+            [new ImageCandidate(MediaImageKind.Profile.ToCode(), headshot, "radarr", null, null, null, null)],
+            [],
+            []);
+        var proposal = new EntityMetadataProposal(
+            "manager:movie:19",
+            "radarr",
+            EntityKind.Movie,
+            null,
+            "Connected catalog",
+            new EntityMetadataPatch(
+                "Reviewed Movie",
+                null,
+                new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "19" },
+                [],
+                [],
+                null,
+                [new CreditPatch("Lead Actor", CreditRole.Actor.ToCode(), "Hero", 0)],
+                new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                new Dictionary<string, int>(),
+                null),
+            [],
+            [],
+            [],
+            movieId,
+            [person]);
+
+        await Writer(db).ApplyProposalWithDeferredArtworkAsync(movieId, proposal, CancellationToken.None);
+
+        var personId = await db.Entities.Where(row => row.KindCode == EntityKind.Person.ToCode()
+            && row.Title == "Lead Actor").Select(row => row.Id).SingleAsync();
+        var externalId = await db.EntityExternalIds.SingleAsync(row => row.EntityId == personId);
+        Assert.Equal((ExternalIdProviders.Tmdb, "101"), (externalId.Provider, externalId.Value));
+        var credit = await db.EntityRelationshipLinks.SingleAsync(row => row.EntityId == movieId
+            && row.TargetEntityId == personId && row.RelationshipCode == RelationshipKind.Cast.ToCode());
+        Assert.Contains($"\"role\":\"{CreditRole.Actor.ToCode()}\"", credit.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("Hero", credit.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+        var artwork = await db.EntityFiles.SingleAsync(row => row.EntityId == personId);
+        Assert.Equal((EntityFileRole.Thumbnail, headshot, FileSourceKind.Custom.ToCode()),
+            (artwork.Role, artwork.Path, artwork.Source));
     }
 
     [Fact]

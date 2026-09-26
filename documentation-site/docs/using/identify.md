@@ -55,6 +55,21 @@ For a container, picking a match identifies the parent and opens its review imme
 
 You can walk into child and relationship proposals, disable individual cast/studio/tag entries, choose artwork, and accept only when it looks right. On Accept, Prismedia creates missing people/studios/tags, downloads chosen artwork, writes provider IDs, marks items **organized**, and shows a live "applying" progress row.
 
+## Field sources and protection
+
+Administrators can open **Protection** on an editable detail page to view the source and lock state of
+the title, description, and classification. Accepted provider values record the exact plugin identity,
+time, and confidence when supplied. Existing values without recorded evidence show **Source unknown**.
+
+Manual changes to these fields, including clearing a description or classification, automatically lock
+them against provider enrichment. Provider omission preserves the existing value even when unlocked.
+Locks also apply when a parent proposal updates its children. Unlocking permits future enrichment;
+it does not change the current value or its source. Content-safety classification rules still apply.
+
+These locks govern metadata provider application, not file scanning or other library operations.
+Artwork, dates, identifiers, and lists do not yet have field protection. A list needs evidence for each
+entry before Prismedia can accurately attribute its merged contents to providers.
+
 ## Bulk identify
 
 Queuing a batch adds every selected item to the review queue up front and returns you to the dashboard, then searches them there with live progress. Bulk identify runs as a **durable background job** — it survives app restarts and feeds results into the review queue.

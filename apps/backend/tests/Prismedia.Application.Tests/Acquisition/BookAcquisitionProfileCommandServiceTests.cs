@@ -7,6 +7,28 @@ using Prismedia.Application.Security;
 namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class BookAcquisitionProfileCommandServiceTests {
+    [Theory]
+    [InlineData("{Author}/{Title}/{Title}")]
+    [InlineData("{Title}.{ext}/Book")]
+    [InlineData("{Title}.epub")]
+    [InlineData("{Title}.{ext}.backup")]
+    [InlineData(".{ext}")]
+    public async Task BookTemplatesMustRetainTheSelectedPayloadExtension(string template) {
+        var store = new CapturingStore();
+        var error = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            CreateService(store).SaveAsync(Request(EntityKind.Book, template), default));
+        Assert.Equal(ApiProblemCodes.AcquisitionProfileInvalid, error.Code);
+        Assert.Contains(".{ext}", error.Message);
+        Assert.Null(store.LastCommand);
+    }
+
+    [Fact]
+    public async Task BookFileTemplateWithPreservedExtensionIsSaved() {
+        var store = new CapturingStore();
+        await CreateService(store).SaveAsync(Request(EntityKind.Book, "  {Author}/{Title}.{ext}  "), default);
+        Assert.Equal("{Author}/{Title}.{ext}", store.LastCommand!.PathTemplate);
+    }
+
     private static BookAcquisitionProfileSaveRequest Request(EntityKind kind, string pathTemplate) => new(
         Id: null,
         DisplayName: "Test",

@@ -52,10 +52,10 @@ export const profileKindLabels: Readonly<Record<string, string>> = Object.fromEn
 /** Filters library roots using the acquisition-profile facet that owns each profile kind. */
 export function rootsForProfileKind(roots: LibraryRootSummary[], kind: string): LibraryRootSummary[] {
   const capability = profileFor(kind)?.libraryRootMediaCapability;
-  return roots.filter((root) =>
+  return roots.filter((root) => !root.isReadOnly && (
     capability === LIBRARY_ROOT_MEDIA_CAPABILITY.scanVideos
       ? root.scanVideos
       : capability === LIBRARY_ROOT_MEDIA_CAPABILITY.scanAudio
         ? root.scanAudio
-        : capability === LIBRARY_ROOT_MEDIA_CAPABILITY.scanBooks && root.scanBooks);
+        : capability === LIBRARY_ROOT_MEDIA_CAPABILITY.scanBooks && root.scanBooks));
 }

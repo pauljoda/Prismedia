@@ -28,14 +28,16 @@ internal sealed class FlagsCapabilityProjector : EntityCapabilityProjector<Flags
             context.Entity.IsFavorite,
             context.Entity.IsNsfw,
             context.Entity.IsOrganized,
-            context.Entity.IsWanted);
+            context.Entity.IsWanted,
+            context.Entity.IsLibraryArchived);
 }
 
 [EntityCapabilityProjector(30)]
 internal sealed class FileManagementCapabilityProjector : EntityCapabilityProjector<FileManagementCapability> {
     public override FileManagementCapability? Project(EntityCapabilityProjectionContext context) =>
         EntityKindRegistry.Describe(context.Entity.Kind).SupportsFileDeletion &&
-        context.FileManagementState.CanDeleteFiles
+        context.FileManagementState.CanDeleteFiles &&
+        context.ExternalLibraryProvenance is null
             ? new FileManagementCapability(CanDeleteFiles: true)
             : null;
 }
@@ -308,6 +310,9 @@ internal sealed class SourceCapabilityProjector : EntityCapabilityProjector<Sour
 
 [EntityCapabilityProjector(190)]
 internal sealed class ProgressCapabilityProjector : EntityCapabilityProjector<ProgressCapability> {
+    #region Actions - Projection
+
+    /// <summary>Projects the main cursor plus each modality's exact checkpoint in modality order.</summary>
     public override ProgressCapability? Project(EntityCapabilityProjectionContext context) =>
         context.Entity.Progress is { } progress
             ? new ProgressCapability(
@@ -323,8 +328,26 @@ internal sealed class ProgressCapabilityProjector : EntityCapabilityProjector<Pr
                 ConsumedTotal: progress.Total,
                 ConsumedPercent: progress.Total > 0
                     ? Math.Clamp(progress.ConsumedCount / (double)progress.Total, 0, 1)
-                    : 0)
+                    : 0,
+                LastModality: progress.LastModality,
+                Checkpoints: ConsumptionModalityDefinition.All
+                    .Select(definition => progress.CheckpointFor(definition.Modality))
+                    .OfType<ProgressCheckpoint>()
+                    .Select(checkpoint => new ModalityProgress(
+                        checkpoint.Modality,
+                        checkpoint.PositionEntityId,
+                        checkpoint.Unit,
+                        checkpoint.Index,
+                        checkpoint.Total,
+                        checkpoint.OffsetSeconds,
+                        checkpoint.MarkerId,
+                        checkpoint.Mode,
+                        checkpoint.Location,
+                        checkpoint.UpdatedAt))
+                    .ToArray())
             : null;
+
+    #endregion
 }
 
 [EntityCapabilityProjector(200)]

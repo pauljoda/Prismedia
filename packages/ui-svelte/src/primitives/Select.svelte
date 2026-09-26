@@ -23,6 +23,7 @@
 </script>
 
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { cn } from "../lib/utils";
   import * as SelectBase from "../components/ui/select";
   import Badge from "./Badge.svelte";
@@ -39,6 +40,7 @@
     ariaLabel?: string;
     ariaDescribedby?: string;
     onchange?: (value: string) => void;
+    optionLeading?: Snippet<[SelectOption]>;
   }
 
   let {
@@ -53,6 +55,7 @@
     ariaLabel,
     ariaDescribedby,
     onchange,
+    optionLeading,
   }: Props = $props();
 
   let trigger = $state<HTMLButtonElement | null>(null);
@@ -74,8 +77,13 @@
     aria-invalid={variant === "error" || undefined}
     class={cn(selectTriggerVariants({ size, variant }), className)}
   >
-    <span class={cn("min-w-0 truncate", !selectedOption && "text-muted-foreground")}>
-      {selectedOption?.label ?? placeholder}
+    <span class="flex min-w-0 flex-1 items-center gap-2">
+      {#if selectedOption && optionLeading}
+        {@render optionLeading(selectedOption)}
+      {/if}
+      <span class={cn("min-w-0 truncate", !selectedOption && "text-muted-foreground")}>
+        {selectedOption?.label ?? placeholder}
+      </span>
     </span>
   </SelectBase.Trigger>
   <SelectBase.Content
@@ -86,6 +94,9 @@
     <SelectBase.Group aria-label={ariaLabel}>
       {#each options as option (option.value)}
         <SelectBase.Item value={option.value} label={option.label} disabled={option.disabled}>
+          {#if optionLeading}
+            {@render optionLeading(option)}
+          {/if}
           <span class="min-w-0 flex-1 [overflow-wrap:anywhere]">{option.label}</span>
           {#if option.annotation}
             <Badge>{option.annotation}</Badge>

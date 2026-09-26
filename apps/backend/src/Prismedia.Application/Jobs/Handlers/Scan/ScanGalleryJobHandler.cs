@@ -20,7 +20,8 @@ public sealed class ScanGalleryJobHandler(
     IImageGalleryScanPersistence images,
     IDownstreamNeedsPersistence downstreamNeeds,
     IScanSnapshotStore? snapshots = null,
-    ILibraryFileChangeIntake? changeIntake = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
+    ILibraryFileChangeIntake? changeIntake = null,
+    IImportedPublicationTitleResolver? importedTitles = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanImages;
 
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Image];
@@ -47,7 +48,8 @@ public sealed class ScanGalleryJobHandler(
         // This keeps single-file download folders from cluttering the library, and migrates a
         // previously persisted single-image gallery on re-scan because the dropped folder is removed
         // by stale cleanup after its image has been reparented.
-        var collapsedTargets = ComputeCollapsedGalleries(root.Path, dirGroups, allContainerPaths);
+        var preserved = await images.GetPreservedGalleryPathsAsync(root.Id, cancellationToken);
+        var collapsedTargets = ComputeCollapsedGalleries(root.Path, dirGroups, preserved);
         var collapsedFolders = collapsedTargets.Keys.ToHashSet(FileSystemPathComparison.Comparer);
         var validGalleryPaths = allContainerPaths
             .Where(path => !collapsedFolders.Contains(path))
@@ -61,20 +63,14 @@ public sealed class ScanGalleryJobHandler(
         foreach (var galleryLevel in validGalleryPaths
             .GroupBy(path => PathDepth(root.Path, path))
             .OrderBy(group => group.Key)) {
-            var galleryItems = galleryLevel
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .Select(dirPath => {
-                    var parentPath = NearestSurvivingAncestor(dirPath, root.Path, collapsedFolders);
-                    Guid? parentGalleryId = parentPath is not null ? galleryIdsByPath[parentPath] : null;
-                    return new GalleryUpsertItem(
-                        dirPath,
-                        Path.GetFileName(dirPath),
-                        root.Id,
-                        parentGalleryId,
-                        siblingSortOrders[dirPath],
-                        root.IsNsfw);
-                })
-                .ToArray();
+            var items = new List<GalleryUpsertItem>();
+            foreach (var dirPath in galleryLevel.OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
+                var parentPath = NearestSurvivingAncestor(dirPath, root.Path, collapsedFolders);
+                Guid? parentGalleryId = parentPath is not null ? galleryIdsByPath[parentPath] : null;
+                items.Add(new(dirPath, await ImportedGalleryTitleAsync(root, dirPath, cancellationToken), root.Id,
+                    parentGalleryId, siblingSortOrders[dirPath], root.IsNsfw));
+            }
+            var galleryItems = items.ToArray();
 
             var galleryIds = await images.UpsertGalleriesBatchAsync(galleryItems, cancellationToken);
             for (var i = 0; i < galleryItems.Length && i < galleryIds.Count; i++) {
@@ -115,7 +111,7 @@ public sealed class ScanGalleryJobHandler(
 
             for (var i = 0; i < orderedImageFiles.Length; i++) {
                 var filePath = orderedImageFiles[i];
-                var title = Path.GetFileNameWithoutExtension(filePath);
+                var title = await ImportedTitleAsync(root, filePath, cancellationToken);
                 validImagePaths.Add(filePath);
 
                 long? size = null;
@@ -181,6 +177,36 @@ public sealed class ScanGalleryJobHandler(
         return ScanRootOutcome.Success;
     }
 
+    /// <summary>Materializes exact loose images or one explicit child-folder gallery without discovery or stale cleanup.</summary>
+    public async Task MaterializeImportedPathsAsync(LibraryRootData root, IReadOnlyList<string> paths, CancellationToken cancellationToken) {
+        if (!root.Enabled || root.IsReadOnly || !root.ScanImages || paths.Count == 0 || paths.Any(path => !File.Exists(path)))
+            throw new InvalidOperationException("Image imports require existing files inside an enabled image library.");
+        var folders = paths.Select(path => Path.GetDirectoryName(Path.GetFullPath(path))!).Distinct(FileSystemPathComparison.Comparer).ToArray();
+        if (folders.Length != 1) throw new InvalidOperationException("An image import must have one exact folder scope.");
+        Guid? galleryId = null;
+        if (!SamePath(folders[0], root.Path)) {
+            if (!root.Recursive || !SamePath(Path.GetDirectoryName(folders[0])!, root.Path))
+                throw new InvalidOperationException("A gallery import requires one direct child folder in a recursive image library.");
+            galleryId = (await images.UpsertGalleriesBatchAsync([
+                new(folders[0], await ImportedGalleryTitleAsync(root, folders[0], cancellationToken), root.Id, null, 0, root.IsNsfw, PreserveContainer: true)
+            ], cancellationToken)).Single();
+        }
+        var items = new List<ImageUpsertItem>();
+        foreach (var path in paths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
+            items.Add(new(path, await ImportedTitleAsync(root, path, cancellationToken), root.Id, galleryId,
+                new FileInfo(path).Length, items.Count, root.IsNsfw));
+        }
+        await images.UpsertImagesBatchAsync(items, cancellationToken);
+    }
+
+    private async Task<string> ImportedGalleryTitleAsync(LibraryRootData root, string path, CancellationToken cancellationToken) =>
+        (importedTitles is null ? null : await importedTitles.ResolveAsync(root.Id, EntityKind.Gallery, path, cancellationToken))
+        ?? Path.GetFileName(path);
+
+    private async Task<string> ImportedTitleAsync(LibraryRootData root, string path, CancellationToken cancellationToken) =>
+        (importedTitles is null ? null : await importedTitles.ResolveAsync(root.Id, EntityKind.Image, path, cancellationToken))
+        ?? Path.GetFileNameWithoutExtension(path);
+
     private static bool SamePath(string left, string right) =>
         FileSystemPathComparison.Equals(NormalizePath(left), NormalizePath(right));
 
@@ -196,11 +222,11 @@ public sealed class ScanGalleryJobHandler(
     private static Dictionary<string, string?> ComputeCollapsedGalleries(
         string rootPath,
         IReadOnlyDictionary<string, IReadOnlyList<string>> dirGroups,
-        IReadOnlyList<string> containerPaths) {
+        IReadOnlySet<string> preserved) {
         var collapsed = new HashSet<string>(FileSystemPathComparison.Comparer);
 
         foreach (var (dirPath, imageFiles) in dirGroups) {
-            if (SamePath(dirPath, rootPath) || imageFiles.Count != 1) {
+            if (SamePath(dirPath, rootPath) || imageFiles.Count != 1 || preserved.Contains(dirPath)) {
                 continue;
             }
 

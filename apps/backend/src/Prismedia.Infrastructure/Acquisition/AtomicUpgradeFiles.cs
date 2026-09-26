@@ -6,7 +6,7 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Uses captured file facts and attempt-specific byte evidence to recover atomic replacements, including approved video container changes.</summary>
-public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin recycleBin, IVideoPayloadVerifier videoVerifier) : IAtomicUpgradeFiles {
+public sealed class AtomicUpgradeFiles(ILibraryFileMutationGuard mutations, IOwnedFileReplacer replacer, IRecycleBin recycleBin, IVideoPayloadVerifier videoVerifier) : IAtomicUpgradeFiles {
     /// <inheritdoc />
     public Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken, bool allowFormatChange = false) {
         cancellationToken.ThrowIfCancellationRequested();
@@ -30,6 +30,8 @@ public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin 
 
     /// <inheritdoc />
     public async Task<AtomicUpgradeFileRecovery> RecoverAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync([checkpoint.Files.OwnedPath, checkpoint.Files.IncomingPath,
+            checkpoint.Files.InstallPath, checkpoint.BackupPath, checkpoint.EvidencePath], cancellationToken);
         var files = checkpoint.Files;
         var staged = OwnedFileReplacementArtifacts.StagedPath(files.OwnedPath);
         var evidence = checkpoint.EvidencePath;
@@ -87,6 +89,7 @@ public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin 
 
     /// <inheritdoc />
     public async Task CompleteAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync([checkpoint.Files.OwnedPath, checkpoint.BackupPath, checkpoint.EvidencePath], cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         File.Delete(checkpoint.EvidencePath);
         if (!File.Exists(checkpoint.BackupPath)

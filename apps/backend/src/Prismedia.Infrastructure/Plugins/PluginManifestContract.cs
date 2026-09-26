@@ -12,11 +12,26 @@ internal static class PluginManifestContract {
 
     /// <summary>Returns whether the manifest schema and support declarations are usable.</summary>
     internal static bool IsValid(PluginManifest manifest) =>
-        IsValid(manifest.ManifestVersion, manifest.Id, manifest.Supports, manifest.Execution);
+        IsValidIconPath(manifest.Icon) &&
+        IsValid(manifest.ManifestVersion, manifest.Id, manifest.Supports, manifest.Execution, manifest.Integration);
 
     /// <summary>Returns whether the index entry schema and support declarations are usable.</summary>
     internal static bool IsValid(PluginIndexEntry entry) =>
-        IsValid(entry.ManifestVersion, entry.Id, entry.Supports, entry.Execution);
+        IsValidIconPath(entry.Icon) &&
+        IsValid(entry.ManifestVersion, entry.Id, entry.Supports, entry.Execution, entry.Integration);
+
+    /// <summary>Returns whether an optional icon is a safe package-relative SVG or PNG path.</summary>
+    internal static bool IsValidIconPath(string? icon) {
+        if (icon is null) return true;
+        if (string.IsNullOrWhiteSpace(icon) || icon.Length > 256 || Path.IsPathRooted(icon) || icon.Contains('\\')) return false;
+
+        var segments = icon.Split('/');
+        if (segments.Any(segment => segment.Length == 0 || segment is "." or "..")) return false;
+
+        var extension = Path.GetExtension(icon);
+        return extension.Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".png", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>Returns a manifest whose support declarations are complete for runtime consumers.</summary>
     internal static PluginManifest Normalize(PluginManifest manifest) =>
@@ -34,7 +49,8 @@ internal static class PluginManifestContract {
         int manifestVersion,
         string pluginId,
         IReadOnlyList<PluginEntitySupport>? supports,
-        PluginExecutionPolicy? execution) {
+        PluginExecutionPolicy? execution,
+        PluginIntegrationDefinition? integration) {
         if (manifestVersion is not (1 or 2)) {
             return false;
         }
@@ -44,6 +60,9 @@ internal static class PluginManifestContract {
             return false;
         }
 
+        if (integration is not null &&
+            (manifestVersion != 2 || !PluginIntegrationContract.IsValid(integration))) return false;
+
         // Manifest v1 did not declare identity namespaces or search forms. Its plugin id is the
         // compatibility identity namespace, so it must at least be convertible into that shape.
         if (manifestVersion == 1) {
@@ -51,7 +70,7 @@ internal static class PluginManifestContract {
         }
 
         if (supports is not { Count: > 0 }) {
-            return false;
+            return supports is not null && integration is not null;
         }
 
         var kinds = new HashSet<string>(StringComparer.Ordinal);
@@ -104,7 +123,7 @@ internal static class PluginManifestContract {
         return support.Search is null || IsUsableSearch(support.Search);
     }
 
-    private static bool IsUsableSearch(PluginSearchDefinition? search) {
+    internal static bool IsUsableSearch(PluginSearchDefinition? search) {
         if (search?.Fields is not { Count: > 0 }) {
             return false;
         }

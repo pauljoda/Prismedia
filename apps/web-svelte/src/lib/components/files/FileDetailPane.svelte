@@ -29,6 +29,7 @@
     error?: string | null;
     mobile?: boolean;
     downloadBusy?: boolean;
+    isReadOnly?: boolean;
     onBack?: () => void;
     onRefresh?: () => void;
     onAction?: (action: FileActionId) => void;
@@ -43,6 +44,7 @@
     error = null,
     mobile = false,
     downloadBusy = false,
+    isReadOnly = false,
     onBack,
     onRefresh,
     onAction,
@@ -162,13 +164,13 @@
   function handleDragOver(event: DragEvent): void {
     if (!event.dataTransfer?.types.includes("Files")) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
+    event.dataTransfer.dropEffect = isReadOnly ? "none" : "copy";
   }
 
   function handleDrop(event: DragEvent): void {
     if (!event.dataTransfer?.types.includes("Files")) return;
     event.preventDefault();
-    onExternalDrop?.(event.dataTransfer);
+    if (!isReadOnly) onExternalDrop?.(event.dataTransfer);
   }
 
   $effect(() => {
@@ -233,11 +235,13 @@
         <Download class="h-3.5 w-3.5" />Download
       </Button>
       {#if isDirectory}
+        {#if !isReadOnly}
         <Button variant="ghost" size="sm" type="button" onclick={() => fileInput?.click()}><Upload class="h-3.5 w-3.5" />Upload</Button>
         <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("new-folder")}><FolderPlus class="h-3.5 w-3.5" />New folder</Button>
+        {/if}
         <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("rescan")}><ScanLine class="h-3.5 w-3.5" />Rescan</Button>
       {/if}
-      {#if !isRoot}
+      {#if !isRoot && !isReadOnly}
         <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("rename")}><Pencil class="h-3.5 w-3.5" />Rename</Button>
         <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("move")}><FileArchive class="h-3.5 w-3.5" />Move</Button>
         {#if isExcluded}
@@ -249,6 +253,7 @@
         <Button variant="destructive" size="icon-sm" aria-label="Delete" type="button" onclick={() => onAction?.("delete")}><Trash2 class="h-3.5 w-3.5" /></Button>
       {/if}
     </div>
+    {#if isReadOnly}<p class="px-4 py-2 text-xs text-text-muted">Files are managed by the connected application. Prismedia keeps this library read-only.</p>{/if}
 
     <input
       bind:this={fileInput}

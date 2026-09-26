@@ -95,6 +95,17 @@ public sealed partial class LibraryScanPersistenceService {
         return id;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> GetPreservedGalleryPathsAsync(Guid rootId, CancellationToken cancellationToken) {
+        var folderCode = EntitySourceCode.Folder.ToCode();
+        var paths = await (from detail in _db.GalleryDetails.AsNoTracking()
+            join source in _db.EntitySources.AsNoTracking() on detail.EntityId equals source.EntityId
+            join root in _db.EntityLibraryRoots.AsNoTracking() on detail.EntityId equals root.EntityId
+            where detail.PreserveContainer && source.Code == folderCode && root.LibraryRootId == rootId
+            select source.Value).ToArrayAsync(cancellationToken);
+        return paths.ToHashSet(FileSystemPathComparison.Comparer);
+    }
+
     public async Task<Guid> UpsertGalleryAsync(
         string folderPath,
         string title,
@@ -125,7 +136,7 @@ public sealed partial class LibraryScanPersistenceService {
 
     private async Task<Guid> UpsertGalleryCoreAsync(
         GalleryUpsertItem item, CancellationToken cancellationToken) {
-        var (folderPath, title, libraryRootId, parentGalleryEntityId, sortOrder, isNsfw) = item;
+        var (folderPath, title, libraryRootId, parentGalleryEntityId, sortOrder, isNsfw, preserveContainer) = item;
         var existing = await FindEntityByFolderSourcePathAsync(EntityKind.Gallery.ToCode(), folderPath, cancellationToken);
         if (existing is not null) {
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
@@ -143,7 +154,8 @@ public sealed partial class LibraryScanPersistenceService {
             }
 
             var detail = await _db.GalleryDetails.FindAsync([existing.Id], cancellationToken);
-            if (detail is null) _db.GalleryDetails.Add(new GalleryDetailRow { EntityId = existing.Id, GalleryType = GalleryType.Folder });
+            if (detail is null) _db.GalleryDetails.Add(new GalleryDetailRow { EntityId = existing.Id, GalleryType = GalleryType.Folder, PreserveContainer = preserveContainer });
+            else if (preserveContainer) detail.PreserveContainer = true;
             await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
             return existing.Id;
         }
@@ -152,7 +164,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Gallery.ToCode(), Title = title, ParentEntityId = parentGalleryEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.GalleryDetails.Add(new GalleryDetailRow { EntityId = id, GalleryType = GalleryType.Folder });
+        _db.GalleryDetails.Add(new GalleryDetailRow { EntityId = id, GalleryType = GalleryType.Folder, PreserveContainer = preserveContainer });
         _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntitySources.Add(new EntitySourceRow {
             EntityId = id,
@@ -428,22 +440,28 @@ public sealed partial class LibraryScanPersistenceService {
         CancellationToken cancellationToken) {
         var existing = await FindEntityByFolderSourcePathAsync(EntityKind.Book.ToCode(), folderPath, cancellationToken);
         if (existing is not null) {
+            var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
+            var hasReadableRendition = detail?.Format is BookFormat.Epub or BookFormat.Pdf;
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
             if (tracked is not null) {
-                tracked.Title = title;
-                tracked.ParentEntityId = null;
-                tracked.SortOrder = null;
+                if (!hasReadableRendition) {
+                    tracked.Title = title;
+                    tracked.ParentEntityId = null;
+                    tracked.SortOrder = null;
+                }
                 tracked.UpdatedAt = DateTimeOffset.UtcNow;
                 if (isNsfw) tracked.IsNsfw = true;
             }
-            var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) {
-                detail.BookType = bookType;
-                detail.Format = format;
+                if (!hasReadableRendition) {
+                    detail.BookType = bookType;
+                    detail.Format = format;
+                }
             } else {
                 _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = bookType, Format = format });
             }
-            await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
+            if (!hasReadableRendition)
+                await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
             await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }

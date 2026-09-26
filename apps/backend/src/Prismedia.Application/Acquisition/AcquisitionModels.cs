@@ -21,6 +21,12 @@ public sealed record IndexerRelease(
     DateTimeOffset? PublishedAt) {
     /// <summary>Advertised payload filenames when the provider exposes them before download; empty means unknown.</summary>
     public IReadOnlyList<string> KnownFileNames { get; init; } = [];
+
+    /// <summary>
+    /// How many files the indexer says the payload holds (the Torznab <c>files</c> attribute), or null when
+    /// it does not say. A hint only: it tells one file from many, never which files they are.
+    /// </summary>
+    public int? AdvertisedFileCount { get; init; }
 }
 
 /// <summary>
@@ -51,6 +57,9 @@ public sealed record BookAcquisitionRules(
     /// wrong-season TV gate. Null outside volume-scoped searches.
     /// </summary>
     public int? VolumeNumber { get; init; }
+
+    /// <summary>Exact requested comic designation; shelf ordinals must never substitute for this identity.</summary>
+    public ComicInstallmentNumber? TargetInstallmentNumber { get; init; }
 
     /// <summary>Allows video upgrades to change containers while preserving the owned entity and its history.</summary>
     public bool AllowFormatChange { get; init; } = true;
@@ -106,6 +115,14 @@ public sealed record BookAcquisitionRules(
     /// <summary>The independently acquired book rendition; null outside books and for legacy ad-hoc rules.</summary>
     public BookRendition? BookRendition { get; init; }
 
+    /// <summary>
+    /// The layout of the owned audiobook for an audiobook upgrade search (set per search by the runner from
+    /// the parent's recorded shape, like <see cref="OwnedQuality"/>). When set, an audiobook upgrade is judged
+    /// on structure: a candidate must be expected to carry chapter boundaries and outrank this shape. Null
+    /// keeps the source/format-tier upgrade gates.
+    /// </summary>
+    public AudiobookReleaseShape? OwnedAudiobookShape { get; init; }
+
     /// <summary>Formal names of this exact work, validated against its currently linked provider identity.</summary>
     public IReadOnlyList<string> TargetAlternativeTitles { get; init; } = [];
 
@@ -156,6 +173,9 @@ public sealed record BookAcquisitionRules(
     /// without a target.
     /// </summary>
     public string? TargetTitle { get; init; }
+
+    /// <summary>The comic run that owns a requested volume or issue, independent of its unit label.</summary>
+    public string? TargetSeriesTitle { get; init; }
 
     /// <summary>
     /// The provider-authored title of the sought TV episode, set independently from
@@ -232,13 +252,16 @@ public sealed record IndexerQuery(
     EntityKind Kind) {
     /// <summary>Download protocols the caller can acquire; null leaves the provider scope unrestricted.</summary>
     public IReadOnlyList<DownloadProtocol>? Protocols { get; init; }
+
+    /// <summary>Publication rendition requested by the caller; null keeps the default ebook selection for books.</summary>
+    public BookRendition? BookRendition { get; init; }
 }
 
 /// <summary>Result of probing an indexer connection.</summary>
 public sealed record IndexerConnectionTest(bool Connected, string? Message);
 
-/// <summary>An indexer that failed during a search; surfaced in the acquisition status so partial results stay transparent.</summary>
-public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, string Message);
+/// <summary>An indexer that failed or was skipped during a search; surfaced so partial results stay transparent.</summary>
+public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, string Message, bool WasSkipped = false);
 
 /// <summary>Metadata captured when an acquisition is created, retained for the identify-hint handoff at import.</summary>
 /// <param name="Kind">The media kind being acquired (book, movie, …); drives per-kind release scoring and import.</param>
@@ -282,6 +305,9 @@ public sealed record AcquisitionSearchInput(
     int? VolumeNumber = null,
     BookRendition? BookRendition = null,
     int? AbsoluteEpisodeNumber = null) {
+    /// <summary>Current exact comic issue/chapter label, including fractions and suffixes.</summary>
+    public string? InstallmentLabel { get; init; }
+
     /// <summary>
     /// The title of the WORK this acquisition belongs to — the series for TV units (a season or episode
     /// acquisition's own Title is "Season 1" or the episode name), the author-qualified title for music,
@@ -480,6 +506,9 @@ public sealed record UpgradeOwnedQuality(
 
     /// <summary>True when another entity owns the same physical video source.</summary>
     public bool VideoSourceShared { get; init; }
+
+    /// <summary>The owned audiobook's recorded layout for an audiobook upgrade child; null for every other child.</summary>
+    public AudiobookReleaseShape? AudiobookShape { get; init; }
 }
 
 /// <summary>
@@ -517,6 +546,8 @@ public sealed record UpgradeReplaceTarget(
     public string? InstalledUpgradePath { get; init; }
     /// <summary>The recorded installation still matches the parent's sole current Source binding.</summary>
     public bool InstalledUpgradeSourceCurrent { get; init; }
+    /// <summary>The owned audiobook's recorded layout an automatic audiobook replacement must improve on; null when unknown.</summary>
+    public AudiobookReleaseShape? ParentAudiobookShape { get; init; }
 }
 
 /// <summary>

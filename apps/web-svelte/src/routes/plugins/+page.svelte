@@ -1,11 +1,18 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { page } from "$app/state";
+  import { isEntityKindCode } from "$lib/entities/entity-codes";
+  import { selectIdentifyProviders } from "$lib/identify/provider-selection";
+  import IdentifyPluginSetupNotice from "./IdentifyPluginSetupNotice.svelte";
   import InstalledPluginsTab from "./InstalledPluginsTab.svelte";
   import PluginPageShell from "./PluginPageShell.svelte";
   import PrismediaCommunityTab from "./PrismediaCommunityTab.svelte";
   import StashCommunityIndexTab from "./StashCommunityIndexTab.svelte";
   import type { StashScraperRow } from "./StashCommunityIndexTab.svelte";
   import type { PluginTabDefinition, PluginsTab } from "./plugin-page-types";
+  import { StatusLed } from "@prismedia/ui-svelte";
+  import type { ConnectionResponse } from "$lib/api/generated/model";
+  import { fetchConnections } from "$lib/api/connections";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import {
     fetchPluginProviders,
@@ -21,12 +28,22 @@
   const nsfw = useNsfw();
   const isSfw = $derived(nsfw.mode === "off");
 
+  const identifyContext = $derived.by(() => {
+    const entityId = page.url.searchParams.get("identifyId");
+    const entityKind = page.url.searchParams.get("identifyKind") ?? "";
+    return entityId && isEntityKindCode(entityKind) ? { entityId, entityKind } : null;
+  });
+
   let tab = $state<PluginsTab>("installed");
   let loading = $state(true);
   let error = $state<string | null>(null);
   let message = $state<string | null>(null);
 
   let pluginProviders = $state<PluginProvider[]>([]);
+  let connections = $state.raw<ConnectionResponse[]>([]);
+  const identifyReady = $derived(identifyContext !== null &&
+    selectIdentifyProviders(pluginProviders, identifyContext.entityKind, null, isSfw).length > 0);
+
   let providerInstallingId = $state<string | null>(null);
   let providerRemovingId = $state<string | null>(null);
   let providerUpdatingId = $state<string | null>(null);
@@ -92,7 +109,13 @@
   }
 
   onMount(() => {
+    if (identifyContext) tab = "prismedia-index";
     void loadInstalled();
+    // Connections only enrich the plugin cards; the page works without them.
+    fetchConnections().then(
+      (list) => (connections = list),
+      () => undefined,
+    );
   });
 
   $effect(() => {
@@ -204,6 +227,9 @@
   const visibleInstalledProviders = $derived(
     pluginProviders.filter((plugin) => plugin.installed && (!isSfw || !plugin.isNsfw)),
   );
+  const enabledProviders = $derived(visibleInstalledProviders.filter((plugin) => plugin.enabled));
+  const needsKeysCount = $derived(enabledProviders.filter((plugin) => plugin.missingAuthKeys.length > 0).length);
+  const updateCount = $derived(enabledProviders.filter((plugin) => plugin.updateAvailable).length);
   const installedProviderIds = $derived(
     new Set(pluginProviders.filter((plugin) => plugin.installed).map((plugin) => plugin.id)),
   );
@@ -241,6 +267,12 @@
   <title>Plugins · Prismedia</title>
 </svelte:head>
 
+{#if identifyContext}
+  <div class="mb-5">
+    <IdentifyPluginSetupNotice {...identifyContext} ready={identifyReady} />
+  </div>
+{/if}
+
 <PluginPageShell
   {loading}
   {error}
@@ -250,13 +282,30 @@
   onDismissError={() => (error = null)}
   onTabChange={(nextTab) => (tab = nextTab)}
 >
+  {#snippet status()}
+    {#if !loading && (needsKeysCount > 0 || updateCount > 0)}
+      {#if needsKeysCount > 0}
+        <span class="flex items-center gap-2 text-caption text-text-secondary">
+          <StatusLed status="warning" size="sm" />
+          <span class="font-mono text-text-primary">{needsKeysCount}</span> need keys
+        </span>
+      {/if}
+      {#if updateCount > 0}
+        <span class="flex items-center gap-2 text-caption text-text-secondary">
+          <StatusLed status="info" size="sm" />
+          <span class="font-mono text-text-primary">{updateCount}</span> {updateCount === 1 ? "update" : "updates"}
+        </span>
+      {/if}
+    {/if}
+  {/snippet}
   {#if tab === "installed"}
     <InstalledPluginsTab
       bind:authValues
       {authExpandedFor}
       {authSavingFor}
-      {isSfw}
+      {connections}
       onAuthCancel={closeAuthForm}
+      onBrowseCommunity={() => (tab = "prismedia-index")}
       onProviderAuthToggle={toggleProviderAuthExpanded}
       onProviderInstall={(plugin) => void handleProviderInstall(plugin)}
       onProviderRemove={(plugin) => void handleProviderRemove(plugin)}

@@ -104,8 +104,8 @@ public sealed partial class PluginCatalogService {
 
         var descriptors = await DiscoverAsync(cancellationToken);
         return descriptors
-            .Where(descriptor => descriptor.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(descriptor => ParseVersion(descriptor.Manifest.Version))
+            .Where(descriptor => descriptor.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase)
+                && descriptor.Manifest.Version == entry.Version)
             .FirstOrDefault();
     }
 
@@ -131,6 +131,63 @@ public sealed partial class PluginCatalogService {
         }
 
         return path;
+    }
+
+    private async Task<PluginIconAsset?> FetchCatalogIconAsync(
+        PluginIndexEntry entry,
+        CancellationToken cancellationToken) {
+        if (entry.Icon is null || !TryResolveCatalogIconUrl(entry.Icon, out var url)) return null;
+
+        var extension = Path.GetExtension(entry.Icon).ToLowerInvariant();
+        var cacheDirectory = Path.Combine(CommunityPluginRoot(), "icons");
+        Directory.CreateDirectory(cacheDirectory);
+        var cachePath = Path.Combine(cacheDirectory,
+            $"{SafePathSegment(entry.Id)}-{SafePathSegment(entry.Version)}{extension}");
+        if (File.Exists(cachePath)) {
+            var cacheInfo = new FileInfo(cachePath);
+            if (cacheInfo.Length is > 0 and <= PluginIconAssetReader.MaximumBytes) {
+                var cached = await File.ReadAllBytesAsync(cachePath, cancellationToken);
+                if (PluginIconAssetReader.TryRead(cached, entry.Icon, out var cachedIcon)) return cachedIcon;
+            }
+            File.Delete(cachePath);
+        }
+
+        using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength is > PluginIconAssetReader.MaximumBytes) return null;
+        await using var remote = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var content = new MemoryStream();
+        var buffer = new byte[8192];
+        while (true) {
+            var count = await remote.ReadAsync(buffer, cancellationToken);
+            if (count == 0) break;
+            if (content.Length + count > PluginIconAssetReader.MaximumBytes) return null;
+            await content.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+        }
+
+        var bytes = content.ToArray();
+        if (!PluginIconAssetReader.TryRead(bytes, entry.Icon, out var icon)) return null;
+        var tempPath = $"{cachePath}.{Guid.NewGuid():N}.tmp";
+        try {
+            await File.WriteAllBytesAsync(tempPath, bytes, cancellationToken);
+            File.Move(tempPath, cachePath, overwrite: true);
+        } finally {
+            if (File.Exists(tempPath)) File.Delete(tempPath);
+        }
+        return icon;
+    }
+
+    private bool TryResolveCatalogIconUrl(string path, out string url) {
+        url = string.Empty;
+        if (!PluginManifestContract.IsValidIconPath(path) || string.IsNullOrWhiteSpace(_options.CommunityIndexUrl)) return false;
+
+        var index = new Uri(ResolveIndexUrl(_options.CommunityIndexUrl));
+        var resolved = new Uri(index, path);
+        var indexDirectory = new Uri(index, ".");
+        if (!resolved.Scheme.Equals(index.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !resolved.Authority.Equals(index.Authority, StringComparison.OrdinalIgnoreCase) ||
+            !resolved.AbsolutePath.StartsWith(indexDirectory.AbsolutePath, StringComparison.Ordinal)) return false;
+        url = resolved.ToString();
+        return true;
     }
 
     private async Task<IReadOnlyList<PluginIndexEntry>> FetchRemoteIndexAsync(CancellationToken cancellationToken) {

@@ -7,6 +7,16 @@ namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Reads current work identity and canonical positions for persisted and transient acquisition searches.</summary>
 internal sealed class EfAcquisitionWorkContext(PrismediaDbContext db) {
+    /// <summary>Reads the exact display designation without interpreting an integer ordering value as identity.</summary>
+    public async Task<string?> ReadInstallmentLabelAsync(Guid? entityId, EntityKind kind, CancellationToken cancellationToken) {
+        if (entityId is not { } id || kind != EntityKind.ComicInstallment) return null;
+        return await (from position in db.EntityPositions.AsNoTracking()
+            join entity in db.Entities.AsNoTracking() on position.EntityId equals entity.Id
+            where entity.Id == id && entity.KindCode == EntityKind.ComicInstallment.ToCode()
+                && position.Code == EntityPositionCodes.Chapter
+            select position.Label).SingleOrDefaultAsync(cancellationToken);
+    }
+
     /// <summary>
     /// Uses the library's current ordering after metadata repair, with request-time values retained by
     /// callers only where the library has no position. Search and import must agree on the same target;
@@ -49,18 +59,19 @@ internal sealed class EfAcquisitionWorkContext(PrismediaDbContext db) {
 
     /// <summary>
     /// The year identity of the work an entity belongs to: the first ancestor that owns an acquisition
-    /// profile, within a cycle-safe ancestor walk, together with its current provider's formal titles.
+    /// profile, within a cycle-safe ancestor walk, together with its current title and provider's formal titles.
     /// A missing year preserves request-time fallback; missing or retired identity evidence supplies no alternatives.
     /// </summary>
-    public async Task<(int? Year, IReadOnlyList<string> Titles)> ReadIdentityAsync(Guid entityId, CancellationToken cancellationToken) {
+    public async Task<(int? Year, string? Title, IReadOnlyList<string> Titles)> ReadIdentityAsync(Guid entityId, CancellationToken cancellationToken) {
         var currentId = (Guid?)entityId;
         var workId = entityId;
+        string? workTitle = null;
         AcquisitionProfileDefinition? workProfile = null;
         var visited = new HashSet<Guid>();
         while (currentId is { } id && visited.Add(id)) {
             var current = await db.Entities.AsNoTracking()
                 .Where(row => row.Id == id)
-                .Select(row => new { row.KindCode, row.ParentEntityId })
+                .Select(row => new { row.KindCode, row.Title, row.ParentEntityId })
                 .FirstOrDefaultAsync(cancellationToken);
             if (current is null) {
                 break;
@@ -69,6 +80,7 @@ internal sealed class EfAcquisitionWorkContext(PrismediaDbContext db) {
             if (EntityKindRegistry.TryDescribe(current.KindCode, out var definition)
                 && definition.AcquisitionProfile is { } acquisitionProfile) {
                 workId = id;
+                workTitle = current.Title;
                 workProfile = acquisitionProfile;
                 break;
             }
@@ -77,7 +89,7 @@ internal sealed class EfAcquisitionWorkContext(PrismediaDbContext db) {
         }
 
         if (workProfile is null) {
-            return (null, []);
+            return (null, null, []);
         }
 
         var dates = await db.EntityDates.AsNoTracking()
@@ -96,7 +108,7 @@ internal sealed class EfAcquisitionWorkContext(PrismediaDbContext db) {
         }
 
         var titles = await EfAcquisitionWorkTitles.ReadAsync(db, workId, cancellationToken);
-        return (year, titles);
+        return (year, workTitle, titles);
     }
 
 }

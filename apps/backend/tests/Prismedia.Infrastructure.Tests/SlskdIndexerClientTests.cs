@@ -120,7 +120,7 @@ public sealed class SlskdIndexerClientTests {
     }
 
     [Fact]
-    public async Task SoulseekSearchIsAudioOnly() {
+    public async Task SoulseekSearchDoesNotQueryUnsupportedMovieContent() {
         var handler = new Handler(_ => throw new InvalidOperationException("HTTP should not be called"));
         var client = new SlskdIndexerClient(new HttpClient(handler));
 

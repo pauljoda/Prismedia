@@ -65,6 +65,24 @@ public sealed class LibraryScanJobsTests {
     }
 
     [Fact]
+    public async Task ExplicitReconcileQueuesForcedRootScans() {
+        var rootId = Guid.NewGuid();
+        var queue = new RecordingJobQueue();
+
+        await LibraryScanJobs.QueueReconcileScansForRootAsync(queue, rootId, "Comics",
+            new LibraryScanSelection(false, false, false, true, true), CancellationToken.None);
+
+        Assert.Equal([JobType.ScanBook, JobType.ScanComic], queue.Enqueued.Select(job => job.Type));
+        Assert.All(queue.Enqueued, job => {
+            var payload = AssertPayload(job);
+            Assert.Equal(rootId, payload.RootId);
+            Assert.True(payload.ForceReconcile);
+            Assert.False(payload.ChangesOnly);
+            Assert.False(payload.Deep);
+        });
+    }
+
+    [Fact]
     public async Task ChangedPathQueueingPersistsEachKindBeforeQueuingSurgicalJobs() {
         var rootId = Guid.NewGuid();
         var queue = new RecordingJobQueue();

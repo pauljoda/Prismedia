@@ -39,7 +39,8 @@ public sealed class AcquisitionFinalizeJobHandler(
             cancellationToken,
             payload.OwnedMediaQuality,
             payload.OwnedMediaRevision,
-            payload.OwnedFormatScore);
+            payload.OwnedFormatScore,
+            payload.OwnedAudiobookShape());
         await context.ReportProgressAsync(100, payload.Message ?? "Import ready", cancellationToken);
     }
 }

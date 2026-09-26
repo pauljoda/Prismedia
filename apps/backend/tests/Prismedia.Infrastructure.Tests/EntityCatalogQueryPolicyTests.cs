@@ -8,6 +8,27 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityCatalogQueryPolicyTests {
     [Fact]
+    public async Task ArchivedLibraryMetadataRemainsAddressableButLeavesEveryCatalogSurface() {
+        await using var db = CreateContext();
+        var archived = Row(Guid.NewGuid(), EntityKind.Movie, DateTimeOffset.UtcNow);
+        archived.IsLibraryArchived = true;
+        var available = Row(Guid.NewGuid(), EntityKind.Movie, DateTimeOffset.UtcNow);
+        db.Entities.AddRange(archived, available);
+        await db.SaveChangesAsync();
+
+        foreach (var surface in new[] { EntityCatalogSurface.KindBrowse, EntityCatalogSurface.Discovery,
+                     EntityCatalogSurface.Collection, EntityCatalogSurface.Statistics }) {
+            var all = db.Entities.AsNoTracking();
+            var ids = await EntityCatalogQueryPolicy.Apply(all, all, surface).Select(entity => entity.Id).ToArrayAsync();
+            Assert.Equal([available.Id], ids);
+        }
+        Assert.NotNull(await db.Entities.FindAsync(archived.Id));
+        var history = await EntityCatalogQueryPolicy.Apply(db.Entities, db.Entities,
+            EntityCatalogSurface.Statistics, includeArchived: true).Select(entity => entity.Id).ToArrayAsync();
+        Assert.Contains(archived.Id, history);
+    }
+
+    [Fact]
     public async Task PlansApplyTheDeclaredSurfaceMatrixWithoutRouteSpecificKindBranches() {
         await using var db = CreateContext();
         var bookId = Guid.NewGuid();

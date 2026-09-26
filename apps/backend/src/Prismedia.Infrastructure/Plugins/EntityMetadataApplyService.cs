@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Security;
@@ -22,7 +23,7 @@ public sealed record PluginArtworkServiceOptions(string CacheRoot);
 /// <summary>
 /// Applies selected plugin metadata proposals into entity capability rows.
 /// </summary>
-public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchService, IEntityPositionEnricher {
+public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchService, IEntityPositionEnricher, IExternalPeopleCreditsApplier {
     // Stat codes are an open provider vocabulary (plugins may send any code; rows are
     // stored and displayed as-is), so this filter matches wire strings rather than a
     // closed [Code] enum. prism-vocab: external
@@ -232,6 +233,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
 
         var now = DateTimeOffset.UtcNow;
         await ApplyScopedPatchToEntityAsync(entity, fields, request.Patch, now, cancellationToken);
+        await RecordMetadataEvidenceAsync(entity.Id, request.Patch, fields, null, now, cancellationToken);
 
         if (fields.Contains(MetadataPatchField.Images.ToCode()) && request.SelectedImages is not null) {
             await _artwork.DownloadSelectedImagesAsync(entityId, request.SelectedImages, now, cancellationToken);
@@ -296,7 +298,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         }
 
         if (fields.Contains(MetadataPatchField.Positions.ToCode())) {
-            await ReplacePositionsAsync(entity, EntityMetadataPositionRules.Normalize(patch.Positions), now, cancellationToken);
+            await ReplacePositionsAsync(entity, EntityMetadataPositionRules.Normalize(patch), now, cancellationToken, EntityMetadataPositionRules.Labels(patch, allowClear: true));
         }
 
         if (fields.Contains(MetadataPatchField.Classification.ToCode())) {
@@ -372,6 +374,78 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             identifyEligibility,
             cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<ExternalPeopleCreditsApplyResult> ApplyIfMissingAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        CancellationToken cancellationToken) {
+        ArgumentNullException.ThrowIfNull(proposal);
+        _structurePlacement.Reset();
+        proposal = EntityMetadataProposalIdentityPolicy.RemoveSharedStructuralIdentities(proposal);
+        var selectedFields = new[] { MetadataPatchField.Credits.ToCode() };
+
+        await _artwork.StageAsync(ProposalArtworkUrls([proposal]), cancellationToken);
+
+        var result = ExternalPeopleCreditsApplyResult.NotFound;
+        bool accepted;
+        try {
+            accepted = await _lifecycle.ExecuteAsync(
+                entityId,
+                async leaseCancellationToken => {
+                    if (!await _db.Entities.AnyAsync(row => row.Id == entityId, leaseCancellationToken)) {
+                        return;
+                    }
+
+                    var creditsEvidence = await _db.EntityMetadataFields.FindAsync(
+                        [entityId, MetadataPatchField.Credits],
+                        leaseCancellationToken);
+                    if (creditsEvidence?.IsLocked == true) {
+                        result = ExternalPeopleCreditsApplyResult.ProtectedByUser;
+                        return;
+                    }
+
+                    var peopleRelationshipCodes = new[] {
+                        RelationshipKind.Cast.ToCode(),
+                        RelationshipKind.Credits.ToCode()
+                    };
+                    if (await _db.EntityRelationshipLinks.AnyAsync(
+                            row => row.EntityId == entityId
+                                && peopleRelationshipCodes.Contains(row.RelationshipCode),
+                            leaseCancellationToken)) {
+                        result = ExternalPeopleCreditsApplyResult.ExistingCredits;
+                        return;
+                    }
+
+                    result = await ApplyWithinLifecycleAsync(
+                        entityId,
+                        proposal,
+                        selectedFields,
+                        selectedImages: null,
+                        progress: null,
+                        identifyEligibility: null,
+                        leaseCancellationToken)
+                        ? ExternalPeopleCreditsApplyResult.Applied
+                        : ExternalPeopleCreditsApplyResult.NotFound;
+                },
+                cancellationToken);
+        } catch {
+            _artwork.RollbackStagedWrites();
+            throw;
+        }
+
+        if (!accepted) {
+            _artwork.RollbackStagedWrites();
+            return ExternalPeopleCreditsApplyResult.LifecycleConflict;
+        }
+        if (result == ExternalPeopleCreditsApplyResult.Applied) {
+            _artwork.CommitStagedWrites();
+            await RefreshGridThumbnailsForDownloadedArtworkAsync(cancellationToken);
+        } else {
+            _artwork.RollbackStagedWrites();
+        }
+        return result;
+    }
+
     private async Task<bool> ApplyAsyncCore(
         Guid entityId,
         EntityMetadataProposal proposal,
@@ -437,6 +511,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         }
 
         var selected = selectedFields.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var locked = await LockedMetadataFieldsAsync(entity.Id, cancellationToken);
+        selected.ExceptWith(locked.Select(field => field.ToCode()));
         var patch = proposal.Patch;
         var now = DateTimeOffset.UtcNow;
         var rootTitle = !string.IsNullOrWhiteSpace(patch.Title) ? patch.Title.Trim() : entity.Title;
@@ -447,12 +523,14 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             entity.Title = patch.Title.Trim();
         }
 
-        if (selected.Contains(MetadataPatchField.Description.ToCode())) {
+        // Provider omissions carry no evidence. Explicit clearing belongs to ApplyPatchAsync,
+        // whose selected fields represent a user's edit rather than a sparse provider response.
+        if (selected.Contains(MetadataPatchField.Description.ToCode()) && !string.IsNullOrWhiteSpace(patch.Description)) {
             await UpsertDescriptionAsync(entityId, patch.Description, now, cancellationToken);
         }
 
         if (selected.Contains(MetadataPatchField.ExternalIds.ToCode())) {
-            await UpsertExternalIdsAsync(entityId, patch.ExternalIds, patch.Urls, cancellationToken);
+            await ReconcileProviderExternalIdsAsync(entity, proposal, cancellationToken);
         }
         await BindProviderIdentityAsync(
             entity,
@@ -485,11 +563,11 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         }
 
         if (selected.Contains(MetadataPatchField.Positions.ToCode())) {
-            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch.Positions);
-            await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken);
+            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch);
+            await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken, EntityMetadataPositionRules.Labels(patch));
         }
 
-        if (selected.Contains(MetadataPatchField.Classification.ToCode())) {
+        if (selected.Contains(MetadataPatchField.Classification.ToCode()) && !string.IsNullOrWhiteSpace(patch.Classification)) {
             await UpsertClassificationAsync(entityId, patch.Classification, now, cancellationToken);
         }
 
@@ -500,6 +578,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         if (patch.Flags?.IsNsfw == true) {
             await UpsertFlagsAsync(entityId, new EntityMetadataFlagsPatch(null, true, null), now, cancellationToken);
         }
+
+        await RecordMetadataEvidenceAsync(entity.Id, patch, selected, proposal, now, cancellationToken);
 
         // Walk the root's related entities and structural children through the single recursive node
         // applier. Relationship proposals only enrich entities the root's credit/studio/tags fields

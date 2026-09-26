@@ -1,5 +1,6 @@
 import type { EntityKind } from "$lib/api/generated/model";
 import type { PluginSearchDefinition } from "$lib/api/generated/model";
+import type { EntityMetadataPatch as GeneratedMetadataPatch } from "$lib/api/generated/model";
 import type {
   EntityDateTypeCode,
   IdentifyActionCode,
@@ -34,6 +35,7 @@ export interface PluginProvider {
   missingAuthKeys: string[];
   updateAvailable?: boolean;
   availableVersion?: string | null;
+  iconUrl?: string | null;
 }
 
 export interface IdentifyQuery {
@@ -82,6 +84,7 @@ export interface EntityMetadataPatch {
   description?: string | null;
   externalIds: Record<string, string>;
   urls: string[];
+  retiredExternalIds?: GeneratedMetadataPatch["retiredExternalIds"];
   tags: string[];
   studio?: string | null;
   credits: CreditPatch[];
@@ -89,6 +92,7 @@ export interface EntityMetadataPatch {
   dateEntries?: Array<{ type: EntityDateTypeCode; value: string }>;
   stats: Record<string, number>;
   positions: Record<string, number>;
+  positionEntries?: GeneratedMetadataPatch["positionEntries"];
   classification?: string | null;
   flags?: EntityMetadataFlagsPatch | null;
 }

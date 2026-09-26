@@ -10,12 +10,25 @@ namespace Prismedia.Api.Diagnostics;
 /// (<c>Prismedia:SlowRequestThresholdMs</c>, default 250), Debug otherwise.
 /// </summary>
 public sealed class RequestTimingMiddleware {
+    #region Static Variables
+
     private const double DefaultSlowThresholdMs = 250;
 
+    #endregion
+
+    #region Variables
+
     private readonly RequestDelegate _next;
+
     private readonly ILogger<RequestTimingMiddleware> _logger;
+
     private readonly double _slowThresholdMs;
 
+    #endregion
+
+    #region Constructors
+
+    /// <summary>Creates the middleware, reading the slow-request threshold from configuration or using the default.</summary>
     public RequestTimingMiddleware(
         RequestDelegate next,
         ILogger<RequestTimingMiddleware> logger,
@@ -29,6 +42,11 @@ public sealed class RequestTimingMiddleware {
                 : DefaultSlowThresholdMs;
     }
 
+    #endregion
+
+    #region Actions - Pipeline
+
+    /// <summary>Times API and OPDS requests, adding the Server-Timing header and logging the duration; other paths pass through.</summary>
     public async Task InvokeAsync(HttpContext context) {
         var path = context.Request.Path;
         if (!path.StartsWithSegments("/api") && !path.StartsWithSegments("/opds")) {
@@ -64,4 +82,6 @@ public sealed class RequestTimingMiddleware {
                 db.Commands);
         }
     }
+
+    #endregion
 }

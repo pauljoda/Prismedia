@@ -35,7 +35,7 @@ public static class AppSettings {
 
         public static readonly SettingDefinition<bool> AutoScanEnabled = Bool(
             Group, "scan.autoScanEnabled", "Automatic library scans",
-            "Queue scans on a recurring interval.", false, 10);
+            "Scan enabled libraries regularly. Linked external libraries always use the scan interval below; pause their library to stop scanning.", false, 10);
         public static readonly SettingDefinition<int> IntervalMinutes = Int(
             Group, "scan.intervalMinutes", "Scan interval",
             "Minutes between automatic scans.", 60, 20, min: 5, max: 1440, step: 5);

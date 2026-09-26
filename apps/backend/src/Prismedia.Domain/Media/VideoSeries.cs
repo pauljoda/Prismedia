@@ -37,7 +37,21 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         new CapabilityCredits(),
         new CapabilityProgress(),
         new CapabilityConsumption()
-    ]) {
+    ]),
+    IManagedFulfillmentKindDefinition {
+    /// <inheritdoc />
+    /// <remarks>Selected episodes are searched without turning on broad series monitoring.</remarks>
+    public ManagedFulfillmentPolicy ManagedFulfillment { get; } = new(
+        identityFormats: [ProviderIdentityFormat.Tvdb, ProviderIdentityFormat.Tmdb],
+        identityDescription: "a TVDB or TMDB identity",
+        usesProfile: true,
+        target: new(EntityKind.VideoEpisode, ManagedTargetShape.Episode),
+        minimumTargets: 1,
+        maximumTargets: ManagedFulfillmentPolicy.FiniteChildren,
+        requiredMonitoring: false,
+        requiresSearch: true,
+        targetIdentityFormats: [ProviderIdentityFormat.Tvdb]);
+
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.OrderedContainer(EntityKind.VideoEpisode);
 

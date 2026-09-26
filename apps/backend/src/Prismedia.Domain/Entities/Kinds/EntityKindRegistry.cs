@@ -8,6 +8,8 @@ namespace Prismedia.Domain.Entities;
 /// fails unless every <see cref="EntityKind"/> has exactly one complete definition.
 /// </summary>
 public static class EntityKindRegistry {
+    #region Static Variables
+
     private static readonly IReadOnlyList<EntityKindDefinition> Definitions = Discover();
 
     private static readonly IReadOnlyDictionary<EntityKind, EntityKindDefinition> ByKind =
@@ -33,6 +35,10 @@ public static class EntityKindRegistry {
 
     private static readonly IReadOnlyDictionary<PlayableVideoScanPlacement, IPlayableVideoKindDefinition>
         PlayableVideoByScanPlacement = BuildPlayableVideoByScanPlacement(Definitions);
+
+    #endregion
+
+    #region Actions - Lookup
 
     /// <summary>All discovered entity-kind definitions in enum order.</summary>
     public static IReadOnlyList<EntityKindDefinition> All => Definitions;
@@ -126,6 +132,10 @@ public static class EntityKindRegistry {
         return false;
     }
 
+    #endregion
+
+    #region Actions - Discovery
+
     private static IReadOnlyList<EntityKindDefinition> Discover() {
         var definitionType = typeof(EntityKindDefinition);
         var definitions = definitionType.Assembly.GetTypes()
@@ -159,6 +169,7 @@ public static class EntityKindRegistry {
         ValidateStructurePolicies(definitions);
         ValidateCatalogVisibilityPolicies(definitions);
         ValidateProgressTopologies(definitions);
+        ValidateEngagementModalities(definitions);
 
         return definitions;
     }
@@ -178,6 +189,10 @@ public static class EntityKindRegistry {
 
         return grouped.ToDictionary(group => group.Key, group => group.Single());
     }
+
+    #endregion
+
+    #region Actions - Validation
 
     private static void ValidateLibraryVisibilityPolicies(IReadOnlyList<EntityKindDefinition> definitions) {
         var byKind = definitions.ToDictionary(definition => definition.Kind);
@@ -269,6 +284,18 @@ public static class EntityKindRegistry {
                     break;
                 default:
                     throw new InvalidOperationException($"Entity kind '{definition.Code}' has an unsupported progress topology.");
+            }
+        }
+    }
+
+    private static void ValidateEngagementModalities(IReadOnlyList<EntityKindDefinition> definitions) {
+        foreach (var definition in definitions) {
+            var ownerless = definition.Engagement.Modalities
+                .FirstOrDefault(modality => modality.RequiresAudioPlaybackOwner &&
+                    definition is not IAudioPlaybackOwnerKindDefinition);
+            if (ownerless is not null) {
+                throw new InvalidOperationException(
+                    $"Entity kind '{definition.Code}' declares the '{ownerless.Modality}' modality, which requires a definition that owns a shared-player audio queue.");
             }
         }
     }
@@ -415,4 +442,6 @@ public static class EntityKindRegistry {
                 $"Duplicate entity kind definition {label}s: {string.Join(", ", duplicates)}.");
         }
     }
+
+    #endregion
 }

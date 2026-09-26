@@ -10,6 +10,7 @@ using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Security;
 
 namespace Prismedia.Infrastructure.Subtitles;
 
@@ -19,6 +20,7 @@ namespace Prismedia.Infrastructure.Subtitles;
 /// </summary>
 internal sealed class SubtitleAcquisitionService(
     PrismediaDbContext db,
+    ProviderCredentialStore credentials,
     OpenSubtitlesClient openSubtitles,
     SubtitleAssetImportService assets,
     IMediaHashing hashing,
@@ -356,14 +358,16 @@ internal sealed class SubtitleAcquisitionService(
             .Where(row => row.ProviderCode == SubtitleProviderCodes.OpenSubtitles)
             .Select(row => (Guid?)row.Id)
             .SingleOrDefaultAsync(cancellationToken);
+        var environment = new Dictionary<string, string?> {
+            [OpenSubtitlesCredentialKeys.ApiKey] = configuration[OpenSubtitlesProtocol.ApiKeyEnvironment],
+            [OpenSubtitlesCredentialKeys.Username] = configuration[OpenSubtitlesProtocol.UsernameEnvironment],
+            [OpenSubtitlesCredentialKeys.Password] = configuration[OpenSubtitlesProtocol.PasswordEnvironment]
+        };
         var stored = providerId is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : await db.ProviderCredentials.AsNoTracking()
-                .Where(row => row.ProviderConfigId == providerId)
-                .ToDictionaryAsync(row => row.CredentialKey, row => row.EncryptedValue, StringComparer.Ordinal, cancellationToken);
-        Override(stored, OpenSubtitlesCredentialKeys.ApiKey, configuration[OpenSubtitlesProtocol.ApiKeyEnvironment]);
-        Override(stored, OpenSubtitlesCredentialKeys.Username, configuration[OpenSubtitlesProtocol.UsernameEnvironment]);
-        Override(stored, OpenSubtitlesCredentialKeys.Password, configuration[OpenSubtitlesProtocol.PasswordEnvironment]);
+            : await credentials.ReadAsync(providerId.Value,
+                environment.Where(pair => string.IsNullOrWhiteSpace(pair.Value)).Select(pair => pair.Key).ToArray(), cancellationToken);
+        foreach (var (key, value) in environment) Override(stored, key, value);
         return stored;
     }
 
@@ -386,8 +390,7 @@ internal sealed class SubtitleAcquisitionService(
             };
             db.ProviderCredentials.Add(row);
         }
-        row.EncryptedValue = value.Trim();
-        row.UpdatedAt = now;
+        credentials.SetValue(row, value.Trim(), now);
     }
 
     private static OpenSubtitlesConfiguration ToSafeConfiguration(

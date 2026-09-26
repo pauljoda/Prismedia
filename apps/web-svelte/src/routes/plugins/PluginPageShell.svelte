@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { AlertTriangle, Boxes, Check, Globe, Plug, Puzzle, Sparkles, X } from "@lucide/svelte";
-  import { Alert, Badge, Button, Tabs } from "@prismedia/ui-svelte";
+  import { Alert, Badge, Button, Tabs, buttonVariants } from "@prismedia/ui-svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import ManagePageHeader from "$lib/components/manage/ManagePageHeader.svelte";
   import type { PluginTabDefinition, PluginsTab } from "./plugin-page-types";
 
   let {
@@ -13,6 +14,7 @@
     visibleTabs,
     onDismissError,
     onTabChange,
+    status,
     children,
   }: {
     loading: boolean;
@@ -22,6 +24,8 @@
     visibleTabs: PluginTabDefinition[];
     onDismissError: () => void;
     onTabChange: (tab: PluginsTab) => void;
+    /** Counts and attention states shown under the title. */
+    status?: Snippet;
     children: Snippet;
   } = $props();
 
@@ -37,16 +41,12 @@
   const next = visibleTabs.find((item) => item.key === value);
   if (next) onTabChange(next.key);
 }} class="gap-5 min-w-0">
-  <header class="flex flex-col gap-4">
-    <div>
-      <h1 class="flex items-center gap-2.5">
-        <Puzzle class="h-5 w-5 text-text-accent" />
-        Plugins
-      </h1>
-      <p class="mt-1 text-text-muted text-[0.78rem]">
-        Install and manage identification plugins and metadata providers
-      </p>
-    </div>
+  <div class="flex flex-col gap-4">
+    <ManagePageHeader icon={Puzzle} title="Plugins" {status}>
+      {#snippet actions()}
+        <a class={buttonVariants({ variant: "outline", size: "sm" })} href="/settings/connections"><Plug />Connections</a>
+      {/snippet}
+    </ManagePageHeader>
 
     {#if !loading}
       <Tabs.List variant="line" class="overflow-x-auto scrollbar-hidden" aria-label="Plugin views">
@@ -65,7 +65,7 @@
         {/each}
       </Tabs.List>
     {/if}
-  </header>
+  </div>
 
   {#if error}
     <Alert.Root variant="destructive">

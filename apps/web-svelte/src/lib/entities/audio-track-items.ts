@@ -24,15 +24,6 @@ function parseDurationString(value: string | null | undefined): number | null {
   return days * 86400 + hours * 3600 + minutes * 60 + seconds + frac;
 }
 
-/** Parse a display duration like "12:40" or "1:02:33" into seconds. */
-function parseDisplayDuration(label: string): number | null {
-  const parts = label.split(":").map(Number);
-  if (parts.some((p) => !Number.isFinite(p))) return null;
-  if (parts.length === 2) return parts[0]! * 60 + parts[1]!;
-  if (parts.length === 3) return parts[0]! * 3600 + parts[1]! * 60 + parts[2]!;
-  return null;
-}
-
 function toNumber(value: number | string | null | undefined): number | null {
   if (value == null) return null;
   const n = Number(value);
@@ -84,7 +75,6 @@ export function entityThumbnailToTrackItem(
   libraryId: string | null,
   options: EntityThumbnailTrackItemOptions = {},
 ): AudioTrackListItemDto {
-  const durationMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.duration);
   const codecMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.audio);
   const sectionMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.disc);
   const artistMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.person);
@@ -100,7 +90,8 @@ export function entityThumbnailToTrackItem(
     hasSourceMedia: thumb.hasSourceMedia === true,
     wantedStatus: thumb.wantedStatus ?? null,
     latestAcquisitionStatus: thumb.latestAcquisitionStatus ?? null,
-    duration: durationMeta ? parseDisplayDuration(durationMeta.label) : null,
+    // The duration meta label is display text ("15:31" is 15h31m past an hour); use the typed value.
+    duration: toNumber(thumb.durationSeconds),
     bitRate: null,
     sampleRate: null,
     channels: null,

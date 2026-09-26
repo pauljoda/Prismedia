@@ -322,7 +322,8 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             externalIds,
             files,
             row.IsWanted,
-            providerIdentity);
+            providerIdentity,
+            row.IsLibraryArchived);
     }
 
     private async Task<EntityProviderIdentity?> ResolveProviderIdentityAsync(

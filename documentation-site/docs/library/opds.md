@@ -30,7 +30,7 @@ Use these settings in any app that supports OPDS 1.x / OPDS 1.2 catalogs:
 | Username | Your Prismedia username. |
 | Password | Your Prismedia password. |
 
-After saving the catalog, browse **Libraries**, **Recently Added**, **Authors**, or **Series**. Series navigation groups child books; library acquisition feeds only show the individual downloadable books.
+After saving the catalog, browse **Libraries**, **Recently Added**, **Authors**, or **Series**. Series navigation groups prose books and dedicated comic installments. Comic issues beneath an optional volume link to their comic series. Acquisition feeds show individual downloadable publications.
 
 :::tip Apps that do not resend credentials for covers/downloads
 Some OPDS clients authenticate the catalog request but then fetch cover or download links without the `Authorization` header. If covers or downloads fail while the catalog loads, put a session token query parameter on the catalog URL (get one by signing in with `POST /api/auth/login` — see [Authentication & User Accounts](../deployment/authentication.md#direct-api-access)):
@@ -68,8 +68,11 @@ OPDS publishes downloadable books and comics in these formats:
 | --- | --- | --- |
 | EPUB | `.epub` | `application/epub+zip` |
 | PDF | `.pdf` | `application/pdf` |
-| CBZ / ZIP comics | `.cbz`, `.zip` | `application/vnd.comicbook+zip` or `application/zip` |
-| CBR comics | `.cbr` | `application/vnd.comicbook-rar` |
+| CBZ / ZIP comics | `.cbz`, `.zip` | `application/vnd.comicbook+zip` |
+
+Comic ZIP archives are delivered with a `.cbz` download filename. CBR archives and
+unmaterialized loose-page folders are not published; a managed CBZ produced from a
+supported loose-page comic can be published once it is the installment's source.
 
 Unsupported book files are excluded from OPDS feeds and return `404` from direct OPDS download links.
 

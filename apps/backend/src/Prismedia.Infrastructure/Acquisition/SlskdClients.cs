@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -19,7 +20,9 @@ public static class SoulseekProtocol {
     public const string DownloadBatchesPath = "/api/v0/transfers/downloads/batches";
     public const string DownloadsPath = "/api/v0/transfers/downloads";
     public const string ServerPath = "/api/v0/server";
+    public const string SearchInProgressState = "InProgress";
     public const string SearchCompletedState = "Completed";
+    public const string SearchTimedOutState = "TimedOut";
     public const string TransferCompletedState = "Completed";
     public const string TransferSucceededState = "Succeeded";
     public const string NormalizedFailedState = "Failed";
@@ -105,7 +108,8 @@ public sealed partial class SlskdIndexerClient(
     HttpClient http,
     SlskdSearchConcurrencyGate? concurrency = null) : IIndexerSearchClient {
     private const int SoulseekSearchTimeoutMilliseconds = 10_000;
-    private const int SearchCompletionPollAttempts = 60;
+    // A queued search can remain in progress after its 10-second peer-response window ends.
+    private const int SearchCompletionPollAttempts = 120;
     private static readonly TimeSpan SearchCompletionPollInterval = TimeSpan.FromMilliseconds(250);
     private static readonly IReadOnlySet<string> AudioExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".m4b", ".wma", ".opus",
@@ -120,9 +124,11 @@ public sealed partial class SlskdIndexerClient(
         IndexerConnection connection,
         IndexerQuery query,
         CancellationToken cancellationToken) {
-        if (query.Kind is not (EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist)) {
+        if (query.Kind is not (EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist)
+            && !IsPublication(query.Kind)) {
             return [];
         }
+        if (query.Protocols is { } protocols && !protocols.Contains(DownloadProtocol.Soulseek)) return [];
 
         using var searchLease = concurrency is null
             ? null
@@ -148,6 +154,7 @@ public sealed partial class SlskdIndexerClient(
         await EnsureSuccessAsync(response, "read Soulseek search responses", cancellationToken);
         var peers = await response.Content.ReadFromJsonAsync<SlskdSearchResponse[]>(SoulseekLocator.JsonOptions, cancellationToken) ?? [];
 
+        if (IsPublication(query.Kind)) return PublicationReleases(query, searchId, peers);
         return query.Kind == EntityKind.AudioTrack
             ? TrackReleases(query, searchId, peers)
             : AlbumReleases(query, searchId, peers);
@@ -160,13 +167,13 @@ public sealed partial class SlskdIndexerClient(
         CancellationToken cancellationToken) {
         var state = initialState;
         for (var attempt = 0; attempt < SearchCompletionPollAttempts; attempt++) {
-            if (HasState(state, SoulseekProtocol.SearchCompletedState)) return;
+            if (SearchHasFinished(state)) return;
 
             using var request = Request(connection, HttpMethod.Get, $"{SoulseekProtocol.SearchesPath}/{searchId}");
             using var response = await http.SendAsync(request, cancellationToken);
             await EnsureSuccessAsync(response, "read Soulseek search state", cancellationToken);
             state = (await response.Content.ReadFromJsonAsync<SlskdSearchState>(SoulseekLocator.JsonOptions, cancellationToken))?.State;
-            if (HasState(state, SoulseekProtocol.SearchCompletedState)) return;
+            if (SearchHasFinished(state)) return;
             await Task.Delay(SearchCompletionPollInterval, cancellationToken);
         }
 
@@ -253,11 +260,13 @@ public sealed partial class SlskdIndexerClient(
     }
     private static string PathContext(string path) => string.Join(
         " / ",
-        path.Split('\\', '/', StringSplitOptions.RemoveEmptyEntries).TakeLast(4));
+        path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries).TakeLast(4));
     private static string[] SignificantWords(string value) => Normalize(value).Split(' ', StringSplitOptions.RemoveEmptyEntries);
     private static string Normalize(string value) => NonWordRegex().Replace(value.ToLowerInvariant(), " ").Trim();
     private static bool HasState(string? value, string state) => value?.Split(',', StringSplitOptions.TrimEntries)
         .Contains(state, StringComparer.OrdinalIgnoreCase) == true;
+    private static bool SearchHasFinished(string? state) =>
+        HasState(state, SoulseekProtocol.SearchCompletedState) || HasState(state, SoulseekProtocol.SearchTimedOutState);
 
     private static HttpRequestMessage Request(IndexerConnection connection, HttpMethod method, string path) {
         var request = new HttpRequestMessage(method, connection.BaseUrl.TrimEnd('/') + path);
@@ -292,6 +301,8 @@ public sealed partial class SlskdIndexerClient(
 
 /// <summary>Queues and monitors slskd batch downloads represented by <see cref="SoulseekLocator"/>.</summary>
 public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
+    private const string LegacyQueueWaitTimeout = "The wait timed out after";
+
     public DownloadClientKind Kind => DownloadClientKind.Slskd;
 
     public async Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) {
@@ -444,50 +455,78 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
         DownloadClientConnection connection,
         SoulseekReleaseLocator locator,
         CancellationToken cancellationToken) {
-        using var message = Request(
-            connection,
-            HttpMethod.Post,
-            $"{SoulseekProtocol.DownloadsPath}/{Uri.EscapeDataString(locator.Username)}");
-        message.Content = JsonContent.Create(locator.Files.Select(file => new { filename = file.Filename, size = file.Size }));
-        using var response = await http.SendAsync(message, cancellationToken);
-        if (!response.IsSuccessStatusCode) {
-            var users = await GetDownloadsAsync(connection, cancellationToken);
-            var matchingGroups = LegacyGroups(users)
-                .Where(group => Represents(group, locator))
-                .ToArray();
-            if (matchingGroups.Length == 1) {
-                return SoulseekLocator.EncodeLegacy(new SoulseekLegacyTransferLocator(matchingGroups[0].Fingerprint));
-            }
-
-            var matchingFiles = users
-                .Where(user => user.Username.Equals(locator.Username, StringComparison.Ordinal))
-                .SelectMany(user => user.Directories)
-                .SelectMany(directory => directory.Files)
-                .Where(actual => locator.Files.Any(expected =>
-                    actual.Filename.Equals(expected.Filename, StringComparison.Ordinal)
-                    && actual.Size == expected.Size))
-                .ToArray();
-            var detail = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (matchingFiles.Length == 0) {
-                throw new DownloadClientAddUnresolvedException(
-                    $"slskd rejected the Soulseek files and no matching download exists: {(int)response.StatusCode} {detail}".Trim());
-            }
-
-            throw new InvalidOperationException(
-                $"slskd could not enqueue the Soulseek files and matching downloads are ambiguous: {(int)response.StatusCode} {detail}".Trim());
-        }
-        var body = await response.Content.ReadFromJsonAsync<LegacyEnqueueResponse>(SoulseekLocator.JsonOptions, cancellationToken);
-        if (body is null || body.Failed.Count != 0 || body.Enqueued.Count != locator.Files.Count) {
-            if (body is not null) {
-                foreach (var transfer in body.Enqueued) {
-                    await RemoveTransferAsync(connection, locator.Username, transfer.Id, cancellationToken);
+        for (var attempt = 0; attempt < 2; attempt++) {
+            using var message = Request(
+                connection,
+                HttpMethod.Post,
+                $"{SoulseekProtocol.DownloadsPath}/{Uri.EscapeDataString(locator.Username)}");
+            message.Content = JsonContent.Create(locator.Files.Select(file => new { filename = file.Filename, size = file.Size }));
+            using var response = await http.SendAsync(message, cancellationToken);
+            if (!response.IsSuccessStatusCode) {
+                var users = await GetDownloadsAsync(connection, cancellationToken);
+                var matchingGroups = LegacyGroups(users)
+                    .Where(group => Represents(group, locator))
+                    .ToArray();
+                if (matchingGroups.Length == 1) {
+                    return SoulseekLocator.EncodeLegacy(new SoulseekLegacyTransferLocator(matchingGroups[0].Fingerprint));
                 }
+
+                var matchingFiles = users
+                    .Where(user => user.Username.Equals(locator.Username, StringComparison.Ordinal))
+                    .SelectMany(user => user.Directories)
+                    .SelectMany(directory => directory.Files)
+                    .Where(actual => locator.Files.Any(expected =>
+                        actual.Filename.Equals(expected.Filename, StringComparison.Ordinal)
+                        && actual.Size == expected.Size))
+                    .ToArray();
+                var detail = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (matchingFiles.Length == 0) {
+                    if (attempt == 0 && response.StatusCode == HttpStatusCode.InternalServerError
+                        && detail.Contains(LegacyQueueWaitTimeout, StringComparison.OrdinalIgnoreCase)) {
+                        // Older slskd releases can exhaust their five-second peer wait without enqueuing.
+                        // Only this exact transient failure is retried, after confirming no file was queued.
+                        await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+                        var delayedUsers = await GetDownloadsAsync(connection, cancellationToken);
+                        var delayedGroup = LegacyGroups(delayedUsers)
+                            .Where(group => Represents(group, locator))
+                            .ToArray();
+                        if (delayedGroup.Length == 1) {
+                            return SoulseekLocator.EncodeLegacy(new SoulseekLegacyTransferLocator(delayedGroup[0].Fingerprint));
+                        }
+                        if (delayedUsers
+                            .Where(user => user.Username.Equals(locator.Username, StringComparison.Ordinal))
+                            .SelectMany(user => user.Directories)
+                            .SelectMany(directory => directory.Files)
+                            .Any(actual => locator.Files.Any(expected =>
+                                actual.Filename.Equals(expected.Filename, StringComparison.Ordinal)
+                                && actual.Size == expected.Size))) {
+                            throw new InvalidOperationException("slskd queued only part of the selected Soulseek files after its peer wait timed out.");
+                        }
+                        continue;
+                    }
+
+                    throw new DownloadClientAddUnresolvedException(
+                        $"slskd rejected the Soulseek files and no matching download exists: {(int)response.StatusCode} {detail}".Trim());
+                }
+
+                throw new InvalidOperationException(
+                    $"slskd could not enqueue the Soulseek files and matching downloads are ambiguous: {(int)response.StatusCode} {detail}".Trim());
             }
-            throw new DownloadClientAddUnresolvedException("slskd did not enqueue every file in the selected release.");
+            var body = await response.Content.ReadFromJsonAsync<LegacyEnqueueResponse>(SoulseekLocator.JsonOptions, cancellationToken);
+            if (body is null || body.Failed.Count != 0 || body.Enqueued.Count != locator.Files.Count) {
+                if (body is not null) {
+                    foreach (var transfer in body.Enqueued) {
+                        await RemoveTransferAsync(connection, locator.Username, transfer.Id, cancellationToken);
+                    }
+                }
+                throw new DownloadClientAddUnresolvedException("slskd did not enqueue every file in the selected release.");
+            }
+
+            return SoulseekLocator.EncodeLegacy(new SoulseekLegacyTransferLocator(
+                LegacyFingerprint(locator.Username, body.Enqueued)));
         }
 
-        return SoulseekLocator.EncodeLegacy(new SoulseekLegacyTransferLocator(
-            LegacyFingerprint(locator.Username, body.Enqueued)));
+        throw new UnreachableException();
     }
 
     private static async Task<bool> IsLegacyEndpointResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken) {

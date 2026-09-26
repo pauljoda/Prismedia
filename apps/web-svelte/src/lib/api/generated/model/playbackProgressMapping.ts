@@ -30,4 +30,6 @@ export interface PlaybackProgressMapping {
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
      */
   sourceEndSeconds?: number | string | null;
+  /** @nullable */
+  audioMarkerId?: string | null;
 }

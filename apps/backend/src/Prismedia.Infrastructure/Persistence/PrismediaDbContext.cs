@@ -7,13 +7,7 @@ namespace Prismedia.Infrastructure.Persistence;
 /// Entity Framework context for the Prismedia persistence model.
 /// </summary>
 public sealed class PrismediaDbContext : DbContext {
-    /// <summary>
-    /// Creates the context with provider-specific options supplied by dependency injection.
-    /// </summary>
-    /// <param name="options">EF Core context options, including the PostgreSQL connection and provider configuration.</param>
-    public PrismediaDbContext(DbContextOptions<PrismediaDbContext> options)
-        : base(options) {
-    }
+    #region Variables
 
     public DbSet<EntityKindRow> EntityKinds => Set<EntityKindRow>();
 
@@ -30,6 +24,7 @@ public sealed class PrismediaDbContext : DbContext {
     public DbSet<EntityCollectionMemberCountRow> EntityCollectionMemberCounts => Set<EntityCollectionMemberCountRow>();
 
     public DbSet<EntityDescriptionRow> EntityDescriptions => Set<EntityDescriptionRow>();
+    public DbSet<EntityMetadataFieldRow> EntityMetadataFields => Set<EntityMetadataFieldRow>();
 
     public DbSet<EntityRelationshipLinkRow> EntityRelationshipLinks => Set<EntityRelationshipLinkRow>();
 
@@ -59,6 +54,8 @@ public sealed class PrismediaDbContext : DbContext {
     public DbSet<EntityPageEntryRow> EntityPageEntries => Set<EntityPageEntryRow>();
 
     public DbSet<UserEntityStateRow> UserEntityStates => Set<UserEntityStateRow>();
+
+    public DbSet<UserProgressCheckpointRow> UserProgressCheckpoints => Set<UserProgressCheckpointRow>();
 
     public DbSet<EntityConsumptionEventRow> EntityConsumptionEvents => Set<EntityConsumptionEventRow>();
 
@@ -134,6 +131,18 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<BrowserSessionSettingRow> BrowserSessionSettings => Set<BrowserSessionSettingRow>();
 
+    public DbSet<IntegrationConnectionRow> IntegrationConnections => Set<IntegrationConnectionRow>();
+
+    public DbSet<IntegrationTransferRow> IntegrationTransfers => Set<IntegrationTransferRow>();
+    public DbSet<PluginInvocationStateRow> PluginInvocationStates => Set<PluginInvocationStateRow>();
+    public DbSet<PluginInvocationLeaseRow> PluginInvocationLeases => Set<PluginInvocationLeaseRow>();
+    public DbSet<ExternalLibraryMountRow> ExternalLibraryMounts => Set<ExternalLibraryMountRow>();
+    public DbSet<ManagedHoldingRow> ManagedHoldings => Set<ManagedHoldingRow>();
+    public DbSet<ManagedControlRow> ManagedControls => Set<ManagedControlRow>();
+    public DbSet<ManagedRequestRow> ManagedRequests => Set<ManagedRequestRow>();
+    public DbSet<ManagedSourceBindingRow> ManagedSourceBindings => Set<ManagedSourceBindingRow>();
+    public DbSet<FulfillmentReservationRow> FulfillmentReservations => Set<FulfillmentReservationRow>();
+
     public DbSet<ProviderConfigRow> ProviderConfigs => Set<ProviderConfigRow>();
 
     public DbSet<ProviderCredentialRow> ProviderCredentials => Set<ProviderCredentialRow>();
@@ -192,6 +201,22 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<MonitorRow> Monitors => Set<MonitorRow>();
 
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates the context with provider-specific options supplied by dependency injection.
+    /// </summary>
+    /// <param name="options">EF Core context options, including the PostgreSQL connection and provider configuration.</param>
+    public PrismediaDbContext(DbContextOptions<PrismediaDbContext> options)
+        : base(options) {
+    }
+
+    #endregion
+
+    #region Actions - Model
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         modelBuilder.ConfigureBaseEntityModel();
         modelBuilder.ConfigureEntityRelationshipModel();
@@ -225,4 +250,6 @@ public sealed class PrismediaDbContext : DbContext {
                 .IsRowVersion();
         }
     }
+
+    #endregion
 }

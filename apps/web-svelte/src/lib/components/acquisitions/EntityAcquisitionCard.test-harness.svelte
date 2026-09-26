@@ -18,6 +18,7 @@
     monitorActive = false,
     showMonitor = false,
     showSearch = false,
+    monitorUnavailableReason = null,
     onToggleMonitor,
     entityKind = ENTITY_KIND.book,
   }: {
@@ -31,6 +32,7 @@
     monitorActive?: boolean;
     showMonitor?: boolean;
     showSearch?: boolean;
+    monitorUnavailableReason?: string | null;
     onToggleMonitor?: () => void | Promise<void>;
     entityKind?: string;
   } = $props();
@@ -57,6 +59,9 @@
       return monitorUnknownStatus;
     },
     trackedVia: "",
+    get monitorUnavailableReason() {
+      return monitorUnavailableReason;
+    },
     get showFileManagement() {
       return showFileManagement;
     },

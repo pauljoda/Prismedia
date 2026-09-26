@@ -146,6 +146,54 @@ public sealed class SlskdDownloadClientTests {
     }
 
     [Fact]
+    public async Task LegacyPeerWaitTimeoutRetriesOnceAfterAnEmptyDownloadCheck() {
+        var locator = SoulseekLocator.Encode(new SoulseekReleaseLocator(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"), "peer",
+            [new SoulseekFileLocator("Books\\The Yellow Wallpaper.m4b", 100)]));
+        var handler = new StatusHandler([
+            (HttpStatusCode.BadRequest, """The JSON value could not be converted to System.Collections.Generic.IEnumerable`1[slskd.Transfers.API.QueueDownloadRequest]."""),
+            (HttpStatusCode.InternalServerError, "The wait timed out after 5000 milliseconds"),
+            (HttpStatusCode.OK, "[]"),
+            (HttpStatusCode.OK, "[]"),
+            (HttpStatusCode.Created, """{"enqueued":[{"id":"44444444-4444-4444-4444-444444444444","username":"peer","filename":"Books\\The Yellow Wallpaper.m4b","size":100,"bytesTransferred":0,"state":"Queued"}],"failed":[]}""")
+        ]);
+        var client = new SlskdDownloadClient(new HttpClient(handler));
+
+        var id = await client.AddAsync(Connection, new DownloadAddRequest(locator, null, "prismedia", "The Yellow Wallpaper"), CancellationToken.None);
+
+        Assert.StartsWith("slskd-legacy:", id, StringComparison.Ordinal);
+        Assert.Equal([
+            "/api/v0/transfers/downloads/batches",
+            "/api/v0/transfers/downloads/peer",
+            "/api/v0/transfers/downloads",
+            "/api/v0/transfers/downloads",
+            "/api/v0/transfers/downloads/peer"
+        ], handler.Requests.Select(request => request.RequestUri!.AbsolutePath));
+    }
+
+    [Fact]
+    public async Task LegacyPeerWaitTimeoutAdoptsATransferThatAppearsBeforeRetry() {
+        var locator = SoulseekLocator.Encode(new SoulseekReleaseLocator(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"), "peer",
+            [new SoulseekFileLocator("Books\\The Yellow Wallpaper.m4b", 100)]));
+        const string delayedDownload = """[{"username":"peer","directories":[{"directory":"Books","files":[{"id":"44444444-4444-4444-4444-444444444444","filename":"Books\\The Yellow Wallpaper.m4b","size":100,"bytesTransferred":0,"state":"Queued","batchId":null}]}]}]""";
+        var handler = new StatusHandler([
+            (HttpStatusCode.BadRequest, """The JSON value could not be converted to System.Collections.Generic.IEnumerable`1[slskd.Transfers.API.QueueDownloadRequest]."""),
+            (HttpStatusCode.InternalServerError, "The wait timed out after 5000 milliseconds"),
+            (HttpStatusCode.OK, "[]"),
+            (HttpStatusCode.OK, delayedDownload)
+        ]);
+        var client = new SlskdDownloadClient(new HttpClient(handler));
+
+        var id = await client.AddAsync(Connection, new DownloadAddRequest(locator, null, "prismedia", "The Yellow Wallpaper"), CancellationToken.None);
+
+        Assert.StartsWith("slskd-legacy:", id, StringComparison.Ordinal);
+        Assert.Equal(4, handler.Requests.Count);
+        Assert.Single(handler.Requests, request =>
+            request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/peer", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RejectedLegacyAddAdoptsTheExactlyMatchingDownload() {
         var locator = SoulseekLocator.Encode(new SoulseekReleaseLocator(
             Guid.Parse("11111111-1111-1111-1111-111111111111"), "peer",

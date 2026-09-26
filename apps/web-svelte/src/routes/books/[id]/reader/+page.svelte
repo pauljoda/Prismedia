@@ -4,17 +4,19 @@
   import { AlertTriangle, Headphones, Pause, Play } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
   import { onMount } from "svelte";
+  import { fetchBookAlignment } from "$lib/api/books";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { getBookMetadataCapability, getCapability, hasReadableBookFile } from "$lib/api/capabilities";
   import { recordEntityConsumptionEvent, updateEntityProgress } from "$lib/api/consumption";
   import {
     BOOK_FORMAT,
     CAPABILITY_KIND,
-    CONSUMPTION_ACTIVITY_KIND,
     CONSUMPTION_EVENT_KIND,
+    CONSUMPTION_MODALITY,
     PROGRESS_UNIT,
     READER_MODE,
   } from "$lib/api/generated/codes";
+  import type { ReadingTarget } from "$lib/api/generated/model";
   import BookFileReader from "$lib/components/BookFileReader.svelte";
   import PdfReader from "$lib/components/PdfReader.svelte";
   import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
@@ -57,6 +59,8 @@
   let pdfInitialPage = $state(0);
   let pdfLastPage = 0;
   let pdfLastCount = 0;
+  /** Whole-book total for EPUB positions, owned by the server's alignment projection. */
+  let readablePositionTotal = 0;
   let progressSaveQueue: Promise<void> = Promise.resolve();
   const readerActivityClock = new ConsumptionActivityClock();
   const readerConsumptionSessionId = createReaderSessionId();
@@ -124,7 +128,7 @@
     };
 
     try {
-      const nextBook = await fetchEntity(bookId);
+      const [nextBook, alignment] = await Promise.all([fetchEntity(bookId), fetchBookAlignment(bookId)]);
       const format = getBookMetadataCapability(nextBook.capabilities)?.format;
       if (!hasReadableBookFile(nextBook.capabilities)) {
         throw new Error("This book has no readable EPUB or PDF rendition.");
@@ -135,8 +139,13 @@
       readerTitle = nextBook.title;
       returnHref = await resolveReaderReturnHref(nextBook.id, nextContext);
       sourceUrl = `/entities/${nextBook.id}/files/source`;
-      if (format === BOOK_FORMAT.epub) loadEpubState(nextBook, nextContext);
-      else loadPdfState(nextBook, nextContext);
+      readablePositionTotal = Number(alignment.readablePositionTotal);
+      // The exact reading checkpoint resumes only while it is newer than the Book's completion.
+      const exactReading = nextContext.command === "start-over"
+        ? null
+        : alignment.resume?.exactReading ?? null;
+      if (format === BOOK_FORMAT.epub) loadEpubState(nextBook, exactReading, nextContext);
+      else loadPdfState(exactReading);
       loadState = "ready";
     } catch (error) {
       if (redirectHiddenEntityNotFound(error, nsfw.mode)) return;
@@ -145,34 +154,31 @@
     }
   }
 
-  function loadEpubState(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
+  function loadEpubState(
+    nextBook: EntityCardFull,
+    exactReading: ReadingTarget | null,
+    nextContext: BookReaderRouteContext,
+  ) {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
-    const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     const launchLocation = webEpubLaunchLocation(nextContext.location);
     const launchFraction = launchLocation ? null : nextContext.fraction ?? null;
-    const persistedLocation = resume ? exactWebEpubResumeLocation(progress?.location) : null;
+    const persistedLocation = exactWebEpubResumeLocation(exactReading?.location);
+    const exactTotal = Number(exactReading?.total ?? 0);
+    const exactFraction = exactReading && exactTotal > 0 ? Number(exactReading.index) / exactTotal : null;
     surface = "epub";
     epubLocation = launchLocation ?? (launchFraction === null ? persistedLocation : null);
-    epubInitialFraction = launchFraction
-      ?? (epubLocation
-        ? null
-        : resume && Number(progress?.total ?? 0) > 0
-          ? Number(progress?.index ?? 0) / Number(progress?.total ?? 0)
-          : null);
-    epubFlow = progress?.mode === READER_MODE.scrolled ? "scrolled" : "paginated";
+    epubInitialFraction = launchFraction ?? (epubLocation ? null : exactFraction);
+    epubFlow = (exactReading?.mode ?? progress?.mode) === READER_MODE.scrolled ? "scrolled" : "paginated";
     epubFlowMode = epubFlow;
     epubSaveLocation = epubLocation;
-    epubSaveFraction = launchFraction
-      ?? (launchLocation ? 0 : resume ? Number(progress?.index ?? 0) / 10_000 : 0);
+    epubSaveFraction = launchFraction ?? (launchLocation ? 0 : exactFraction ?? 0);
   }
 
-  function loadPdfState(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
-    const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
-    const resume = nextContext.command !== "start-over" && !progress?.completedAt;
+  function loadPdfState(exactReading: ReadingTarget | null) {
     surface = "pdf";
-    pdfInitialPage = resume ? Math.max(0, Number(progress?.index ?? 0)) : 0;
+    pdfInitialPage = Math.max(0, Number(exactReading?.index ?? 0));
     pdfLastPage = pdfInitialPage;
-    pdfLastCount = Math.max(0, Number(progress?.total ?? 0));
+    pdfLastCount = Math.max(0, Number(exactReading?.total ?? 0));
   }
 
   function handleEpubLocation(location: { cfi: string | null; fraction: number; label: string | null }) {
@@ -190,18 +196,21 @@
     completed = false,
     activitySeconds = readerActivityClock.take(),
   ) {
-    if (!book) return;
-    const index = Math.max(0, Math.min(10_000, Math.round(epubSaveFraction * 10_000)));
+    if (!book || readablePositionTotal <= 0) return;
+    const index = Math.max(
+      0,
+      Math.min(readablePositionTotal, Math.round(epubSaveFraction * readablePositionTotal)),
+    );
     await updateEntityProgress(book.id, {
+      modality: CONSUMPTION_MODALITY.reading,
       currentEntityId: book.id,
       unit: PROGRESS_UNIT.cfi,
       index,
-      total: 10_000,
+      total: readablePositionTotal,
       mode: epubFlowMode === "scrolled" ? READER_MODE.scrolled : READER_MODE.paged,
       location: epubSaveLocation,
       completed: completed ? true : null,
       activitySeconds,
-      activityKind: activitySeconds ? CONSUMPTION_ACTIVITY_KIND.reading : undefined,
     });
   }
 
@@ -221,6 +230,7 @@
   ) {
     if (!book || pageCount <= 0) return;
     await updateEntityProgress(book.id, {
+      modality: CONSUMPTION_MODALITY.reading,
       currentEntityId: book.id,
       unit: PROGRESS_UNIT.page,
       index: clampPageIndex(pageIndex, pageCount),
@@ -228,7 +238,6 @@
       mode: READER_MODE.scrolled,
       completed: completed ? true : null,
       activitySeconds,
-      activityKind: activitySeconds ? CONSUMPTION_ACTIVITY_KIND.reading : undefined,
     });
   }
 
@@ -271,7 +280,7 @@
 
   async function resolveReaderReturnHref(bookEntityId: string, nextContext: BookReaderRouteContext) {
     if (nextContext.returnId) {
-      const href = await resolveEntityHrefById(nextContext.returnId).catch(() => null);
+      const href = await resolveEntityHrefById(nextContext.returnId, { hideNsfw: nsfw.mode !== "show" }).catch(() => null);
       if (href) return href;
     }
     return bookReaderReturnHref(bookEntityId, nextContext);

@@ -1,4 +1,15 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Settings;
+
+/// <summary>Provider ownership projected from an immutable external library mount.</summary>
+public sealed record ExternalLibraryOrigin(
+    Guid ConnectionId,
+    string ConnectionName,
+    string PluginId,
+    string RemoteLibraryId,
+    string RemotePath,
+    string ManagementUrl);
 
 /// <summary>
 /// API-facing watched media root.
@@ -24,7 +35,18 @@ public sealed record LibraryRoot(
     DateTimeOffset UpdatedAt,
     bool AutoIdentify = true,
     Guid? CreatedByUserId = null,
-    IReadOnlyList<Guid>? AccessUserIds = null);
+    IReadOnlyList<Guid>? AccessUserIds = null,
+    bool IsReadOnly = false,
+    ExternalLibraryOrigin? ExternalOrigin = null) {
+    /// <summary>Whether this root scans the media a library-root capability names.</summary>
+    public bool Scans(LibraryRootMediaCapability capability) => capability switch {
+        LibraryRootMediaCapability.ScanBooks => ScanBooks,
+        LibraryRootMediaCapability.ScanVideos => ScanVideos,
+        LibraryRootMediaCapability.ScanAudio => ScanAudio,
+        LibraryRootMediaCapability.ScanImages => ScanImages,
+        _ => false
+    };
+}
 
 /// <summary>
 /// Member-facing summary of a library root the caller can access. Deliberately omits
@@ -37,7 +59,8 @@ public sealed record LibraryRootSummary(
     bool ScanImages,
     bool ScanAudio,
     bool ScanBooks,
-    bool IsNsfw);
+    bool IsNsfw,
+    bool IsReadOnly = false);
 
 /// <summary>
 /// Request body for creating a watched media root.

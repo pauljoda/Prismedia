@@ -30,7 +30,7 @@ namespace Prismedia.Infrastructure.Tests;
 /// its existing Wanted Entity to real Source ownership before it writes Imported; TV has its own
 /// checkpoint/materializer suite because one file may satisfy several episode Entities.
 /// </summary>
-public sealed class ImportedEntityMaterializationTests : IDisposable {
+public sealed partial class ImportedEntityMaterializationTests : IDisposable {
     private readonly string _workRoot = Directory.CreateTempSubdirectory("prismedia-import-ready-").FullName;
 
     public void Dispose() {
@@ -150,7 +150,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new SingleBookPlanner(sourcePath),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             materializer,
             Torrents(store),
             new EfAcquisitionHistoryStore(db),
@@ -195,7 +195,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new SingleTargetPlanner(sourcePath, Path.Combine("Witch Hat Atelier", "Chapter 83.cbz")),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             ComicMaterializer(db, root),
             Torrents(store),
             new EfAcquisitionHistoryStore(db),
@@ -245,7 +245,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new MultipleTargetPlanner(first, second),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             new FailingMaterializer(),
             Torrents(store),
             new EfAcquisitionHistoryStore(db),
@@ -287,7 +287,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new SingleBookPlanner(audiobookPath),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             BookMaterializer(db, root),
             Torrents(store),
             new EfAcquisitionHistoryStore(db),
@@ -310,7 +310,11 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             audiobookTrackIds.Contains(file.EntityId)
             && file.Role == EntityFileRole.Source
             && file.Path.EndsWith(".m4b", StringComparison.OrdinalIgnoreCase)));
-        Assert.Contains(queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
+        var reconciliation = Assert.Single(queue.Enqueued, request =>
+            request.Type == JobType.ReconcileEntity && request.PayloadJson is not null);
+        Assert.Same(
+            AudiobookReleaseShape.SingleM4b,
+            AcquisitionFinalizeJobPayload.Parse(reconciliation.PayloadJson!).OwnedAudiobookShape());
         Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
     }
 
@@ -393,7 +397,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new AcquisitionImportPlanner(),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             new FailingMaterializer(),
             Torrents(store),
             new EfAcquisitionHistoryStore(db),
@@ -444,7 +448,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new AcquisitionImportPlanner(),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             BookMaterializer(db, root),
             Torrents(store),
             new EfAcquisitionHistoryStore(db),
@@ -468,6 +472,75 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var finalization = AcquisitionFinalizeJobPayload.Parse(reconciliation.PayloadJson!);
         Assert.Equal(parentId, finalization.UpgradeParentAcquisitionId);
         Assert.Equal(childId, finalization.AcquisitionId);
+        Assert.Same(
+            AudiobookReleaseShape.ChapterFiles,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId)).AudiobookShape);
+    }
+
+    [Fact]
+    public async Task AutomaticAudiobookUpgradeWithoutBetterChapterStructureKeepsTheOwnedFiles() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "audiobook-no-upgrade")).FullName;
+        var bookFolder = Directory.CreateDirectory(Path.Combine(rootPath, "Author", "Novel")).FullName;
+        var owned = Path.Combine(bookFolder, "Novel-Part01.mp3");
+        await File.WriteAllTextAsync(owned, "owned-part");
+        var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "audiobook-no-upgrade-download")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "Novel-Part01.mp3"), "new-part-one");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "Novel-Part02.mp3"), "new-part-two");
+        var root = new RootPersistence(rootPath, scanBooks: true);
+        AddLibraryRoot(db, root.Root);
+        var bookId = AddWantedEntity(db, EntityKind.Book, "Novel");
+        var now = DateTimeOffset.UtcNow;
+        var parentId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        db.Acquisitions.AddRange(
+            new AcquisitionRow {
+                Id = parentId, EntityId = bookId, Kind = EntityKind.Book, BookRendition = BookRendition.Audiobook,
+                Status = AcquisitionStatus.Imported, Title = "Novel", Author = "Author", FinalSourcePath = bookFolder,
+                AudiobookShape = AudiobookReleaseShape.PartFiles, UpgradeQualityCaptured = true,
+                ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now.AddDays(-1), UpdatedAt = now.AddDays(-1)
+            },
+            new AcquisitionRow {
+                Id = childId, EntityId = bookId, Kind = EntityKind.Book, BookRendition = BookRendition.Audiobook,
+                Status = AcquisitionStatus.Importing, Title = "Novel", Author = "Author", UpgradeOfAcquisitionId = parentId,
+                SelectedReleaseJson = JsonSerializer.Serialize(new SelectedRelease("Author - Novel [M4B]", "Indexer", "release")),
+                ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
+            });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(), AcquisitionId = childId, ClientItemId = "release", ContentPath = payloadPath,
+            Progress = 1, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var engine = new BookAcquisitionImportEngine(
+            store,
+            new EfBookAcquisitionProfileStore(db),
+            root,
+            new AcquisitionImportPlanner(),
+            new ImportFileMover(new TestFileMutationGuard()),
+            new FailingMaterializer(),
+            Torrents(store),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<BookAcquisitionImportEngine>.Instance,
+            new EfAcquisitionBlocklistStore(db));
+        var import = new AcquisitionImportContext(
+            childId, "Novel", "Author", Series: null, Year: null, PosterUrl: null, ExternalIdentity: null, ProfileId: null,
+            ContentPath: payloadPath, ClientItemId: null, DownloadClientConfigId: null, Kind: EntityKind.Book,
+            EntityId: bookId, BookRendition: BookRendition.Audiobook, UpgradeOfAcquisitionId: parentId);
+
+        await engine.ImportAsync(
+            JobContext(db, childId, new MergedImportTestSupport.RecordingJobQueue()), import, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Failed, await StatusOfAsync(db, childId));
+        Assert.Equal("owned-part", await File.ReadAllTextAsync(owned));
+        Assert.Single(Directory.GetFiles(bookFolder));
+        Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(bookFolder)!, "*.prismedia-new-*"));
+        Assert.Contains(
+            new SelectedRelease("Author - Novel [M4B]", "Indexer", "release").Identity,
+            await new EfAcquisitionBlocklistStore(db).GetIdentitiesAsync(CancellationToken.None));
+        Assert.Same(
+            AudiobookReleaseShape.PartFiles,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId)).AudiobookShape);
     }
 
     [Theory]
@@ -498,7 +571,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new DownloadPayloadReader(),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             Torrents(store),
             new EfImportTargetIndex(db),
             new EfAcquisitionBlocklistStore(db),
@@ -568,7 +641,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var id = await AddAcquisitionAsync(db, EntityKind.AudioTrack, wantedId, "Selected Song");
         var store = AcquisitionTestFactory.Store(db);
         var engine = new MusicAcquisitionImportEngine(store, new EfBookAcquisitionProfileStore(db), root,
-            new DownloadPayloadReader(), new ImportFileMover(), Torrents(store), new EfImportTargetIndex(db),
+            new DownloadPayloadReader(), new ImportFileMover(new TestFileMutationGuard()), Torrents(store), new EfImportTargetIndex(db),
             new EfAcquisitionBlocklistStore(db), new EfAcquisitionHistoryStore(db), AlbumMaterializer(db, root),
             NullLogger<MusicAcquisitionImportEngine>.Instance);
         var import = new AcquisitionImportContext(id, "Selected Song", "Artist", "Album", null, null, null,
@@ -646,7 +719,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new DownloadPayloadReader(),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             Torrents(store),
             new EfImportTargetIndex(db),
             new EfAcquisitionBlocklistStore(db),
@@ -747,7 +820,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new DownloadPayloadReader(),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             Torrents(store),
             new EfImportTargetIndex(db),
             new EfAcquisitionBlocklistStore(db),
@@ -812,7 +885,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new DownloadPayloadReader(),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             Torrents(store),
             new EfImportTargetIndex(db),
             new EfAcquisitionBlocklistStore(db),
@@ -1129,7 +1202,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new DownloadPayloadReader(),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             Torrents(store),
             new EfImportTargetIndex(db),
             new EfAcquisitionBlocklistStore(db),
@@ -1168,7 +1241,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new SingleBookPlanner(sourcePath),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             new FailingMaterializer(),
             Torrents(store),
             new EfAcquisitionHistoryStore(db),
@@ -1201,7 +1274,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfBookAcquisitionProfileStore(db),
             root,
             new SingleBookPlanner(sourcePath),
-            new ImportFileMover(),
+            new ImportFileMover(new TestFileMutationGuard()),
             BookMaterializer(db, root),
             Torrents(store),
             new EfAcquisitionHistoryStore(db),
@@ -1630,7 +1703,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             bool scanVideos = false,
             bool scanAudio = false,
             bool scanBooks = false,
-            bool autoGenerateMetadata = false) {
+            bool autoGenerateMetadata = false,
+            bool scanImages = false) {
             _autoGenerateMetadata = autoGenerateMetadata;
             Root = new LibraryRootData(
                 Guid.NewGuid(),
@@ -1639,7 +1713,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
                 Enabled: true,
                 Recursive: true,
                 ScanVideos: scanVideos,
-                ScanImages: false,
+                ScanImages: scanImages,
                 ScanAudio: scanAudio,
                 ScanBooks: scanBooks,
                 IsNsfw: false);

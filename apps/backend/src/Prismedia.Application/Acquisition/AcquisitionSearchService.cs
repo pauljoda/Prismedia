@@ -92,7 +92,7 @@ public sealed class AcquisitionSearchRunner(
                     if (search.Error is not null) {
                         errors.TryAdd(
                             search.Config.Id,
-                            new IndexerSearchError(search.Config.Id, search.Config.DisplayName, search.Error));
+                            new IndexerSearchError(search.Config.Id, search.Config.DisplayName, search.Error, search.RateLimited));
                         // A real failure is not repeated for every broader query in the same operation.
                         // Rate-limit exhaustion likewise cannot recover inside this query ladder.
                         failedIndexers.Add(search.Config.Id);
@@ -110,17 +110,18 @@ public sealed class AcquisitionSearchRunner(
             bool HasAccepted() => engine.Evaluate(
                 releases.Where(candidate => protocols.Contains(candidate.Release.Protocol)).ToArray(), rules, blocklisted)
                 .Select(ApplyCoverage).Any(candidate => candidate.Accepted);
-            var accentInputs = AcquisitionWorkTitles.AccentFallbackQueryInputs(input);
-            var accentQueries = accentInputs.SelectMany(policy.BuildQueries)
+            var alternativeInputs = AcquisitionWorkTitles.AccentFallbackQueryInputs(input)
+                .Concat(AcquisitionWorkTitles.BookFormalFallbackQueryInputs(input)).ToArray();
+            var alternativeQueries = alternativeInputs.SelectMany(policy.BuildQueries)
                 .Distinct(StringComparer.OrdinalIgnoreCase).Except(queries, StringComparer.OrdinalIgnoreCase).ToArray();
             var hasAccepted = HasAccepted();
-            if (!hasAccepted && accentQueries.Length > 0) {
-                await SearchQueriesAsync(accentQueries);
+            if (!hasAccepted && alternativeQueries.Length > 0) {
+                await SearchQueriesAsync(alternativeQueries);
                 hasAccepted = HasAccepted();
             }
-            var fallbackQueries = queryInputs.Concat(accentInputs).SelectMany(policy.BuildFallbackQueries)
+            var fallbackQueries = queryInputs.Concat(alternativeInputs).SelectMany(policy.BuildFallbackQueries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Except(queries.Concat(accentQueries), StringComparer.OrdinalIgnoreCase)
+                .Except(queries.Concat(alternativeQueries), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             if (!hasAccepted && fallbackQueries.Length > 0) {
                 await SearchQueriesAsync(fallbackQueries);
@@ -204,7 +205,9 @@ public sealed class AcquisitionSearchRunner(
             // Narrow the indexer's configured categories to the acquisition kind's Torznab range, so a
             // movie or album search never queries the book categories the indexer was set up with.
             var categories = connection.Categories;
-            var found = await client.SearchAsync(connection, new IndexerQuery(text, categories, input.Kind) { Protocols = protocols }, cancellationToken);
+            var found = await client.SearchAsync(connection, new IndexerQuery(text, categories, input.Kind) {
+                Protocols = protocols, BookRendition = input.BookRendition
+            }, cancellationToken);
             return new IndexerSearchResult(config, found, null);
         } catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested) {
             // HttpClient reports its own Timeout as TaskCanceledException. That is one indexer's

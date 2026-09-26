@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EntityCard, EntityKind } from "$lib/api/generated/model";
 import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
+import { EXTERNAL_ID_PROVIDER, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
 import { entityCardToDetailCard, formatDetailDateValue } from "./entity-detail";
 
 describe("formatDetailDateValue", () => {
@@ -61,6 +62,43 @@ describe("entity detail view model", () => {
       identityValue: "Show:AbC:01:5",
       url: "https://provider.test/items/Show%3AAbC%3A01%3A5",
     });
+    expect(detail.externalLibraryProvenance).toBeNull();
+  });
+
+  it("maps saved external-library provenance independently from metadata identity", () => {
+    const detail = entityCardToDetailCard({
+      id: "movie-1",
+      kind: ENTITY_KIND.movie,
+      title: "A film",
+      parentEntityId: null,
+      sortOrder: null,
+      capabilities: [{
+        kind: CAPABILITY_KIND.externalLibraryProvenance,
+        connectionId: "connection-one",
+        connectionName: "Radarr",
+        pluginId: "radarr",
+        libraryRootId: "library-one",
+        libraryLabel: "Movies on NAS",
+        holding: {
+          holdingId: "holding-one",
+          item: {
+            entityKind: ENTITY_KIND.movie,
+            remoteId: "movie-42",
+            expectedExternalIds: { [EXTERNAL_ID_PROVIDER.tmdb]: "42" },
+          },
+          status: MANAGED_TRACKING_STATUS.released,
+        },
+      }],
+      childrenByKind: [],
+      relationships: [],
+    } satisfies EntityCard);
+
+    expect(detail.externalLibraryProvenance).toMatchObject({
+      connectionName: "Radarr",
+      libraryLabel: "Movies on NAS",
+      holding: { item: { remoteId: "movie-42" }, status: MANAGED_TRACKING_STATUS.released },
+    });
+    expect(detail.providerIdentity).toBeNull();
   });
 
   it("does not infer a provider identity from ordinary external IDs", () => {

@@ -28,7 +28,7 @@
   } from "$lib/api/files";
   import { FILE_ENTRY_KIND } from "$lib/api/generated/codes";
   import { refreshEntity } from "$lib/api/entities";
-  import type { FileActionId } from "$lib/files/file-actions";
+  import { fileContextActions, type FileActionId } from "$lib/files/file-actions";
   import {
     createFileTreeRegistry,
     fileTreeRootPath,
@@ -184,15 +184,16 @@
   }
 
   async function refreshSelected(): Promise<void> {
-    if (!selectedMeta) return;
-    const target = selectedMeta.kind === "directory" ? selectedMeta : directoryTarget(selectedMeta);
+    const selected = selectedMeta;
+    if (!selected) return;
+    const target = selected.kind === "directory" ? selected : directoryTarget(selected);
     if (target) {
       const nextLoaded = new Set(loadedKeys);
       nextLoaded.delete(loadedKey(target));
       loadedKeys = nextLoaded;
       await loadChildren(target);
     }
-    await loadDetail(selectedMeta);
+    await loadDetail(selected);
   }
 
   function createFolder(meta: FileTreeNodeMeta): void {
@@ -207,6 +208,7 @@
   }
 
   async function renameFile(meta: FileTreeNodeMeta, proposedName?: string): Promise<void> {
+    if (meta.isReadOnly) { error = "This library is read-only."; return; }
     if (!meta.path) {
       error = "Library roots cannot be renamed here.";
       return;
@@ -241,6 +243,7 @@
       return;
     }
     const targetDirectory = targetDirectoryTreePath ? registry.get(targetDirectoryTreePath) : null;
+    if (meta.isReadOnly || targetDirectory?.isReadOnly) { error = "Externally managed library files cannot be moved here."; return; }
     const defaultPath = targetDirectory
       ? [targetDirectory.path, basename(meta.path)].filter(Boolean).join("/")
       : meta.path;
@@ -293,10 +296,11 @@
   }
 
   async function rescan(meta: FileTreeNodeMeta): Promise<void> {
+    const linkedEntities = detail?.linkedEntities ?? [];
     await apiRescanFileRoot({ rootId: meta.rootId, path: meta.path || null });
-    if (detail?.linkedEntities?.length) {
+    if (linkedEntities.length) {
       await Promise.allSettled(
-        detail.linkedEntities.map((linked) => refreshEntity(linked.entityId)),
+        linkedEntities.map((linked) => refreshEntity(linked.entityId)),
       );
     }
     await refreshSelected();
@@ -362,7 +366,7 @@
 
   async function handleAction(action: FileActionId, treePath = selectedTreePath): Promise<void> {
     const meta = treePath ? registry.get(treePath) : null;
-    if (!meta) return;
+    if (!meta || !fileContextActions(meta.kind, meta.path === "", meta.excluded, meta.isReadOnly).some((choice) => choice.id === action)) return;
     try {
       if (action === "open") await selectTreePath(meta.treePath);
       if (action === "download") await downloadEntry(meta);
@@ -387,6 +391,7 @@
     target = directoryTarget(selectedMeta),
   ): Promise<void> {
     if (!target || items.length === 0) return;
+    if (target.isReadOnly) { error = "This library is managed by the connected application and is read-only."; return; }
     try {
       await apiUploadFiles(target.rootId, target.path, items);
       const nextLoaded = new Set(loadedKeys);
@@ -579,6 +584,7 @@
 
   <FileDetailPane
     {detail}
+    isReadOnly={Boolean(selectedMeta?.isReadOnly)}
     loading={loadingDetail}
     {error}
     mobile={mobileDetail}

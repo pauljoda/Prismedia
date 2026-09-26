@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { DATE_PRECISION, ENTITY_DATE_TYPE, ENTITY_KIND } from "$lib/api/generated/codes";
 import type { ReleaseCalendarEvent } from "$lib/api/generated/model";
@@ -49,8 +49,10 @@ beforeAll(() => {
 });
 
 describe("release calendar page", () => {
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
+    // The shared dialog releases its body scroll lock asynchronously after unmount.
+    await waitFor(() => expect(document.body.style.overflow).not.toBe("hidden"));
     mockedFetchReleaseCalendar.mockReset();
   });
 

@@ -10,6 +10,9 @@ public static class AcquisitionWorkTitles {
     /// <summary>Maximum length of a useful work title, shared with metadata persistence.</summary>
     public const int MaximumTitleLength = 512;
 
+    /// <summary>Limits extra remote searches when a book provider supplies many translated titles.</summary>
+    public const int MaximumBookFallbackTitles = 3;
+
     /// <summary>Keeps nonempty names in provider order and folds equivalent spelling/separator variants.</summary>
     public static IReadOnlyList<string> Normalize(IEnumerable<string?> titles) {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -44,6 +47,21 @@ public static class AcquisitionWorkTitles {
             .Select(variant => family == AcquisitionNamingFamily.Television
                 ? variant.Input with { Series = variant.Title }
                 : variant.Input with { Title = variant.Title })
+            .ToArray();
+    }
+
+    /// <summary>Offers formal book titles and comic run names only after the canonical search finds no accepted release.</summary>
+    public static IReadOnlyList<AcquisitionSearchInput> BookFormalFallbackQueryInputs(AcquisitionSearchInput input) {
+        var family = EntityKindRegistry.Describe(AcquisitionProfileKinds.For(input.Kind)).AcquisitionProfile?.NamingFamily;
+        if (family != AcquisitionNamingFamily.Book || input.AlternativeWorkTitles.Count == 0) return [];
+
+        var comicUnit = input.Kind is EntityKind.ComicVolume or EntityKind.ComicInstallment;
+        if (comicUnit && string.IsNullOrWhiteSpace(input.Series)) return [];
+        var primary = comicUnit ? input.Series : input.Title;
+        return Normalize(input.AlternativeWorkTitles.Prepend(primary))
+            .Skip(1)
+            .Take(MaximumBookFallbackTitles)
+            .Select(title => comicUnit ? input with { Series = title } : input with { Title = title })
             .ToArray();
     }
 

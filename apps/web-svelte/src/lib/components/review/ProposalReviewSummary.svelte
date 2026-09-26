@@ -4,6 +4,7 @@
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { relationshipProposals, structuralChildProposals } from "$lib/components/identify-review";
   import { proposalImageUrl, proposalTitle } from "$lib/components/identify/identify-review-helpers";
+  import { displayNameForEntityKind } from "$lib/entities/entity-codes";
   import { aspectRatioForKind } from "$lib/entities/entity-thumbnail";
   import ProposalContextBar from "./ProposalContextBar.svelte";
   import ProposalFieldReviewSection from "./ProposalFieldReviewSection.svelte";
@@ -59,7 +60,7 @@
       {proposal}
       {title}
       {subtitle}
-      kindLabel={proposal.targetKind}
+      kindLabel={displayNameForEntityKind(proposal.targetKind)}
       {posterUrl}
       imageShape={imageShape === "square" ? "square" : imageShape === "wide" ? "wide" : "portrait"}
       showReason

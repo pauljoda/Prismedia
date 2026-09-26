@@ -276,7 +276,9 @@ public sealed partial class IdentifyPluginService {
                 container.Patch.Urls),
             Query: new IdentifyQuery(null, null, null),
             Hints: new IdentifyMatchHints(container.Patch.ExternalIds, container.Patch.Urls, container.Patch.Title, null),
-            StructuralContext: new IdentifyStructuralContext(ancestorPath, container.Patch.Positions),
+            StructuralContext: new IdentifyStructuralContext(ancestorPath, EntityMetadataPositionRules.Normalize(container.Patch)) {
+                PositionEntries = container.Patch.PositionEntries
+            },
             IncludeNsfw: includeNsfw,
             IncludeRelationshipDetails: false,
             IncludeStructuralChildren: true);
@@ -559,7 +561,7 @@ public sealed partial class IdentifyPluginService {
     private static int? StructuralSortOrder(EntityMetadataProposal child) =>
         EntityMetadataPositionRules.SortOrderFor(
             child.TargetKind.ToCode(),
-            EntityMetadataPositionRules.Normalize(child.Patch.Positions));
+            EntityMetadataPositionRules.Normalize(child.Patch));
 
     private static bool IsSameStructuralChild(EntityMetadataProposal left, EntityMetadataProposal right) =>
         StructuralChildMatcher.IsSameProposalChild(left, right);
@@ -674,7 +676,7 @@ public sealed partial class IdentifyPluginService {
         providerChildren.Count > 0 && localChildren.Count != providerChildren.Count;
 
     private static EntityMetadataProposal EnsureStructuralPositions(EntityMetadataProposal proposal, StructuralChild child) {
-        if (child.SortOrder is not { } sortOrder || proposal.Patch.Positions.Count > 0) {
+        if (child.SortOrder is not { } sortOrder || (proposal.Patch.Positions.Count > 0 || proposal.Patch.PositionEntries is { Count: > 0 })) {
             return proposal;
         }
 
@@ -836,10 +838,21 @@ public sealed partial class IdentifyPluginService {
             children.Select(row => row.Id).ToArray(),
             cancellationToken);
 
+        var childIds = children.Select(row => row.Id).ToArray();
+        var labels = await _db.EntityPositions.AsNoTracking()
+            .Where(row => childIds.Contains(row.EntityId) && row.Code == EntityPositionCodes.Chapter)
+            .ToDictionaryAsync(row => row.EntityId, row => row.Label, cancellationToken);
+
         return children
-            .Select(row => new StructuralChild(row.SortOrder, row, eligibility[row.Id].IsEligible))
+            .Select(row => new StructuralChild(row.SortOrder, row, eligibility[row.Id].IsEligible) { InstallmentLabel = labels.GetValueOrDefault(row.Id) })
             .ToArray();
     }
+
+    private async Task<IReadOnlyList<Prismedia.Contracts.Entities.EntityPosition>> ResolveStructuralPositionEntriesAsync(
+        Guid entityId, CancellationToken cancellationToken) =>
+        await _db.EntityPositions.AsNoTracking().Where(row => row.EntityId == entityId)
+            .Select(row => new Prismedia.Contracts.Entities.EntityPosition(row.Code, row.Value, row.Label))
+            .ToArrayAsync(cancellationToken);
 
     private async Task<IReadOnlyDictionary<string, int>> ResolveStructuralPositionsAsync(
         Guid entityId,
@@ -865,10 +878,12 @@ public sealed partial class IdentifyPluginService {
     private static bool SupportsKind(PluginManifest manifest, string kind) =>
         manifest.Supports.Any(support => PluginEntityKindCompatibility.SupportsKind(support, kind));
 
-    private sealed record StructuralChild(int? SortOrder, EntityRow Entity, bool IsIdentifyEligible);
+    private sealed record StructuralChild(int? SortOrder, EntityRow Entity, bool IsIdentifyEligible) {
+        public string? InstallmentLabel { get; init; }
+    }
 
     private sealed record RelocatableLocalChild(Guid EntityId, string KindCode, string Title, int? SortOrder);
 
     private static StructuralLocalChild ToMatchInput(StructuralChild child) =>
-        new(child.Entity.Id, child.Entity.KindCode, child.Entity.Title, child.SortOrder);
+        new(child.Entity.Id, child.Entity.KindCode, child.Entity.Title, child.SortOrder) { InstallmentLabel = child.InstallmentLabel };
 }

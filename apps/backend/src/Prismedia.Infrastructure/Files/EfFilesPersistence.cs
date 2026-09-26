@@ -26,7 +26,8 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
                 root.ScanAudio,
                 root.ScanBooks,
                 root.IsNsfw,
-                root.Recursive))
+                root.Recursive,
+                db.ExternalLibraryMounts.Any(mount => mount.LibraryRootId == root.Id)))
             .ToArrayAsync(cancellationToken);
 
     /// <inheritdoc />
@@ -43,7 +44,8 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
                 root.ScanAudio,
                 root.ScanBooks,
                 root.IsNsfw,
-                root.Recursive))
+                root.Recursive,
+                db.ExternalLibraryMounts.Any(mount => mount.LibraryRootId == root.Id)))
             .FirstOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc />

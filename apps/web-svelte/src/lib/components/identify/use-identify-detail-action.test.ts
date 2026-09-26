@@ -55,7 +55,7 @@ describe("useIdentifyDetailAction", () => {
     expect(goto).toHaveBeenCalledWith("/identify/person-1?returnId=person-1");
   });
 
-  it("links to Plugins when no ready provider supports the entity kind", async () => {
+  it("opens the entity review without searching when no provider is ready", async () => {
     fetchIdentifyProviders.mockResolvedValue([provider("video")]);
 
     render(UseIdentifyDetailActionHarness, {
@@ -68,12 +68,13 @@ describe("useIdentifyDetailAction", () => {
     });
 
     const button = await screen.findByRole("button", {
-      name: "Identify (no compatible plugin installed)",
+      name: "Identify (metadata setup required)",
     });
     expect(button).not.toBeDisabled();
     await fireEvent.click(button);
 
-    expect(goto).toHaveBeenCalledWith("/plugins");
+    expect(goto).toHaveBeenCalledWith("/identify/person-1?returnId=person-1");
+    expect(requestIdentifySearch).not.toHaveBeenCalled();
   });
 
   it("shows a plain identify action when a provider supports the entity kind", async () => {
@@ -133,7 +134,7 @@ describe("useIdentifyDetailAction", () => {
 
     await waitFor(() => expect(fetchIdentifyProviders).toHaveBeenCalledWith("video"));
     expect(
-      await screen.findByRole("button", { name: "Identify (no compatible plugin installed)" }),
+      await screen.findByRole("button", { name: "Identify (metadata setup required)" }),
     ).toBeInTheDocument();
 
     window.dispatchEvent(new Event("focus"));

@@ -25,7 +25,7 @@ public sealed class FileDiscoveryService {
         var results = new List<string>();
 
         if (!Directory.Exists(rootPath)) {
-            return Task.FromResult<IReadOnlyList<string>>(results);
+            throw new DirectoryNotFoundException($"Library root '{rootPath}' is unavailable.");
         }
 
         WalkDirectory(
@@ -74,7 +74,7 @@ public sealed class FileDiscoveryService {
         var results = new List<FileSignature>();
 
         if (!Directory.Exists(rootPath)) {
-            return Task.FromResult<IReadOnlyList<FileSignature>>(results);
+            throw new DirectoryNotFoundException($"Library root '{rootPath}' is unavailable.");
         }
 
         WalkDirectory(rootPath, extensions, recursive, NormalizeExcludedPaths(excludedPaths), skipGeneratedSuffixes, file => {
@@ -83,8 +83,6 @@ public sealed class FileDiscoveryService {
                 results.Add(new FileSignature(file, info.Length, info.LastWriteTimeUtc.Ticks));
             } catch (FileNotFoundException) {
                 // File was removed between enumeration and stat; treat as not present.
-            } catch (IOException) {
-                // Transient access issue; skip rather than fail the whole snapshot.
             }
         }, cancellationToken);
         results.Sort(static (left, right) => string.Compare(left.Path, right.Path, StringComparison.OrdinalIgnoreCase));
@@ -104,8 +102,7 @@ public sealed class FileDiscoveryService {
         var allFiles = new List<string>();
 
         if (!Directory.Exists(rootPath)) {
-            return Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>(
-                new Dictionary<string, IReadOnlyList<string>>(FileSystemPathComparison.Comparer));
+            throw new DirectoryNotFoundException($"Library root '{rootPath}' is unavailable.");
         }
 
         WalkDirectory(
@@ -180,10 +177,10 @@ public sealed class FileDiscoveryService {
                     onFile,
                     cancellationToken);
             }
-        } catch (UnauthorizedAccessException) {
-            // skip inaccessible directories silently
-        } catch (DirectoryNotFoundException) {
-            // directory was removed between enumeration and access
+        } catch (UnauthorizedAccessException error) {
+            throw new IOException($"Library directory '{directory}' cannot be enumerated.", error);
+        } catch (DirectoryNotFoundException error) {
+            throw new IOException($"Library directory '{directory}' disappeared during enumeration.", error);
         }
     }
 

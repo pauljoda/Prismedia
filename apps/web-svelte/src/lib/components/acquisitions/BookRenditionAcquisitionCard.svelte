@@ -2,11 +2,12 @@
   import { BookOpen, Headphones, Search } from "@lucide/svelte";
   import { Alert, Badge, Button, Item } from "@prismedia/ui-svelte";
   import { BOOK_RENDITION, MONITOR_STATUS, type BookRenditionCode } from "$lib/api/generated/codes";
-  import type { AcquisitionDetail, MonitorView } from "$lib/api/generated/model";
+  import type { AcquisitionDetail, ExternalBookRenditionProvenance, MonitorView } from "$lib/api/generated/model";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import {
     bookRenditionCanRequest,
+    bookRenditionManagerOwner,
     bookRenditionRows,
     type BookRenditionOwnership,
   } from "$lib/requests/book-rendition-acquisition";
@@ -16,25 +17,38 @@
     ownership,
     acquisitions,
     monitors,
+    managedRenditions = [],
+    pendingManagerRenditions = [],
     onRequest,
+    onRequestBoth,
     onToggleMonitor,
     onChanged,
   }: {
     ownership: BookRenditionOwnership;
     acquisitions: readonly AcquisitionDetail[];
     monitors: readonly MonitorView[];
+    managedRenditions?: readonly ExternalBookRenditionProvenance[];
+    pendingManagerRenditions?: readonly BookRenditionCode[];
     onRequest: (rendition: BookRenditionCode) => void | Promise<void>;
+    onRequestBoth?: () => void | Promise<void>;
     onToggleMonitor?: (monitor: MonitorView) => void | Promise<void>;
     onChanged?: () => void | Promise<void>;
   } = $props();
 
   const rows = $derived(bookRenditionRows(acquisitions, monitors, ownership));
   let requesting = $state<BookRenditionCode | null>(null);
+  let requestingBoth = $state(false);
+  let bothError = $state<string | null>(null);
   let monitorBusyId = $state<string | null>(null);
   let requestError = $state<{ rendition: BookRenditionCode; message: string } | null>(null);
 
   function renditionLabel(rendition: BookRenditionCode): string {
     return rendition === BOOK_RENDITION.audiobook ? "Audiobook" : "Ebook";
+  }
+
+  function managedOrPending(rendition: BookRenditionCode): boolean {
+    return Boolean(bookRenditionManagerOwner(rendition, managedRenditions))
+      || pendingManagerRenditions.includes(rendition);
   }
 
   function monitorStatusLine(monitor: MonitorView): string {
@@ -45,7 +59,7 @@
   }
 
   async function requestMissing(rendition: BookRenditionCode) {
-    if (requesting) return;
+    if (requesting || requestingBoth) return;
     requesting = rendition;
     requestError = null;
     try {
@@ -57,6 +71,19 @@
       };
     } finally {
       requesting = null;
+    }
+  }
+
+  async function requestBoth() {
+    if (!onRequestBoth || requesting || requestingBoth) return;
+    requestingBoth = true;
+    bothError = null;
+    try {
+      await onRequestBoth();
+    } catch (reason) {
+      bothError = reason instanceof Error ? reason.message : "Failed to request both formats";
+    } finally {
+      requestingBoth = false;
     }
   }
 
@@ -80,8 +107,22 @@
 </script>
 
 <Item.Group class="gap-4">
+  {#if onRequestBoth && rows.length === 2 && rows.every(row =>
+    bookRenditionCanRequest(row) && !managedOrPending(row.rendition))}
+    <div class="flex flex-col gap-2">
+      <Button type="button" variant="primary" disabled={requesting !== null || requestingBoth}
+        onclick={() => void requestBoth()}>
+        <Search data-icon="inline-start" />
+        {requestingBoth ? "Requesting both…" : "Request ebook and audiobook"}
+      </Button>
+      {#if bothError}
+        <Alert.Root variant="destructive"><Alert.Description>{bothError}</Alert.Description></Alert.Root>
+      {/if}
+    </div>
+  {/if}
   {#each rows as row (row.rendition)}
     {@const label = renditionLabel(row.rendition)}
+    {@const managerOwner = bookRenditionManagerOwner(row.rendition, managedRenditions)}
     {@const status = acquisitionStatusDisplay(row.acquisition?.summary.status)}
     {@const RenditionIcon = row.rendition === BOOK_RENDITION.audiobook ? Headphones : BookOpen}
     <section class="flex min-w-0 flex-col gap-4" aria-label={`${label} acquisition`}>
@@ -91,6 +132,10 @@
           <Item.Title role="heading" aria-level={3}>{label}</Item.Title>
           {#if row.owned}
             <Item.Description>In library</Item.Description>
+          {:else if managerOwner || pendingManagerRenditions.includes(row.rendition)}
+            <Item.Description>{managerOwner
+              ? `${managerOwner.connectionName} is managing this ${label.toLowerCase()}.`
+              : `Connected manager request accepted for this ${label.toLowerCase()}.`}</Item.Description>
           {:else if row.acquisition}
             <div><Badge variant={status.tone === "failed" ? "error" : status.tone === "attention" ? "warning" : "default"}>{status.label}</Badge></div>
           {:else if row.monitor}
@@ -103,11 +148,11 @@
           {/if}
         </Item.Content>
         <Item.Actions class="flex-wrap @max-[32rem]:w-full @max-[32rem]:[&>button]:flex-1">
-          {#if bookRenditionCanRequest(row)}
+          {#if bookRenditionCanRequest(row) && !managedOrPending(row.rendition)}
             <Button
               type="button"
               variant="secondary"
-              disabled={requesting !== null}
+              disabled={requesting !== null || requestingBoth}
               onclick={() => void requestMissing(row.rendition)}
             >
               <Search data-icon="inline-start" />

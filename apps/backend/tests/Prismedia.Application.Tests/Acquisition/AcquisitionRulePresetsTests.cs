@@ -21,6 +21,10 @@ public sealed class AcquisitionRulePresetsTests {
     [InlineData("Dolby Vision", "Example DV", true)]
     [InlineData("Dolby Vision", "Example DVD", false)]
     [InlineData("Web download", "Example WEB-DL", true)]
+    [InlineData("M4B audiobook", "Author - Book (2020) [M4B]", true)]
+    [InlineData("M4B audiobook", "Author - Book MP3", false)]
+    [InlineData("Chapterized audiobook", "Author - Book (Chapterized) MP3 64k", true)]
+    [InlineData("Chapterized audiobook", "Author - Book Chapter 1", false)]
     public void PresetsUseTheAdvancedMatcher(string name, string title, bool expected) {
         var preset = AcquisitionRulePresets.List().Single(preset => preset.Name == name);
         var rules = BookAcquisitionRules.Default with {
@@ -30,5 +34,21 @@ public sealed class AcquisitionRulePresetsTests {
                     condition.Type, condition.Value, condition.Negate, condition.Required)).ToArray())]
         };
         Assert.Equal(expected ? preset.SuggestedScore : 0, CustomFormatEvaluation.Score(title, rules));
+    }
+
+    [Fact]
+    public void EachProfileKindIsOfferedOnlyThePresetsThatFitIt() {
+        var book = AcquisitionRulePresets.List(EntityKind.Book).Select(preset => preset.Name).ToArray();
+        var movie = AcquisitionRulePresets.List(EntityKind.Movie).Select(preset => preset.Name).ToArray();
+        var episode = AcquisitionRulePresets.List(EntityKind.VideoEpisode).Select(preset => preset.Name).ToArray();
+
+        Assert.Contains("M4B audiobook", book);
+        Assert.Contains("Chapterized audiobook", book);
+        Assert.Contains("English audio", book);
+        Assert.DoesNotContain("H.265 / HEVC", book);
+        Assert.DoesNotContain("Lossless audio", book);
+        Assert.Contains("H.265 / HEVC", movie);
+        Assert.DoesNotContain("M4B audiobook", movie);
+        Assert.Equal(AcquisitionRulePresets.List(EntityKind.VideoSeries).Select(preset => preset.Name), episode);
     }
 }

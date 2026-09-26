@@ -2421,10 +2421,12 @@ public sealed class AcquisitionServiceTests {
             Task.FromResult(id == AcquisitionId ? Status : id == CloneResult ? ReplacementStatus : null);
         public Task<UpgradeOwnedQuality?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken) => Task.FromResult<UpgradeOwnedQuality?>(null);
         public Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken,
+            AudiobookReleaseShape? audiobookShape = null) => throw new NotSupportedException();
+        public Task RecordAudiobookShapeAsync(Guid acquisitionId, AudiobookReleaseShape shape, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, int ownedMediaRevision, int ownedFormatScore, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task EnrichMetadataAsync(Guid acquisitionId, string? description, string? posterUrl, int? year, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0) => throw new NotSupportedException();
+        public Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0, AudiobookReleaseShape? audiobookShape = null) => throw new NotSupportedException();
         public Task<bool> TryCompleteSearchAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, string? message, CancellationToken cancellationToken) =>
             TryTransitionStatusAsync(
                 id,

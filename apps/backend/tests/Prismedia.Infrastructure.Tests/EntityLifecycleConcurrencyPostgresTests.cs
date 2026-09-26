@@ -1000,7 +1000,7 @@ public sealed class EntityLifecycleConcurrencyPostgresTests {
             new EfMonitorStore(db, hierarchy, lifecycle),
             new AcquisitionJobCleanup(db),
             lifecycle,
-            new AcquisitionImportResetCleanup(
+            new AcquisitionImportResetCleanup(new TestFileMutationGuard(),
                 db,
                 new Prismedia.Application.Jobs.Scanning.VideoScanConcurrencyGate(),
                 NullLogger<AcquisitionImportResetCleanup>.Instance));

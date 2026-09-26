@@ -168,6 +168,33 @@ public sealed class MonitorServiceTests {
         Assert.Equal(["cinema-metadata"], eligibility.TrackableProviders);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ExternalOwnershipTakesPriorityAndReturnsActionableReason(bool providerIsTrackable) {
+        await using var db = CreateContext();
+        var entityId = SeedContainerEntity(db, "Bluey", provider: "tmdb");
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var service = Service(
+            db,
+            trackableProviders: providerIsTrackable ? ["tmdb"] : [],
+            queue: queue,
+            fulfillmentOwnership: new FixedFulfillmentOwnershipReader("Living Room Radarr"));
+
+        var eligibility = await service.GetEligibilityAsync(entityId, CancellationToken.None);
+        var error = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            service.StartForEntityAsync(entityId, preset: null, CancellationToken.None));
+
+        Assert.False(eligibility.CanMonitor);
+        Assert.Equal(
+            "Acquisition is managed by Living Room Radarr. Release its ownership before enabling Prismedia monitoring.",
+            eligibility.UnavailableReason);
+        Assert.Equal(Prismedia.Contracts.System.ApiProblemCodes.FulfillmentOwnershipConflict, error.Code);
+        Assert.Empty(await db.Monitors.ToArrayAsync());
+        Assert.Empty(queue.Enqueued);
+    }
+
     [Fact]
     public async Task EligibilityDoesNotTreatAStaleBindingAsAnUnboundLegacyEntity() {
         await using var db = CreateContext();
@@ -247,8 +274,10 @@ public sealed class MonitorServiceTests {
         await using var db = CreateContext();
         var authorId = SeedContainerEntity(db, "Author", provider: "openlibrary");
         var bookId = SeedContainerEntity(db, "Book", provider: "openlibrary", kind: EntityKind.Book);
+        var externallyOwnedBookId = SeedContainerEntity(db, "Managed Book", provider: "openlibrary", kind: EntityKind.Book);
         var seasonId = SeedContainerEntity(db, "Season 1", provider: "unavailable-tv", kind: EntityKind.VideoSeason);
         db.Entities.Local.Single(row => row.Id == bookId).IsWanted = true;
+        db.Entities.Local.Single(row => row.Id == externallyOwnedBookId).IsWanted = true;
         db.Entities.Local.Single(row => row.Id == seasonId).IsWanted = true;
         var missingId = Guid.NewGuid();
         var acquisitionId = SeedAcquisition(db, "Book", "Author");
@@ -265,14 +294,27 @@ public sealed class MonitorServiceTests {
                 CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
             });
         await db.SaveChangesAsync();
-        var service = Service(db, trackableProviders: ["openlibrary"]);
+        var service = Service(
+            db,
+            trackableProviders: ["openlibrary"],
+            fulfillmentOwnership: new FixedFulfillmentOwnershipReader(
+                "Living Room Radarr",
+                new HashSet<Guid> { externallyOwnedBookId }));
 
         var states = await service.GetStatesAsync(
-            [bookId, authorId, seasonId, missingId, bookId],
+            [externallyOwnedBookId, bookId, authorId, seasonId, missingId, bookId],
             CancellationToken.None);
 
-        Assert.Equal([bookId, authorId, seasonId, missingId], states.Select(state => state.EntityId));
-        var book = states[0];
+        Assert.Equal(
+            [externallyOwnedBookId, bookId, authorId, seasonId, missingId],
+            states.Select(state => state.EntityId));
+        var externallyOwnedBook = states[0];
+        Assert.False(externallyOwnedBook.CanMonitor);
+        Assert.False(externallyOwnedBook.CanRequest);
+        Assert.Equal(
+            "Acquisition is managed by Living Room Radarr. Release its ownership before enabling Prismedia monitoring.",
+            externallyOwnedBook.UnavailableReason);
+        var book = states[1];
         Assert.True(book.CanMonitor);
         Assert.True(book.CanRequest);
         Assert.False(book.DiscoversChildren);
@@ -280,7 +322,7 @@ public sealed class MonitorServiceTests {
         Assert.Equal([EntityKind.Book], book.MissingChildEntityKinds);
         Assert.NotNull(book.Monitor);
         Assert.Equal(acquisitionId, book.LatestAcquisition?.Id);
-        var author = states[1];
+        var author = states[2];
         Assert.True(author.CanMonitor);
         Assert.False(author.CanRequest);
         Assert.True(author.DiscoversChildren);
@@ -288,13 +330,13 @@ public sealed class MonitorServiceTests {
         Assert.Equal([EntityKind.Book], author.MissingChildEntityKinds);
         Assert.NotNull(author.Monitor);
         Assert.Null(author.LatestAcquisition);
-        var season = states[2];
+        var season = states[3];
         Assert.False(season.CanMonitor);
         Assert.True(season.CanRequest);
         Assert.False(season.DiscoversChildren);
         Assert.True(season.CanSearchMissingChildren);
         Assert.Equal([EntityKind.VideoEpisode], season.MissingChildEntityKinds);
-        var missing = states[3];
+        var missing = states[4];
         Assert.False(missing.CanMonitor);
         Assert.False(missing.CanRequest);
         Assert.False(missing.CanSearchMissingChildren);
@@ -431,7 +473,8 @@ public sealed class MonitorServiceTests {
         string[]? trackableProviders = null,
         IPluginIdentityRouter? identityRouter = null,
         IProviderTrackingCatalog? trackingCatalog = null,
-        IJobQueueService? queue = null) {
+        IJobQueueService? queue = null,
+        IExternalFulfillmentOwnershipReader? fulfillmentOwnership = null) {
         var trackable = trackableProviders ?? [];
         var router = identityRouter ?? new TrackingIdentityRouter(trackable);
         var suppressions = new Prismedia.Infrastructure.Requests.EfWantedSuppressionStore(db);
@@ -454,7 +497,21 @@ public sealed class MonitorServiceTests {
                 new EfEntityUnmonitorPersistence(db, new EfEntityHierarchyReader(db)),
                 acquisitionRequests),
             suppressions,
-            queue);
+            queue,
+            fulfillmentOwnership);
+    }
+
+    private sealed class FixedFulfillmentOwnershipReader(
+        string connectionName,
+        IReadOnlySet<Guid>? ownedEntityIds = null)
+        : IExternalFulfillmentOwnershipReader {
+        public Task<IReadOnlyDictionary<Guid, ExternalFulfillmentOwnership>> ListAsync(
+            IReadOnlyCollection<FulfillmentOwnershipQuery> scopes,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, ExternalFulfillmentOwnership>>(
+                scopes
+                    .Where(scope => ownedEntityIds is null || ownedEntityIds.Contains(scope.EntityId))
+                    .ToDictionary(scope => scope.EntityId, _ => new ExternalFulfillmentOwnership(connectionName)));
     }
 
     private sealed class RecordingJobQueue : IJobQueueService {

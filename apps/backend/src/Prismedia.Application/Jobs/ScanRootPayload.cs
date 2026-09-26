@@ -8,10 +8,12 @@ namespace Prismedia.Application.Jobs;
 /// </summary>
 /// <param name="RootId">Library root identifier to scan.</param>
 /// <param name="ChangesOnly">Whether the scan should consume durable filesystem-change hints instead of walking the whole root.</param>
+/// <param name="ForceReconcile">Whether an explicit user rescan should rebuild catalog facts even when file signatures are unchanged.</param>
 public sealed record ScanRootPayload(
     [property: JsonPropertyName("rootId")] Guid RootId,
     [property: JsonPropertyName("changesOnly")] bool ChangesOnly = false,
-    [property: JsonPropertyName("deep")] bool Deep = false) {
+    [property: JsonPropertyName("deep")] bool Deep = false,
+    [property: JsonPropertyName("forceReconcile")] bool ForceReconcile = false) {
     /// <summary>
     /// Serializes the payload using the public scan-job wire shape.
     /// </summary>
@@ -41,7 +43,9 @@ public sealed record ScanRootPayload(
                     && changesOnlyProperty.ValueKind == JsonValueKind.True;
                 var deep = root.TryGetProperty("deep", out var deepProperty)
                     && deepProperty.ValueKind == JsonValueKind.True;
-                payload = new ScanRootPayload(rootId, changesOnly, deep);
+                var forceReconcile = root.TryGetProperty("forceReconcile", out var forceProperty)
+                    && forceProperty.ValueKind == JsonValueKind.True;
+                payload = new ScanRootPayload(rootId, changesOnly, deep, forceReconcile);
                 return true;
             }
         } catch (JsonException) {

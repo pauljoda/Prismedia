@@ -1661,8 +1661,10 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.Equal(2, inspector.Calls);
     }
 
-    [Fact]
-    public async Task SameFormatCheckpointResumeCompletesAStagedReplacementInsteadOfAdoptingOldBytes() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SameFormatCheckpointResumeCompletesAStagedReplacementInsteadOfAdoptingOldBytes(bool qualityNamedParent) {
         await using var db = CreateContext();
         var harness = await HarnessAsync(
             db,
@@ -1670,7 +1672,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             payloadFiles: ["Show.S01E01.2160p.BluRay.mkv"],
             releaseTitle: "Show S01 2160p BluRay",
             payloadContent: "incoming-upgrade",
-            failSameFormatAfterStage: true);
+            failSameFormatAfterStage: true, parentLabel: qualityNamedParent ? "4k" : null);
 
         await Assert.ThrowsAsync<IOException>(() =>
             harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None));
@@ -1776,8 +1778,9 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         bool enableMissingFallback = false,
         Action? beforeCheckpoint = null,
         IMediaUpgradePayloadInspector? upgradeInspector = null,
-        IMediaProbe? mediaProbe = null, IVideoPayloadVerifier? videoVerifier = null) {
-        var libraryRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "library")).FullName;
+        IMediaProbe? mediaProbe = null, IVideoPayloadVerifier? videoVerifier = null, string? parentLabel = null) {
+        var fixtureRoot = parentLabel is null ? _workRoot : Path.Combine(_workRoot, parentLabel);
+        var libraryRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot, "library")).FullName;
         var seriesFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "Show (2008)")).FullName;
         var seasonFolder = Directory.CreateDirectory(Path.Combine(seriesFolder, deletedSeason ? "Season 01" : "S01")).FullName;
         var ownedEpisodePath = Path.Combine(seasonFolder, ownedEpisodeName);
@@ -1790,7 +1793,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
                 preexistingTargetContent);
         }
 
-        var payloadRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "download", "release")).FullName;
+        var payloadRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot, "download", "release")).FullName;
         foreach (var file in payloadFiles) {
             await File.WriteAllTextAsync(Path.Combine(payloadRoot, file), payloadContent);
         }
@@ -1868,7 +1871,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         IImportedVideoMaterializer firstMaterializer = failMaterialization
             ? new FailOnCallImportedVideoMaterializer(realMaterializer, 1)
             : realMaterializer;
-        var realMover = new ImportFileMover();
+        var realMover = new ImportFileMover(new TestFileMutationGuard());
         IImportFileMover firstMover = failPlacementOnCall is { } failBeforeCall
             ? new FailOnCallImportFileMover(realMover, failBeforeCall, failAfterPlacement: false)
             : failAfterPlacementOnCall is { } failAfterCall
@@ -1883,8 +1886,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
                 ? new ThrowAfterReplacementStageReplacer()
                 : failAfterReplacementEvidence
                     ? new FailAfterReplacementEvidenceReplacer()
-                    : new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
-        var resumeReplacer = new OwnedFileReplacer(
+                    : new OwnedFileReplacer(new TestFileMutationGuard(), new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
+        var resumeReplacer = new OwnedFileReplacer(new TestFileMutationGuard(),
             new MergedImportTestSupport.NoRecycleBin(),
             NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
         var scanGate = new VideoScanConcurrencyGate();
@@ -1918,7 +1921,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             videoVerifier ?? new TestVideoPayloadVerifier(),
             monitorStore);
 
-        static int? Resolution(string title) => MediaQualityLadder.VideoResolutionTierOf(VideoQualityDetection.Detect(title).ToCode());
+        static int? Resolution(string title) => MediaQualityLadder.VideoResolutionTierOf(VideoQualityDetection.Detect(Path.GetFileName(title)).ToCode());
 
         var job = new JobRunSnapshot(
             jobId, JobType.AcquisitionImport, JobRunStatus.Running, 0, null, "{}",

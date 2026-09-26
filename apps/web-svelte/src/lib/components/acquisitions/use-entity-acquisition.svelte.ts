@@ -4,7 +4,7 @@ import type {
   MonitorEligibilityView,
   MonitorView,
 } from "$lib/api/generated/model";
-import { canDeleteEntityFiles, firstExternalIdentity, isWanted } from "$lib/api/capabilities";
+import { canDeleteEntityFiles, firstExternalIdentity, getCapability, isWanted } from "$lib/api/capabilities";
 import {
   fetchAcquisitionForEntity,
   fetchAcquisitionSummariesForEntity,
@@ -20,7 +20,7 @@ import { commitEntityRequest, requestMissingChildren, syncContainerRequest } fro
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
 import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
-import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, CAPABILITY_KIND } from "$lib/api/generated/codes";
 import {
   monitorHasUnknownStatus,
   monitorIsActive,
@@ -63,6 +63,8 @@ export interface EntityAcquisition {
   readonly monitorUnknownStatus: boolean;
   /** Comma-joined plugin ids the stable monitor rides on (empty until eligibility loads). */
   readonly trackedVia: string;
+  /** Server-authored reason native monitoring and requests are unavailable for this Entity scope. */
+  readonly monitorUnavailableReason: string | null;
   readonly showMonitor: boolean;
   /** Provider discovery is meaningful only for grouping entities, never a monitored leaf. */
   readonly showSync: boolean;
@@ -139,6 +141,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   );
 
   const capabilities = $derived(options.capabilities?.());
+  const externalLibrary = $derived(getCapability(capabilities ?? [], CAPABILITY_KIND.externalLibraryProvenance));
   const wanted = $derived(!!capabilities && isWanted(capabilities));
   const monitorActive = $derived(monitorIsActive(monitor));
   const monitorStopping = $derived(monitorIsStopping(monitor));
@@ -146,6 +149,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   const monitorUnknownStatus = $derived(monitorHasUnknownStatus(monitor));
   const monitorTransitionLocked = $derived(monitorTransitionIsLocked(monitor));
   const trackedVia = $derived(eligibility?.trackableProviders?.join(", ") ?? "");
+  const monitorUnavailableReason = $derived(eligibility?.unavailableReason ?? null);
 
   // The three blocks the card collapses. Monitoring is offered only when the server says a plugin can
   // track the Entity (or a monitor already exists and needs managing); the release search
@@ -154,6 +158,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   const showSync = $derived(monitorActive && eligibility?.discoversChildren === true);
   const showSearch = $derived(
     !monitorTransitionLocked
+      && !monitorUnavailableReason
       && wanted
       && acquisition === null
       && !!capabilities
@@ -165,6 +170,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   // gaps because deeper owned children can still contain missing descendants.
   const showSearchMissing = $derived(
     !monitorTransitionLocked
+      && !monitorUnavailableReason
       && !showSearch
       && eligibility?.canSearchMissingChildren === true
       && (missingChildCount > 0 || monitorActive),
@@ -173,8 +179,9 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     Boolean(capabilities && canDeleteEntityFiles(capabilities)),
   );
   const visible = $derived(
-    (loadedId !== null && (showMonitor || showSearch || showFileManagement || acquisition !== null)) ||
-      childCards.length > 0,
+    !externalLibrary && ((loadedId !== null && (showMonitor || showSearch || showFileManagement
+      || acquisition !== null || monitorUnavailableReason !== null)) ||
+      childCards.length > 0),
   );
 
   /**
@@ -234,7 +241,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
 
   $effect(() => {
     const id = options.entityId();
-    if (!id) {
+    if (!id || externalLibrary) {
       acquisition = null;
       monitor = null;
       eligibility = null;
@@ -255,7 +262,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   // collapsed if work is active) and refreshes the Entity graph only on an imported transition; doing
   // that full owner reload on every tick visibly flashes detail pages and duplicates the same reads.
   $effect(() => {
-    if (!options.entityId() || loadedId === null) return;
+    if (!options.entityId() || loadedId === null || externalLibrary) return;
     const acquisitionStatus = acquisition?.summary.status;
     const fastPoll =
       acquisitionStatusShouldPoll(acquisitionStatus) ||
@@ -288,10 +295,14 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     return () => clearInterval(timer);
   });
 
+  // Provider fulfillment lives on the same Entity document. The detail page's freshness probe
+  // (useEntityDetailPage) follows an in-flight manager request and reloads the page when it advances.
+
   /** The shared Entity-level monitor control: not monitored → start; paused → resume; active → stop. */
   async function toggleMonitor(targeting: EntityMonitorTargeting = {}): Promise<void> {
     const id = options.entityId();
-    if (!id || monitorBusy || monitorDeletingFiles || monitorUnknownStatus) return;
+    if (!id || monitorBusy || monitorDeletingFiles || monitorUnknownStatus
+      || (monitorUnavailableReason && !monitor)) return;
     monitorBusy = true;
     monitorError = null;
     let ownerFollowUp = options.onChanged;
@@ -434,7 +445,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   /** Requests this phantom and refreshes only its acquisition slice; the Entity itself did not change. */
   async function searchForRelease(): Promise<void> {
     const id = options.entityId();
-    if (!id || searchBusy) return;
+    if (!id || monitorUnavailableReason || searchBusy) return;
     searchBusy = true;
     try {
       await commitEntityRequest(id);
@@ -467,6 +478,9 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     },
     get trackedVia() {
       return trackedVia;
+    },
+    get monitorUnavailableReason() {
+      return monitorUnavailableReason;
     },
     get showMonitor() {
       return showMonitor;

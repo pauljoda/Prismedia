@@ -14,6 +14,64 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"prismedia-request-routing-{Guid.NewGuid():N}");
 
+    [Theory]
+    [InlineData("Provider is rate limited.")]
+    [InlineData(null)]
+    public async Task DiscoverReportsPluginFailureInsteadOfAnEmptySuccessfulSearch(string? message) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([new FixedResponseRunner(new(false, null, message))]));
+        var response = await new RequestPluginSearchService(source).SearchAsync(
+            new(RequestMediaKind.Movie, "cinema-metadata", new Dictionary<string, string> { ["workName"] = "Example" }), false, default);
+        Assert.Empty(response.Results);
+        var error = Assert.Single(response.ProviderErrors);
+        Assert.Equal("cinema-metadata", error.DisplayName);
+        Assert.Equal(RequestProviderKind.Plugin, error.Kind);
+        Assert.False(string.IsNullOrWhiteSpace(error.Message));
+        if (message is not null) Assert.Equal(message, error.Message);
+    }
+
+    [Fact]
+    public async Task ARealNoMatchRemainsASuccessfulEmptySearch() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([new FixedResponseRunner(IdentifyPluginResponse.NoMatch())]));
+        var response = await new RequestPluginSearchService(source).SearchAsync(
+            new(RequestMediaKind.Movie, "cinema-metadata", new Dictionary<string, string> { ["workName"] = "Example" }), false, default);
+        Assert.Empty(response.Results); Assert.Empty(response.ProviderErrors);
+    }
+
+    private sealed class FixedResponseRunner(IdentifyPluginResponse response) : IIdentifyRunner {
+        public string RuntimeCode => DotnetPluginProcessRunner.Code;
+        public Task<IdentifyPluginResponse> IdentifyAsync(PluginDescriptor descriptor, IdentifyPluginRequest request, CancellationToken token) => Task.FromResult(response);
+    }
+
+    [Theory]
+    [InlineData("Provider is rate limited.")]
+    [InlineData(null)]
+    public async Task FailedExactLookupIsNotReportedAsAMissingWork(string? message) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([new FixedResponseRunner(new(false, null, message))]));
+        var error = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => source.ReviewAsync(
+            new(RequestMediaKind.Movie, "cinema-metadata", new("tmdb", Guid.NewGuid().ToString("N"))), false, default));
+        Assert.False(string.IsNullOrWhiteSpace(error.Message));
+        if (message is not null) Assert.Equal(message, error.Message);
+    }
+
+    [Fact]
+    public async Task SuccessfulExactLookupWithoutAMatchRemainsMissing() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([new FixedResponseRunner(IdentifyPluginResponse.NoMatch())]));
+        Assert.Null(await source.ReviewAsync(new(RequestMediaKind.Movie, "cinema-metadata",
+            new("tmdb", Guid.NewGuid().ToString("N"))), false, default));
+    }
+
     [Fact]
     public async Task LookupRoutesNamespaceThroughDistinctPluginIdAndSendsNamespaceToPlugin() {
         await using var db = await CreateInstalledPluginAsync("cinema-metadata");
@@ -854,7 +912,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     }
 
     private PluginCatalogService Catalog(PrismediaDbContext db) =>
-        new(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        new(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
     public void Dispose() {
         if (Directory.Exists(_tempRoot)) {

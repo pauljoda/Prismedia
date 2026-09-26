@@ -41,6 +41,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private readonly EfEntityAcquisitionStatusProjection _acquisitionStatuses;
     private readonly EfEntityLibraryVisibilityFilter _libraryVisibility;
     private readonly AssetPathService? _assets;
+    private readonly IEntityAcquisitionAttributionReader? _acquisitionAttribution;
+    private readonly IEntityExternalLibraryProvenanceReader? _externalLibraryProvenance;
 
     public EfEntityReadService(
         PrismediaDbContext db,
@@ -51,7 +53,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         AssetPathService? assets = null,
         IEntitySourceOwnershipReader? sourceOwnership = null,
         IEntityFileDeletionRecoveryReader? deletionRecovery = null,
-        EfEntityLibraryVisibilityFilter? libraryVisibility = null) {
+        EfEntityLibraryVisibilityFilter? libraryVisibility = null,
+        IEntityAcquisitionAttributionReader? acquisitionAttribution = null,
+        IEntityExternalLibraryProvenanceReader? externalLibraryProvenance = null) {
         _db = db;
         _currentUser = currentUser;
         _repository = repository;
@@ -64,6 +68,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         _acquisitionStatuses = new EfEntityAcquisitionStatusProjection(db);
         _libraryVisibility = libraryVisibility ?? new EfEntityLibraryVisibilityFilter(db, currentUser);
         _assets = assets;
+        _acquisitionAttribution = acquisitionAttribution;
+        _externalLibraryProvenance = externalLibraryProvenance;
     }
 
     private Guid CurrentUserId => _currentUser.UserId;
@@ -440,13 +446,18 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         bool descending) {
         var userId = CurrentUserId;
         var states = _db.UserEntityStates.Where(state => state.UserId == userId);
+        // A Book read and listened to separately keeps its listening position only as a checkpoint, so a
+        // checkpoint alone marks an unfinished work as in progress.
+        var checkpoints = _db.UserProgressCheckpoints.Where(checkpoint => checkpoint.UserId == userId);
         states = status == ActivityShelfStatus.Completed
             ? states.Where(state => state.CompletedAt != null || state.ProgressCompletedAt != null)
             : states.Where(state =>
                 state.CompletedAt == null && state.ResumeSeconds > 0 ||
                 state.ProgressCompletedAt == null &&
                 (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0) &&
-                state.ProgressIndex < state.ProgressTotal);
+                state.ProgressIndex < state.ProgressTotal ||
+                state.CompletedAt == null && state.ProgressCompletedAt == null &&
+                checkpoints.Any(checkpoint => checkpoint.EntityId == state.EntityId));
         var keyed =
             from state in states
             join entity in query on state.EntityId equals entity.Id
@@ -546,10 +557,12 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         if (engaged is { } wantsEngaged) {
+            var engagedCheckpoints = _db.UserProgressCheckpoints.Where(checkpoint => checkpoint.UserId == userId);
             var engagedStates = states.Where(state =>
                 state.UserId == userId &&
                 (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0 ||
-                 state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0));
+                 state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0 ||
+                 engagedCheckpoints.Any(checkpoint => checkpoint.EntityId == state.EntityId)));
             query = wantsEngaged
                 ? query.Join(engagedStates, entity => entity.Id, state => state.EntityId, (entity, _) => entity)
                 : query.Where(entity => !engagedStates.Any(state => state.EntityId == entity.Id));
@@ -591,6 +604,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         var normalizedStatus = status?.Trim().ToLowerInvariant();
+        var statusCheckpoints = _db.UserProgressCheckpoints.Where(checkpoint => checkpoint.UserId == userId);
         if (string.IsNullOrEmpty(normalizedStatus)) {
             return query;
         }
@@ -607,14 +621,17 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0 ||
-                         state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0))),
+                         state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)) &&
+                    !statusCheckpoints.Any(checkpoint => checkpoint.EntityId == entity.Id)),
             "in-progress" or "inprogress" or "in_progress" or "reading" or "watching" =>
                 query.Join(
                     states.Where(state => state.UserId == userId &&
                         (state.CompletedAt == null && state.ResumeSeconds > 0 ||
                          state.ProgressCompletedAt == null &&
                          (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0) &&
-                         state.ProgressIndex < state.ProgressTotal)),
+                         state.ProgressIndex < state.ProgressTotal ||
+                         state.CompletedAt == null && state.ProgressCompletedAt == null &&
+                         statusCheckpoints.Any(checkpoint => checkpoint.EntityId == state.EntityId))),
                     entity => entity.Id,
                     state => state.EntityId,
                     (entity, _) => entity),
@@ -668,6 +685,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             hideNsfw,
             enforceLibraryVisibility,
             cancellationToken);
+        var attribution = _acquisitionAttribution is null ? null : await _acquisitionAttribution.ReadAsync(id, cancellationToken);
+        var externalLibraryProvenance = _externalLibraryProvenance is null
+            ? null
+            : await _externalLibraryProvenance.ReadAsync(id, cancellationToken);
         var projected = SanitizeLocalAssets(
             await EnrichBorrowedParentCoverAsync(
                 EntityCardProjector.ToCard(
@@ -675,7 +696,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                     fileManagementState,
                     CurrentUserId,
                     creditMetadata,
-                    sourceBackedChildKinds),
+                    sourceBackedChildKinds,
+                    attribution,
+                    externalLibraryProvenance),
                 hideNsfw,
                 enforceLibraryVisibility,
                 cancellationToken));
@@ -910,7 +933,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         bool hideNsfw,
         CancellationToken cancellationToken) {
         var progress = card.Capabilities.OfType<ProgressCapability>().FirstOrDefault();
-        if (progress?.CurrentEntityId is not { } currentEntityId) {
+        if (progress is null || progress.CurrentEntityId is null && (progress.Checkpoints ?? []).Count == 0) {
             return card;
         }
 
@@ -919,13 +942,23 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             return RemoveProgress(card);
         }
 
-        var cursorVisible = !hideNsfw || !await IsEntityHiddenAsync(currentEntityId, cancellationToken);
-        if (cursorVisible && await RequiresLibraryVisibilityAsync(cancellationToken)) {
-            cursorVisible = await ApplyEnabledLibraryVisibility(_db.Entities.AsNoTracking())
-                .AnyAsync(entity => entity.Id == currentEntityId, cancellationToken);
+        var checkpoints = await EnrichCheckpointsAsync(card.Id, progress.Checkpoints ?? [], hideNsfw, cancellationToken);
+        // A Book that keeps reading and listening Separate also carries each format's own progress.
+        if (card.Kind == EntityKind.Book) {
+            progress = progress with {
+                Separate = (await Media.Books.SeparateBookProgressReader.LoadAsync(
+                        _db,
+                        CurrentUserId,
+                        [card.Id],
+                        cancellationToken))
+                    .GetValueOrDefault(card.Id)
+            };
+        }
+        if (progress.CurrentEntityId is not { } currentEntityId) {
+            return ReplaceProgress(card, progress with { Checkpoints = checkpoints });
         }
 
-        if (!cursorVisible) {
+        if (!await IsProgressPositionVisibleAsync(currentEntityId, hideNsfw, cancellationToken)) {
             return RemoveProgress(card);
         }
 
@@ -940,24 +973,68 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             progress.Index,
             progress.Total,
             cancellationToken);
-        if (position is null) {
-            return card;
-        }
-
-        return card with {
-            Capabilities = card.Capabilities.Select(capability =>
-                capability is ProgressCapability progressCapability
-                    ? progressCapability with {
-                        WorkIndex = position.Index,
-                        WorkTotal = position.Total,
-                        ConsumedTotal = position.Total,
-                        ConsumedPercent = position.Total > 0
-                            ? Math.Clamp(progressCapability.ConsumedCount / (double)position.Total, 0, 1)
-                            : 0,
-                    }
-                    : capability).ToArray()
-        };
+        return ReplaceProgress(card, position is null
+            ? progress with { Checkpoints = checkpoints }
+            : progress with {
+                WorkIndex = position.Index,
+                WorkTotal = position.Total,
+                ConsumedTotal = position.Total,
+                ConsumedPercent = position.Total > 0
+                    ? Math.Clamp(progress.ConsumedCount / (double)position.Total, 0, 1)
+                    : 0,
+                Checkpoints = checkpoints,
+            });
     }
+
+    /// <summary>
+    /// Keeps only checkpoints whose position the current user may see, and gives chapter-local
+    /// reading positions the same absolute work position the main cursor carries.
+    /// </summary>
+    private async Task<IReadOnlyList<ModalityProgress>> EnrichCheckpointsAsync(
+        Guid ownerId,
+        IReadOnlyList<ModalityProgress> checkpoints,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var enriched = new List<ModalityProgress>(checkpoints.Count);
+        foreach (var checkpoint in checkpoints) {
+            if (!await IsProgressPositionVisibleAsync(checkpoint.PositionEntityId, hideNsfw, cancellationToken)) {
+                continue;
+            }
+            if (Domain.Capabilities.ConsumptionModalityDefinition.For(checkpoint.Modality).AddressesByOffset) {
+                enriched.Add(checkpoint);
+                continue;
+            }
+
+            var position = await _progressTopology.ResolveWorkPositionAsync(
+                ownerId,
+                checkpoint.PositionEntityId,
+                checkpoint.Index,
+                checkpoint.Total,
+                cancellationToken);
+            enriched.Add(position is null
+                ? checkpoint
+                : checkpoint with { WorkIndex = position.Index, WorkTotal = position.Total });
+        }
+        return enriched;
+    }
+
+    private async Task<bool> IsProgressPositionVisibleAsync(
+        Guid positionEntityId,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        if (hideNsfw && await IsEntityHiddenAsync(positionEntityId, cancellationToken)) {
+            return false;
+        }
+        return !await RequiresLibraryVisibilityAsync(cancellationToken) ||
+            await ApplyEnabledLibraryVisibility(_db.Entities.AsNoTracking())
+                .AnyAsync(entity => entity.Id == positionEntityId, cancellationToken);
+    }
+
+    private static EntityCard ReplaceProgress(EntityCard card, ProgressCapability progress) => card with {
+        Capabilities = card.Capabilities
+            .Select(capability => capability is ProgressCapability ? progress : capability)
+            .ToArray()
+    };
 
     private static EntityCard RemoveProgress(EntityCard card) => card with {
         Capabilities = card.Capabilities.Where(capability => capability is not ProgressCapability).ToArray()

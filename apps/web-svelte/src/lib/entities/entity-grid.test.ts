@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACQUISITION_STATUS, BOOK_FORMAT, BOOK_TYPE, CAPABILITY_KIND } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, ALIGNMENT_GAP_REASON, BOOK_FORMAT, BOOK_TYPE, CAPABILITY_KIND } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import {
@@ -273,6 +273,38 @@ describe("entity grid helpers", () => {
     });
 
     expect(thumbnail.progress).toBeCloseTo(0.42);
+    expect(thumbnail.separateProgress).toBe(false);
+  });
+
+  it("keeps a Separate book's reading and listening as two meters", () => {
+    const row = entityCardToThumbnailCard({
+      ...thumbnailEntity("row-separate", "book", "Separate"),
+      progress: 0.25,
+      progressSeparate: true,
+      listeningProgress: "0.36",
+    });
+    const full = entityCardToThumbnailCard(card("c-separate", "book", "Separate", [
+      {
+        kind: CAPABILITY_KIND.progress,
+        currentEntityId: null,
+        unit: "cfi",
+        index: 9_000,
+        total: 10_000,
+        mode: null,
+        completedAt: null,
+        updatedAt: null,
+        consumedCount: 9_001,
+        consumedTotal: 10_000,
+        consumedPercent: 0.9,
+        separate: { reason: ALIGNMENT_GAP_REASON.audioUnstructured, readingPercent: 0.25, listeningPercent: 0.36 },
+      },
+    ]));
+
+    for (const thumbnail of [row, full]) {
+      expect(thumbnail.separateProgress).toBe(true);
+      expect(thumbnail.progress).toBeCloseTo(0.25);
+      expect(thumbnail.listeningProgress).toBeCloseTo(0.36);
+    }
   });
 
   it("carries source-media availability from lightweight thumbnails", () => {

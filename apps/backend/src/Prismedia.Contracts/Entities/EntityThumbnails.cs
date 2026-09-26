@@ -58,6 +58,12 @@ public sealed record EntityThumbnail(
     public string? CoverThumb2xUrl { get; init; }
 
     /// <summary>
+    /// Probed media duration in seconds for playable media, or null when unknown. Players and queues
+    /// read this value; the duration entry in <see cref="Meta"/> is display text only.
+    /// </summary>
+    public double? DurationSeconds { get; init; }
+
+    /// <summary>
     /// Structural parent entity kind code when the thumbnail has a parent. Used by
     /// clients to route child media through richer parent detail surfaces.
     /// </summary>
@@ -115,9 +121,22 @@ public sealed record EntityThumbnail(
     /// <summary>
     /// Fraction watched (videos) or read (books) in the range 0..1 for a thumbnail progress
     /// meter, or <c>null</c> when the entity has no meaningful progress to show. A completed
-    /// item reads 1.0.
+    /// item reads 1.0. For a Book with <see cref="ProgressSeparate"/> this is reading progress alone.
     /// </summary>
     public double? Progress { get; init; }
+
+    /// <summary>
+    /// True for an unfinished Book that keeps reading and listening Separate (its audio has no exact
+    /// chapter pairing). Grids then draw two meters: <see cref="Progress"/> for reading and
+    /// <see cref="ListeningProgress"/> for listening. False everywhere else, where one meter applies.
+    /// </summary>
+    public bool ProgressSeparate { get; init; }
+
+    /// <summary>
+    /// Fraction (0..1) of the known audio listened, for a Book with <see cref="ProgressSeparate"/>;
+    /// <c>null</c> otherwise or before any listening.
+    /// </summary>
+    public double? ListeningProgress { get; init; }
 
     /// <summary>
     /// Exact saved playback position in seconds for resumable video thumbnails. Movie

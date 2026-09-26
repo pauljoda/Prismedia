@@ -1,5 +1,6 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using MediaContentTypes = Prismedia.Contracts.Media.MediaContentTypes;
 
 namespace Prismedia.Domain.Media;
 
@@ -35,7 +36,15 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
             defaultActivityKind: ConsumptionActivityKind.Viewing),
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true),
-    defaultCapabilities: static () => [new CapabilityConsumption()]) {
+    defaultCapabilities: static () => [new CapabilityConsumption()]),
+    IIntegrationImportKindDefinition {
+    /// <inheritdoc />
+    public IntegrationImportPolicy IntegrationImport { get; } = new(
+        LibraryRootMediaCapability.ScanImages,
+        extensions: [".jpg", ".jpeg", ".png", ".webp"],
+        mediaTypes: [MediaContentTypes.ImageJpeg, MediaContentTypes.ImagePng, MediaContentTypes.ImageWebp],
+        maximumBytes: 64L * 1024 * 1024);
+
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
 
@@ -44,6 +53,9 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
 
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
+    public override JobType? ImportScanJobType => JobType.ScanGallery;
 }
 
 /// <summary>

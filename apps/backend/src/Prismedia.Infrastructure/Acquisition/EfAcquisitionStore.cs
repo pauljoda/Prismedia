@@ -12,6 +12,9 @@ namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>EF-backed store for acquisition records and their scored release candidates.</summary>
 public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistoryStore history, ILogger<EfAcquisitionStore> logger) : IAcquisitionStore {
+    private static bool UsesFormalWorkTitles(EntityKind kind) =>
+        MediaQualityLadder.IsVideoKind(kind) || kind is EntityKind.Book or EntityKind.ComicVolume or EntityKind.ComicInstallment;
+
     /// <inheritdoc />
     public Task<Guid?> GetJobGraphIdAsync(Guid id, CancellationToken cancellationToken) =>
         db.Acquisitions.AsNoTracking()
@@ -162,16 +165,18 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         // movie's release year — which is what scene naming appends to disambiguate same-name works,
         // so the search gates compare against that instead.
         var contextEntityId = await ResolveContextEntityIdAsync(row.EntityId, row.UpgradeOfAcquisitionId, row.Kind, cancellationToken);
-        var work = contextEntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
+        var work = contextEntityId is { } entityId && UsesFormalWorkTitles(row.Kind)
             ? await new EfAcquisitionWorkContext(db).ReadIdentityAsync(entityId, cancellationToken)
-            : (Year: (int?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
-        var year = work.Year ?? row.Year;
+            : (Year: (int?)null, Title: (string?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
+        var year = MediaQualityLadder.IsVideoKind(row.Kind) ? work.Year ?? row.Year : row.Year;
         var positions = await new EfAcquisitionWorkContext(db).ReadPositionsAsync(contextEntityId, row.Kind, cancellationToken);
 
         return new AcquisitionSearchInput(
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
-            row.Series, positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
+            row.Kind is EntityKind.ComicVolume or EntityKind.ComicInstallment ? work.Title ?? row.Series : row.Series,
+            positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
             positions.Volume ?? row.VolumeNumber, row.BookRendition, positions.AbsoluteEpisode) {
+            InstallmentLabel = await new EfAcquisitionWorkContext(db).ReadInstallmentLabelAsync(contextEntityId, row.Kind, cancellationToken),
             AlternativeWorkTitles = work.Titles,
             RecoveryOfAcquisitionId = row.RecoveryOfAcquisitionId,
             EpisodeCatalog = row.Kind == EntityKind.VideoEpisode && contextEntityId is { } episodeEntityId
@@ -648,7 +653,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         // Current source-linked dimensions below supplement that recorded quality without rewriting it.
         var parent = await db.Acquisitions.AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Kind, row.EntityId, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality, row.OwnedMediaRevision, row.OwnedFormatScore })
+            .Select(row => new {
+                row.Kind, row.EntityId, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality, row.OwnedMediaRevision,
+                row.OwnedFormatScore, row.BookRendition, row.AudiobookShape
+            })
             .FirstOrDefaultAsync(cancellationToken);
         if (parent is null) {
             return null;
@@ -664,7 +672,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 VideoSourceShared = MediaQualityLadder.IsVideoKind(parent.Kind) && parent.EntityId is { } sharedOwner
                     && await OwnedVideoEvidence.IsSharedAsync(db, sharedOwner, cancellationToken)
             }
-            : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null, FormatScore: parent.OwnedFormatScore);
+            : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null, FormatScore: parent.OwnedFormatScore) {
+                AudiobookShape = parent.BookRendition == BookRendition.Audiobook ? parent.AudiobookShape : null
+            };
     }
 
     public async Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken) {
@@ -718,7 +728,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 && await OwnedVideoEvidence.IsSharedAsync(db, sharedOwner, cancellationToken),
             InstalledUpgradePath = installedPath,
             InstalledUpgradeSourceCurrent = installedPath is not null && installedSources.Length == 1
-                && FileSystemPathComparison.Equals(installedSources[0], installedPath)
+                && FileSystemPathComparison.Equals(installedSources[0], installedPath),
+            ParentAudiobookShape = parent.BookRendition == BookRendition.Audiobook ? parent.AudiobookShape : null
         };
     }
 
@@ -752,7 +763,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
     }
 
-    public async Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken) {
+    public async Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken,
+        AudiobookReleaseShape? audiobookShape = null) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
         if (row is null || row.Status == AcquisitionStatus.Stopping) {
             return;
@@ -760,6 +772,20 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
         row.OwnedSourceTier = ownedQuality.Source;
         row.OwnedFormatTier = ownedQuality.Format;
+        if (audiobookShape is not null) {
+            row.AudiobookShape = audiobookShape;
+        }
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RecordAudiobookShapeAsync(Guid acquisitionId, AudiobookReleaseShape shape, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null || row.Status is AcquisitionStatus.Imported or AcquisitionStatus.Stopping || row.AudiobookShape == shape) {
+            return;
+        }
+
+        row.AudiobookShape = shape;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -777,7 +803,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0) {
+    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0, AudiobookReleaseShape? audiobookShape = null) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
         if (row is null || row.Status == AcquisitionStatus.Stopping) {
             return;
@@ -825,6 +851,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
 
         row.OwnedFormatScore = ownedFormatScore;
+        if (audiobookShape is not null) {
+            row.AudiobookShape = audiobookShape;
+        }
+
         row.UpgradeQualityCaptured = true;
         row.ImportCheckpointJson = null;
         row.ImportClaimJobId = null;
@@ -1235,11 +1265,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
         var contextEntityId = await ResolveContextEntityIdAsync(row.EntityId, row.UpgradeOfAcquisitionId, row.Kind, cancellationToken);
         var positions = await new EfAcquisitionWorkContext(db).ReadPositionsAsync(contextEntityId, row.Kind, cancellationToken);
-        var work = contextEntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
+        var work = contextEntityId is { } entityId && UsesFormalWorkTitles(row.Kind)
             ? await new EfAcquisitionWorkContext(db).ReadIdentityAsync(entityId, cancellationToken)
-            : (Year: (int?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
+            : (Year: (int?)null, Title: (string?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
         var context = new AcquisitionImportContext(
-            row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
+            row.Id, row.Title, row.Author,
+            row.Kind is EntityKind.ComicVolume or EntityKind.ComicInstallment ? work.Title ?? row.Series : row.Series,
+            row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Kind,
             row.Description, row.TargetLibraryRootId, positions.Season ?? row.SeasonNumber,
             positions.Episode ?? row.EpisodeNumber, row.EntityId, row.FinalSourcePath,

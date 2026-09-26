@@ -52,6 +52,7 @@ internal static class BaseEntityModelConfiguration {
             entity.Property(row => row.IsNsfw).HasColumnName("is_nsfw").HasDefaultValue(false);
             entity.Property(row => row.IsOrganized).HasColumnName("is_organized").HasDefaultValue(false);
             entity.Property(row => row.IsWanted).HasColumnName("is_wanted").HasDefaultValue(false);
+            entity.Property(row => row.IsLibraryArchived).HasColumnName("is_library_archived").HasDefaultValue(false);
             entity.Property(row => row.LifecycleClaimKind)
                 .HasColumnName("lifecycle_claim_kind")
                 .HasMaxLength(64)

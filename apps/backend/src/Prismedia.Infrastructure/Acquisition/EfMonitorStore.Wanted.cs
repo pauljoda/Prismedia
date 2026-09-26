@@ -95,11 +95,13 @@ public sealed partial class EfMonitorStore {
                 monitor.LastSearchedAt,
                 monitor.BarrenSearches,
                 monitor.Author,
+                monitor.BookRendition,
                 acquisition.ProfileId,
                 acquisition.OwnedSourceTier,
                 acquisition.OwnedFormatTier,
                 acquisition.OwnedMediaQuality,
                 acquisition.OwnedFormatScore,
+                acquisition.AudiobookShape,
                 acquisition.UpgradeQualityCaptured,
                 HasSubtitles = monitor.EntityId != null
                     && db.EntitySubtitles.Any(subtitle => subtitle.EntityId == monitor.EntityId),
@@ -121,7 +123,9 @@ public sealed partial class EfMonitorStore {
                 row.EntityId is not null,
                 row.SubtitleStatusKnown,
                 row.HasSubtitles,
-                VideoPayloadProfileValidation.ResolutionTier(row.MeasuredWidth, row.MeasuredHeight));
+                VideoPayloadProfileValidation.ResolutionTier(row.MeasuredWidth, row.MeasuredHeight),
+                row.BookRendition,
+                row.AudiobookShape);
 
             // Drop rows the sweep would (or already did) fulfill: kinds that never upgrade, copies at/above
             // cutoff. A not-yet-captured copy stays — it is genuinely below any cutoff until proven otherwise,

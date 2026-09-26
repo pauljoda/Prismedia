@@ -97,22 +97,7 @@ public sealed partial class SettingsService {
 
         var created = await _persistence.AddLibraryRootAsync(state, cancellationToken);
 
-        if (created.Enabled && _jobs is not null) {
-            var queued = await LibraryScanJobs.QueueScansForRootAsync(
-                _jobs,
-                created.Id,
-                created.Label,
-                new LibraryScanSelection(
-                    Videos: created.ScanVideos,
-                    Images: created.ScanImages,
-                    Audio: created.ScanAudio,
-                    Books: created.ScanBooks,
-                    Comics: created.ScanBooks),
-                cancellationToken);
-            _logger?.LogInformation(
-                "Queued {Count} scan job(s) after adding library root '{Label}'.",
-                queued, created.Label);
-        }
+        await QueueLibraryRootScansAsync(created, "adding library root", cancellationToken);
 
         return created;
     }
@@ -143,7 +128,45 @@ public sealed partial class SettingsService {
             UpdatedAt = DateTimeOffset.UtcNow,
         };
 
-        return await _persistence.SaveLibraryRootAsync(next, cancellationToken);
+        var saved = await _persistence.SaveLibraryRootAsync(next, cancellationToken);
+        if (!current.Enabled && saved.Enabled) {
+            await QueueLibraryRootScansAsync(saved, "enabling library root", cancellationToken);
+        }
+        return saved;
+    }
+
+    /// <summary>Queues each selected scan for an existing enabled root, if a job queue is available.</summary>
+    public async Task<int> QueueLibraryRootScansIfEnabledAsync(
+        Guid id,
+        string reason,
+        CancellationToken cancellationToken) {
+        var root = await _persistence.GetLibraryRootAsync(id, cancellationToken);
+        return root is null ? 0 : await QueueLibraryRootScansAsync(root, reason, cancellationToken);
+    }
+
+    private async Task<int> QueueLibraryRootScansAsync(
+        LibraryRoot root,
+        string reason,
+        CancellationToken cancellationToken) {
+        if (!root.Enabled || _jobs is null) {
+            return 0;
+        }
+
+        var queued = await LibraryScanJobs.QueueScansForRootAsync(
+            _jobs,
+            root.Id,
+            root.Label,
+            new LibraryScanSelection(
+                Videos: root.ScanVideos,
+                Images: root.ScanImages,
+                Audio: root.ScanAudio,
+                Books: root.ScanBooks,
+                Comics: root.ScanBooks),
+            cancellationToken);
+        _logger?.LogInformation(
+            "Queued {Count} scan job(s) after {Reason} '{Label}'.",
+            queued, reason, root.Label);
+        return queued;
     }
 
     /// <summary>

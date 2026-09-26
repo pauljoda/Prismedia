@@ -1,7 +1,11 @@
 import type { BookRenditionCode, RequestMediaKindCode } from "$lib/api/generated/codes";
 import {
+  commitBookRenditionsRequest as commitBookRenditionsRequestRequest,
   commitEntityRequest as commitEntityRequestRequest,
   commitReviewedRequest as commitReviewedRequestRequest,
+  prepareManagedMovie as prepareManagedMovieRequest,
+  prepareManagedBook as prepareManagedBookRequest,
+  prepareManagedSeries as prepareManagedSeriesRequest,
   getRequestReview,
   commitMissingChildrenRequest,
   removeWanted as removeWantedRequest,
@@ -11,12 +15,16 @@ import {
   syncContainerRequest as syncContainerRequestRequest,
 } from "$lib/api/generated/prismedia";
 import type {
+  BookRenditionRequestChoice,
   ExternalIdentity,
   MissingChildrenCommitResponse,
   RequestCommitResponse,
   RequestReviewResponse,
   RequestSearchResponse,
   ReviewedRequestCommitRequest,
+  PreparedWantedMovieResponse,
+  PreparedWantedBookResponse,
+  PreparedWantedSeriesResponse,
   WantedRemovalResponse,
 } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
@@ -89,6 +97,21 @@ export async function commitReviewedRequest(
   );
 }
 
+/** Saves reviewed metadata without acquisition, before explicit external-manager configuration. */
+export async function prepareManagedMovie(request: ReviewedRequestCommitRequest): Promise<PreparedWantedMovieResponse> {
+  return unwrapGenerated(await prepareManagedMovieRequest(request), "Could not save the reviewed movie");
+}
+
+/** Saves one reviewed Book work so its missing formats can be requested through a connected manager. */
+export async function prepareManagedBook(request: ReviewedRequestCommitRequest): Promise<PreparedWantedBookResponse> {
+  return unwrapGenerated(await prepareManagedBookRequest(request), "Could not save the reviewed Book");
+}
+
+/** Saves a finite reviewed episode selection without acquisition or broad series monitoring. */
+export async function prepareManagedSeries(request: ReviewedRequestCommitRequest): Promise<PreparedWantedSeriesResponse> {
+  return unwrapGenerated(await prepareManagedSeriesRequest(request), "Could not save the reviewed series selection");
+}
+
 /**
  * Requests an existing library entity by id — a wanted placeholder's "Search for release". The server
  * resolves the entity's kind and provider identity itself and starts the auto-grabbing acquisition.
@@ -100,6 +123,17 @@ export async function commitEntityRequest(
   return unwrapGenerated(
     await commitEntityRequestRequest({ entityId, bookRendition }),
     "Failed to search for a release",
+  );
+}
+
+/** Requests both Book formats in one submission with an independent outcome for each. */
+export async function commitBookRenditionsRequest(
+  entityId: string,
+  renditions: BookRenditionRequestChoice[],
+): Promise<RequestCommitResponse> {
+  return unwrapGenerated(
+    await commitBookRenditionsRequestRequest({ entityId, renditions }),
+    "Failed to request Book formats",
   );
 }
 

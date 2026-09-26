@@ -18,7 +18,9 @@ internal static class JobResourceDeclaration {
         ?? EntityKey(request.Job);
 
     public static string? EntityKey(EnqueueJobRequest request) =>
-        request.TargetEntityId is null || request.TargetEntityKind is null
+        request.Type is JobType.ScanLibrary or JobType.ManagedLibraryReconcile
+            ? JobResourceKeys.LibraryScan
+            : request.TargetEntityId is null || request.TargetEntityKind is null
             ? null
             : JobResourceKeys.Entity(request.TargetEntityId);
 
@@ -26,7 +28,7 @@ internal static class JobResourceDeclaration {
         PrismediaDbContext db,
         string? resourceKey,
         CancellationToken cancellationToken) {
-        if (resourceKey is null || !JobResourceKeys.IsEntity(resourceKey)) return;
+        if (resourceKey is null || !JobResourceKeys.IsEntity(resourceKey) && resourceKey != JobResourceKeys.LibraryScan) return;
 
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {

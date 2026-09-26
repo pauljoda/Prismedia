@@ -883,6 +883,35 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal([ReleaseRejectionReason.Blocklisted], candidate.Rejections);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AudiobookShapeIsObservedWhileDownloadingAndFixedByTheImport(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = id, Kind = EntityKind.Book, BookRendition = BookRendition.Audiobook, Status = AcquisitionStatus.Downloading,
+            Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        await store.RecordAudiobookShapeAsync(id, AudiobookReleaseShape.Mixed, CancellationToken.None);
+        db.ChangeTracker.Clear();
+        Assert.Same(AudiobookReleaseShape.Mixed, (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == id)).AudiobookShape);
+
+        await store.MarkImportedWithQualityAsync(id, BookQualityRank.Floor, "Imported.", CancellationToken.None,
+            audiobookShape: AudiobookReleaseShape.PartFiles);
+        await store.RecordAudiobookShapeAsync(id, AudiobookReleaseShape.SingleM4b, CancellationToken.None);
+        db.ChangeTracker.Clear();
+
+        var row = await db.Acquisitions.AsNoTracking().SingleAsync(acquisition => acquisition.Id == id);
+        Assert.Equal(AcquisitionStatus.Imported, row.Status);
+        Assert.Same(AudiobookReleaseShape.PartFiles, row.AudiobookShape);
+    }
+
     [Fact]
     public async Task MarkImportedWithQualityCapturesQualityAtomically() {
         await using var db = CreateContext();

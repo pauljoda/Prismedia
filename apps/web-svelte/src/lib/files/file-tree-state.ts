@@ -8,6 +8,7 @@ export interface FileTreeNodeMeta {
   kind: FileEntryKindCode;
   treePath: string;
   excluded?: boolean;
+  isReadOnly?: boolean;
 }
 
 export function fileTreeRootPath(root: Pick<FileRoot, "id" | "label" | "path">, allRoots?: Pick<FileRoot, "id" | "label" | "path">[]): string {
@@ -34,6 +35,7 @@ export function createFileTreeRegistry(roots: FileRoot[]): Map<string, FileTreeN
     const treePath = `${fileTreeRootPath(root, roots)}/`;
     registry.set(treePath, {
       rootId: root.id,
+      isReadOnly: root.isReadOnly,
       path: "",
       name: root.label || root.path,
       kind: FILE_ENTRY_KIND.directory,
@@ -54,6 +56,7 @@ export function upsertFileTreeEntries(
     const treePath = entry.kind === FILE_ENTRY_KIND.directory ? `${basePath}/` : basePath;
     registry.set(treePath, {
       rootId: entry.rootId,
+      isReadOnly: registry.get(rootTreePath.endsWith("/") ? rootTreePath : `${rootTreePath}/`)?.isReadOnly,
       path: entry.path,
       name: entry.name,
       kind: entry.kind,

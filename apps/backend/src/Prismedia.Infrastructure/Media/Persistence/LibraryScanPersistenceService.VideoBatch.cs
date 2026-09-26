@@ -56,7 +56,7 @@ public sealed partial class LibraryScanPersistenceService {
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<Guid>> RebindPlayableVideoSourceAsync(
+    public Task<IReadOnlyList<Guid>> RebindPlayableVideoSourceAsync(
         string previousPath,
         string replacementPath,
         CancellationToken cancellationToken) {
@@ -64,11 +64,32 @@ public sealed partial class LibraryScanPersistenceService {
             .OfType<IPlayableVideoKindDefinition>()
             .Select(definition => definition.Kind.ToCode())
             .ToArray();
+        return RebindSourceAsync(previousPath, replacementPath, playableCodes, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<Guid>> RebindConnectedComicSourceAsync(
+        string previousPath,
+        string replacementPath,
+        CancellationToken cancellationToken) =>
+        RebindSourceAsync(previousPath, replacementPath, [EntityKind.ComicInstallment.ToCode()], cancellationToken);
+
+    public Task<IReadOnlyList<Guid>> RebindConnectedBookSourceAsync(
+        string previousPath,
+        string replacementPath,
+        CancellationToken cancellationToken) =>
+        RebindSourceAsync(previousPath, replacementPath,
+            [EntityKind.Book.ToCode(), EntityKind.AudioTrack.ToCode()], cancellationToken);
+
+    private async Task<IReadOnlyList<Guid>> RebindSourceAsync(
+        string previousPath,
+        string replacementPath,
+        string[] sourceKindCodes,
+        CancellationToken cancellationToken) {
         var previousOwnerCandidates = await _db.EntityFiles
             .Where(file => file.Role == EntityFileRole.Source
                 && file.Path.Length == previousPath.Length)
             .Join(
-                _db.Entities.Where(entity => playableCodes.Contains(entity.KindCode)),
+                _db.Entities.Where(entity => sourceKindCodes.Contains(entity.KindCode)),
                 file => file.EntityId,
                 entity => entity.Id,
                 (file, _) => file)
@@ -87,7 +108,7 @@ public sealed partial class LibraryScanPersistenceService {
                     && file.Path.Length == replacementPath.Length
                     && !ownerIds.Contains(file.EntityId))
                 .Join(
-                    _db.Entities.AsNoTracking().Where(entity => playableCodes.Contains(entity.KindCode)),
+                    _db.Entities.AsNoTracking().Where(entity => sourceKindCodes.Contains(entity.KindCode)),
                     file => file.EntityId,
                     entity => entity.Id,
                     (file, _) => file)
@@ -97,7 +118,7 @@ public sealed partial class LibraryScanPersistenceService {
                 FileSystemPathComparison.Equals(path, replacementPath));
             if (conflictingOwner) {
                 throw new InvalidOperationException(
-                    $"The replacement video path is already owned by another Entity: {replacementPath}");
+                    $"The replacement source path is already owned by another Entity: {replacementPath}");
             }
         }
 
@@ -213,7 +234,7 @@ public sealed partial class LibraryScanPersistenceService {
         // key a dictionary on the path — a unique-key dictionary here crashed every scan of a
         // library containing such a file.
         var existingEntities = (await _db.EntityFiles.AsNoTracking()
-            .Where(f => f.Role == EntityFileRole.Source
+            .Where(f => (f.Role == EntityFileRole.Source || f.Role == EntityFileRole.UnavailableSource)
                 && filePathLengths.Contains(f.Path.Length))
             .Join(_db.Entities, f => f.EntityId, e => e.Id,
                 (f, e) => new ExistingPlayableSourceOwner(f.Path, e.Id, e.KindCode, e.CreatedAt, e.SortOrder))

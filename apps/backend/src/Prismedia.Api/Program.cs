@@ -102,6 +102,9 @@ var app = builder.Build();
 
 app.UseResponseCompression();
 app.UseMiddleware<Prismedia.Api.Diagnostics.RequestTimingMiddleware>();
+app.UseMiddleware<Prismedia.Api.Diagnostics.FulfillmentOwnershipMiddleware>();
+app.UseMiddleware<Prismedia.Api.Diagnostics.AcquisitionConflictMiddleware>();
+app.UseMiddleware<Prismedia.Api.Diagnostics.PluginProviderFailureMiddleware>();
 
 if (app.Environment.IsDevelopment()) {
     app.MapOpenApi();
@@ -177,6 +180,7 @@ if (File.Exists(staticIndexPath)) {
 
 await DatabaseRestoreRunner.ApplyPendingRestoreAsync(app.Services, app.Configuration);
 await PrismediaMigrationRunner.ApplyPrismediaMigrationsAsync(app.Services, app.Configuration);
+await ProviderCredentialUpgradeRunner.UpgradeAsync(app.Services, app.Configuration);
 await UserBootstrapRunner.RunUserBootstrapAsync(app.Services, app.Configuration);
 
 app.Run();

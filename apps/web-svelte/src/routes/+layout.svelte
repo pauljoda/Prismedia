@@ -61,6 +61,17 @@
   const bareShell = $derived(
     page.url.pathname === "/login" || page.url.pathname.startsWith("/setup"),
   );
+  // The native app owns navigation chrome for its embedded administration surface.
+  // sessionStorage keeps this presentation across ordinary in-app route links.
+  const embeddedStorageKey = "prismedia-native-content";
+  const embeddedShell = $derived(
+    browser && (page.url.searchParams.has("nativeContent")
+      || window.sessionStorage.getItem(embeddedStorageKey) === "1"),
+  );
+  $effect(() => {
+    if (!browser || !page.url.searchParams.has("nativeContent")) return;
+    window.sessionStorage.setItem(embeddedStorageKey, "1");
+  });
   const downloadsWorkspace = $derived(page.url.pathname === "/downloads");
   const artworkTransition = new EntityArtworkTransition();
   provideEntityArtworkTransition(artworkTransition);
@@ -169,7 +180,10 @@
       persistMusicPlayerState();
       return;
     }
-    persistMusicPlayerProgress();
+    // Progress is saved as the listening checkpoint. A restored player that has not moved since its
+    // last save must not re-send its old position, or it would overwrite newer progress from another
+    // device whenever this page hides.
+    persistMusicPlayerTimeIfChanged();
   }
 
   function persistMusicPlayerTimeIfChanged() {
@@ -279,6 +293,14 @@
 
 {#if bareShell}
   {@render pageContent()}
+{:else if embeddedShell}
+  <main
+    bind:this={mainScroller}
+    class="h-dvh overflow-y-auto p-4 sm:p-6"
+    data-native-content
+  >
+    {@render pageContent()}
+  </main>
 {:else}
   <div
     class="flex min-h-dvh"

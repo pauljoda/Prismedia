@@ -104,6 +104,7 @@ public sealed record PluginExecutionPolicy(
 /// <param name="Auth">Credential fields requested by the plugin.</param>
 /// <param name="IsNsfw">Whether this plugin should mark imported metadata as NSFW by default.</param>
 /// <param name="Supports">Entity kind/action support declarations.</param>
+/// <param name="Icon">Optional packaged SVG or PNG path relative to the manifest directory.</param>
 public sealed record PluginManifest(
     int ManifestVersion,
     IReadOnlyList<string> ApiTags,
@@ -116,7 +117,9 @@ public sealed record PluginManifest(
     IReadOnlyList<PluginAuthField> Auth,
     bool IsNsfw,
     IReadOnlyList<PluginEntitySupport> Supports,
-    PluginExecutionPolicy? Execution = null);
+    PluginExecutionPolicy? Execution = null,
+    PluginIntegrationDefinition? Integration = null,
+    string? Icon = null);
 
 /// <summary>
 /// Index entry consumed by the Prismedia plugin manager.
@@ -133,6 +136,7 @@ public sealed record PluginManifest(
 /// <param name="ApiTags">Tags used to gate plugin generations, including Prismedia.</param>
 /// <param name="Compat">Declared compatibility bounds.</param>
 /// <param name="Supports">Entity kind/action support declarations.</param>
+/// <param name="Icon">Optional catalog-relative SVG or PNG asset path.</param>
 public sealed record PluginIndexEntry(
     string Id,
     string Name,
@@ -146,7 +150,9 @@ public sealed record PluginIndexEntry(
     IReadOnlyList<string> ApiTags,
     PluginCompatibility Compat,
     IReadOnlyList<PluginEntitySupport> Supports,
-    PluginExecutionPolicy? Execution = null);
+    PluginExecutionPolicy? Execution = null,
+    PluginIntegrationDefinition? Integration = null,
+    string? Icon = null);
 
 /// <summary>
 /// API-facing plugin provider summary.
@@ -162,7 +168,15 @@ public sealed record PluginProvider(
     IReadOnlyList<PluginAuthField> Auth,
     IReadOnlyList<string> MissingAuthKeys,
     bool UpdateAvailable = false,
-    string? AvailableVersion = null);
+    string? AvailableVersion = null,
+    PluginIntegrationDefinition? Integration = null,
+    string? IconUrl = null);
+
+/// <summary>Validated plugin icon bytes ready for an HTTP image response.</summary>
+/// <param name="Content">Bounded image content.</param>
+/// <param name="ContentType">Validated SVG or PNG media type.</param>
+/// <param name="ETag">Content-derived response validator.</param>
+public sealed record PluginIconAsset(byte[] Content, string ContentType, string ETag);
 
 /// <summary>
 /// Request body for saving plugin credential values.

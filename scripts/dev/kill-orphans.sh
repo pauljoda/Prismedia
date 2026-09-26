@@ -34,9 +34,9 @@ kill_matching "turbo"            "turbo.*dev.*prismedia"
 kill_matching "Docusaurus"       "docusaurus.*start\|docusaurus.*serve"
 kill_matching "Docs node"        "node.*docs-site"
 
-# Ports — catch anything else lingering on dev ports
+# Ports — catch lingering listeners without killing browsers connected to them.
 for port in 8008 8010 3010 5173; do
-  port_pid=$(lsof -ti :"$port" 2>/dev/null || true)
+  port_pid=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
   if [[ -n "$port_pid" ]]; then
     echo "Killing process on port $port (PID: $port_pid)"
     echo "$port_pid" | xargs kill -9 2>/dev/null || true

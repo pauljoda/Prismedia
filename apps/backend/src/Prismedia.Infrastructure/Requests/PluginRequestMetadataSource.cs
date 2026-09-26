@@ -103,6 +103,11 @@ public sealed class PluginRequestMetadataSource(
             IncludeStructuralChildren: false);
 
         var response = await runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
+        if (!response.Ok) {
+            throw new PluginProviderUnavailableException(string.IsNullOrWhiteSpace(response.Error)
+                ? $"{provider.Name} could not complete the search."
+                : response.Error);
+        }
         return (response.Result?.Candidates ?? [])
             .Select(candidate => MapCandidate(provider, candidate, requestKind))
             .Where(result => result is not null)
@@ -716,6 +721,11 @@ public sealed class PluginRequestMetadataSource(
             IncludeStructuralChildren: includeChildren);
 
         var response = await runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
+        if (!response.Ok) {
+            throw new PluginProviderUnavailableException(string.IsNullOrWhiteSpace(response.Error)
+                ? $"{descriptor.Manifest.Name} could not complete the metadata lookup."
+                : response.Error);
+        }
         return response.Result;
     }
 

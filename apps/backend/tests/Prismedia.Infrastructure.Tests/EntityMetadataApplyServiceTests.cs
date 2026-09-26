@@ -14,6 +14,267 @@ using DomainEntityExternalId = Prismedia.Domain.Entities.EntityExternalId;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityMetadataApplyServiceTests {
+    [Fact]
+    public async Task ProviderCannotRetireAnIdentityOutsideItsDeclaredRoute() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Book.ToCode(), "Existing book");
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = id,
+            Provider = "googlebooks",
+            Value = "shared-volume",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var proposal = new EntityMetadataProposal(
+            "openlibrary:work:OL9W:book",
+            "openlibrary",
+            EntityKind.Book,
+            1,
+            "external-id",
+            EmptyPatch() with {
+                RetiredExternalIds = [new("googlebooks", "shared-volume")]
+            },
+            [], [], [], Relationships: []);
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            identityRouter: new ConfiguredIdentityRouter());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ApplyAsync(
+            id,
+            proposal,
+            [MetadataPatchField.ExternalIds.ToCode()],
+            null,
+            default));
+
+        Assert.True(await db.EntityExternalIds.AnyAsync(row =>
+            row.EntityId == id && row.Provider == "googlebooks" && row.Value == "shared-volume"));
+    }
+
+    [Fact]
+    public async Task ReviewedIdentityTransitionRetiresOnlyExactProviderEvidence() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        SeedEntity(db, id, EntityKind.Book.ToCode(), "Old work");
+        db.EntityExternalIds.AddRange(
+            ExternalId("openlibrary", "OL1W", "https://openlibrary.org/works/OL1W"),
+            ExternalId("openlibrarywork", "OL1W", "https://openlibrary.org/works/OL1W"),
+            ExternalId("openlibraryedition", "OL2M", "https://openlibrary.org/books/OL2M"),
+            ExternalId("isbn13", "9780140328721", null),
+            ExternalId("googlebooks", "shared-volume", "https://books.google.com/books?id=shared-volume"));
+        db.EntityUrls.AddRange(
+            Url("https://openlibrary.org/works/OL1W", 0),
+            Url("https://openlibrary.org/books/OL2M", 1),
+            Url("https://example.test/curated", 2));
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            "openlibrary:work:OL9W:book",
+            "openlibrary",
+            EntityKind.Book,
+            1,
+            "external-id",
+            EmptyPatch() with {
+                ExternalIds = new Dictionary<string, string> {
+                    ["openlibrary"] = "OL9W",
+                    ["openlibrarywork"] = "OL9W"
+                },
+                Urls = ["https://openlibrary.org/works/OL9W"],
+                RetiredExternalIds = [
+                    new("openlibrary", "OL1W"),
+                    new("openlibrarywork", "OL1W"),
+                    new("openlibraryedition", "OL2M")
+                ]
+            },
+            [], [], [], Relationships: []);
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            identityRouter: new ConfiguredIdentityRouter(
+                new PluginIdentityRoute("openlibrary", new ExternalIdentity("openlibrary", "OL1W")),
+                new PluginIdentityRoute("openlibrary", new ExternalIdentity("openlibrarywork", "OL1W")),
+                new PluginIdentityRoute("openlibrary", new ExternalIdentity("openlibraryedition", "OL2M"))));
+
+        Assert.True(await service.ApplyAsync(
+            id,
+            proposal,
+            [MetadataPatchField.ExternalIds.ToCode()],
+            null,
+            default));
+
+        var identities = await db.EntityExternalIds.Where(row => row.EntityId == id)
+            .ToDictionaryAsync(row => row.Provider, row => row.Value);
+        Assert.Equal("OL9W", identities["openlibrary"]);
+        Assert.Equal("OL9W", identities["openlibrarywork"]);
+        Assert.DoesNotContain("openlibraryedition", identities.Keys);
+        Assert.Equal("9780140328721", identities["isbn13"]);
+        Assert.Equal("shared-volume", identities["googlebooks"]);
+        var urls = await db.EntityUrls.Where(row => row.EntityId == id).Select(row => row.Url).ToArrayAsync();
+        Assert.Contains("https://openlibrary.org/works/OL1W", urls);
+        Assert.Contains("https://openlibrary.org/books/OL2M", urls);
+        Assert.Contains("https://example.test/curated", urls);
+
+        EntityExternalIdRow ExternalId(string provider, string value, string? url) => new() {
+            Id = Guid.NewGuid(), EntityId = id, Provider = provider, Value = value, Url = url,
+            CreatedAt = now, UpdatedAt = now
+        };
+        EntityUrlRow Url(string url, int sortOrder) => new() {
+            Id = Guid.NewGuid(), EntityId = id, Url = url, SortOrder = sortOrder, CreatedAt = now
+        };
+    }
+
+    [Fact]
+    public async Task TypedPositionsRetainExactComicLabelsAndLegacyOmissionPreservesThem() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.ComicInstallment.ToCode(), "Interlude");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var patch = EmptyPatch() with { PositionEntries = [new EntityPosition(EntityPositionCodes.Chapter, 12, "12.5")] };
+        var proposal = new EntityMetadataProposal("interlude", "fixture-provider", EntityKind.ComicInstallment, null, null,
+            patch, [], [], [], Relationships: []);
+        var fields = ProposalApplySelection.SelectAllPresentFields(proposal).ToArray();
+        Assert.Contains(MetadataPatchField.Positions.ToCode(), fields);
+        await service.ApplyAsync(id, proposal, fields, null, default);
+        var position = (await db.EntityPositions.FindAsync(id, EntityPositionCodes.Chapter))!;
+        Assert.Equal("12.5", position.Label);
+        Assert.Equal(12, position.Value);
+        await service.ApplyAsync(id, proposal with { Patch = EmptyPatch() with {
+            Positions = new Dictionary<string, int> { [EntityPositionCodes.Chapter] = 13 }
+        } }, fields, null, default);
+        Assert.Equal("12.5", position.Label);
+        await service.ApplyPatchAsync(id, new EntityMetadataUpdateRequest(fields, patch with {
+            PositionEntries = [new EntityPosition(EntityPositionCodes.Chapter, 13, "")]
+        }), default);
+        Assert.Null(position.Label);
+    }
+
+    [Fact]
+    public async Task ManualScalarClearIsProtectedAndUnlockingAllowsAttributedProviderEnrichment() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Book.ToCode(), "Book");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var fields = new[] { MetadataPatchField.Description.ToCode() };
+        await service.ApplyPatchAsync(id, new EntityMetadataUpdateRequest(fields, EmptyPatch()), default);
+        var proposal = new EntityMetadataProposal("book", "fixture-provider", EntityKind.Book, 0.9m, null,
+            EmptyPatch() with { Description = "Provider description" }, [], [], [], Relationships: []);
+        await service.ApplyAsync(id, proposal, fields, null, default);
+        Assert.Null(await db.EntityDescriptions.FindAsync(id));
+        var evidence = await db.EntityMetadataFields.FindAsync(id, MetadataPatchField.Description);
+        Assert.True(evidence!.IsLocked);
+        Assert.True(evidence.IsCleared);
+        Assert.Equal(MetadataValueOrigin.User, evidence.Origin);
+        evidence.Apply(evidence.Evidence().WithLock(false));
+        await db.SaveChangesAsync();
+        await service.ApplyAsync(id, proposal, fields, null, default);
+        Assert.Equal("Provider description", (await db.EntityDescriptions.FindAsync(id))!.Value);
+        Assert.Equal(MetadataValueOrigin.Provider, evidence.Origin);
+        Assert.Equal(proposal.Provider, evidence.ProviderId);
+        Assert.Equal(0.9m, evidence.Confidence);
+        Assert.False(evidence.IsCleared);
+    }
+
+    [Fact]
+    public async Task SparseProviderDoesNotTakeCreditForAnExistingValue() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Book.ToCode(), "Book");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var fields = new[] { MetadataPatchField.Description.ToCode() };
+        var proposal = new EntityMetadataProposal("book", "first-provider", EntityKind.Book, 0.8m, null,
+            EmptyPatch() with { Description = "Known description" }, [], [], [], Relationships: []);
+        await service.ApplyAsync(id, proposal, fields, null, default);
+        var original = (await db.EntityMetadataFields.FindAsync(id, MetadataPatchField.Description))!.Evidence();
+        await service.ApplyAsync(id, proposal with { Provider = "second-provider", Patch = EmptyPatch() }, fields, null, default);
+        Assert.Equal(original, (await db.EntityMetadataFields.FindAsync(id, MetadataPatchField.Description))!.Evidence());
+    }
+
+    [Fact]
+    public async Task RecursiveProviderEnrichmentRespectsChildTitleLockAndAttributesUnlockedDescription() {
+        await using var db = CreateContext();
+        var parent = Guid.NewGuid(); var child = Guid.NewGuid();
+        SeedEntity(db, parent, EntityKind.ComicSeries.ToCode(), "Series");
+        SeedEntity(db, child, EntityKind.ComicInstallment.ToCode(), "Chapter", parentEntityId: parent);
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyPatchAsync(child, new EntityMetadataUpdateRequest([MetadataPatchField.Title.ToCode()], EmptyPatch() with { Title = "Curated issue label" }), default);
+        var node = new EntityMetadataProposal("issue", "fixture-provider", EntityKind.ComicInstallment, 0.7m, null,
+            EmptyPatch() with { Title = "Provider issue label", Description = "Issue description" }, [], [], [], TargetEntityId: child, Relationships: []);
+        var root = new EntityMetadataProposal("series", "fixture-provider", EntityKind.ComicSeries, 0.7m, null, EmptyPatch(), [], [node], [], Relationships: []);
+        await service.ApplyAsync(parent, root, [], null, default);
+        Assert.Equal("Curated issue label", (await db.Entities.FindAsync(child))!.Title);
+        Assert.Equal("Issue description", (await db.EntityDescriptions.FindAsync(child))!.Value);
+        Assert.Equal(MetadataValueOrigin.User, (await db.EntityMetadataFields.FindAsync(child, MetadataPatchField.Title))!.Origin);
+        Assert.Equal(MetadataValueOrigin.Provider, (await db.EntityMetadataFields.FindAsync(child, MetadataPatchField.Description))!.Origin);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SparseProviderProposalPreservesDescriptionClassificationAndRelationships(string? missingValue) {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.Book.ToCode(), "A curated book");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var fields = new[] {
+            MetadataPatchField.Description.ToCode(), MetadataPatchField.Classification.ToCode(),
+            MetadataPatchField.Tags.ToCode(), MetadataPatchField.Credits.ToCode()
+        };
+        await service.ApplyPatchAsync(entityId, new EntityMetadataUpdateRequest(fields,
+            EmptyPatch() with {
+                Description = "A carefully reviewed description", Classification = "Reviewed classification",
+                Tags = ["Curated subject"], Credits = [new CreditPatch("Known author", CreditRole.Writer.ToCode(), null, 0)]
+            }), CancellationToken.None);
+        var originalLinks = await db.EntityRelationshipLinks.Where(row => row.EntityId == entityId)
+            .Select(row => row.TargetEntityId).ToArrayAsync();
+        Assert.NotEmpty(originalLinks);
+        // Exercise omission independently of locks: even an unlocked value must survive absent evidence.
+        foreach (var field in await db.EntityMetadataFields.Where(row => row.EntityId == entityId).ToArrayAsync()) field.Apply(field.Evidence().WithLock(false));
+        await db.SaveChangesAsync();
+        var proposal = new EntityMetadataProposal("sparse-book", "fixture-provider", EntityKind.Book, null, null,
+            EmptyPatch() with { Description = missingValue, Classification = missingValue }, [], [], [], Relationships: []);
+
+        Assert.True(await service.ApplyAsync(entityId, proposal, fields, null, CancellationToken.None));
+
+        Assert.Equal("A carefully reviewed description", (await db.EntityDescriptions.FindAsync(entityId))!.Value);
+        Assert.Equal("Reviewed classification", (await db.EntityClassifications.FindAsync(entityId))!.Value);
+        Assert.Equal(originalLinks.Order(), (await db.EntityRelationshipLinks.Where(row => row.EntityId == entityId)
+            .Select(row => row.TargetEntityId).ToArrayAsync()).Order());
+    }
+
+    [Fact]
+    public async Task ManualBookEditCanExplicitlyClearFieldsPreservedBySparseProviders() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.Book.ToCode(), "A curated book");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var fields = new[] {
+            MetadataPatchField.Description.ToCode(), MetadataPatchField.Classification.ToCode(),
+            MetadataPatchField.Tags.ToCode(), MetadataPatchField.Credits.ToCode()
+        };
+        await service.ApplyPatchAsync(entityId, new EntityMetadataUpdateRequest(fields,
+            EmptyPatch() with {
+                Description = "Remove this description", Classification = "Remove this classification",
+                Tags = ["Remove this subject"], Credits = [new CreditPatch("Remove this author", CreditRole.Writer.ToCode(), null, 0)]
+            }), CancellationToken.None);
+
+        Assert.True(await service.ApplyPatchAsync(entityId, new EntityMetadataUpdateRequest(fields, EmptyPatch()), CancellationToken.None));
+
+        Assert.Null(await db.EntityDescriptions.FindAsync(entityId));
+        Assert.Null(await db.EntityClassifications.FindAsync(entityId));
+        Assert.Empty(await db.EntityRelationshipLinks.Where(row => row.EntityId == entityId).ToArrayAsync());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -394,6 +655,17 @@ public sealed class EntityMetadataApplyServiceTests {
                     ["published"] = "2021-05-29T13:00:12-07:00"
                 }
             });
+    }
+
+    [Fact]
+    public void ManualPatchCannotRetireAProviderIdentity() {
+        var exception = Assert.Throws<ArgumentException>(() => EntityMetadataPatchValidator.Validate(
+            EntityMetadataPatchValidator.NormalizeFieldSet([MetadataPatchField.ExternalIds.ToCode()]),
+            EmptyPatch() with {
+                RetiredExternalIds = [new("openlibraryedition", "OL2M")]
+            }));
+
+        Assert.Contains("reviewed provider proposal", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

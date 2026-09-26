@@ -1,23 +1,7 @@
 <script lang="ts">
   import { invalidateAll } from "$app/navigation";
-  import {
-    ChevronLeft,
-    Clock,
-    Eye,
-    Film,
-    FolderOpen,
-    Image as ImageIcon,
-    BookOpen,
-    Loader2,
-    Music,
-    Plus,
-    Sparkles,
-    ToggleLeft,
-    ToggleRight,
-    Trash2,
-    UsersRound,
-  } from "@lucide/svelte";
-  import { TextInput,  Button, Panel, StatusLed, cn  } from "@prismedia/ui-svelte";
+  import { ChevronLeft, FolderOpen, Loader2, Plus } from "@lucide/svelte";
+  import { TextInput, Button, Panel } from "@prismedia/ui-svelte";
   import {
     browseLibraryPath,
     createLibraryRoot,
@@ -30,9 +14,14 @@
   import { JOB_TYPE } from "$lib/api/generated/codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useSession } from "$lib/stores/session.svelte";
+  import { rescanFileRoot } from "$lib/api/files";
+  import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import LibraryAccessDialog from "./LibraryAccessDialog.svelte";
+  import LibraryCard, { type LibraryFlag } from "./LibraryCard.svelte";
   import { entityTerms } from "$lib/terminology";
   import ToggleCard from "./ToggleCard.svelte";
+  import ProviderLibraryDialog from "./ProviderLibraryDialog.svelte";
 
   interface Props {
     roots: LibraryRoot[];
@@ -45,6 +34,8 @@
 
   const session = useSession();
   let accessDialogRoot = $state<LibraryRoot | null>(null);
+  let removeDialogRoot = $state<LibraryRoot | null>(null);
+  let scanningRootId = $state<string | null>(null);
 
   const nsfw = useNsfw();
 
@@ -67,10 +58,6 @@
     return roots;
   });
 
-  function formatTimestamp(value: string | null) {
-    if (!value) return "Never";
-    return new Date(value).toLocaleString();
-  }
 
   async function openBrowser(targetPath?: string) {
     try {
@@ -117,41 +104,30 @@
     }
   }
 
-  async function handleToggleRoot(root: LibraryRoot) {
-    const next = !root.enabled;
-    roots = roots.map((r) => (r.id === root.id ? { ...r, enabled: next } : r));
+  /** Flips one library switch optimistically, restoring it when the server refuses. */
+  async function handleToggle(root: LibraryRoot, flag: LibraryFlag) {
+    const next = !root[flag];
+    const apply = (value: boolean) =>
+      (roots = roots.map((entry) => (entry.id === root.id ? { ...entry, [flag]: value } : entry)));
+    apply(next);
     try {
-      await updateLibraryRoot(root.id, { enabled: next });
+      await updateLibraryRoot(root.id, { [flag]: next });
       await invalidateAll();
     } catch (err) {
-      roots = roots.map((r) => (r.id === root.id ? { ...r, enabled: !next } : r));
-      onError(err instanceof Error ? err.message : "Failed to update root");
+      apply(!next);
+      onError(err instanceof Error ? err.message : "Failed to update library");
     }
   }
 
-  async function handleToggleMediaType(
-    root: LibraryRoot,
-    field: "scanVideos" | "scanImages" | "scanAudio" | "scanBooks" | "autoIdentify",
-  ) {
-    const next = !root[field];
-    roots = roots.map((r) => (r.id === root.id ? { ...r, [field]: next } : r));
+  async function handleScanRoot(root: LibraryRoot) {
+    scanningRootId = root.id;
     try {
-      await updateLibraryRoot(root.id, { [field]: next });
-      await invalidateAll();
+      await rescanFileRoot({ rootId: root.id, path: null });
+      onMessage(`Scanning ${root.label}.`);
     } catch (err) {
-      roots = roots.map((r) => (r.id === root.id ? { ...r, [field]: !next } : r));
-      onError(err instanceof Error ? err.message : "Failed to update root");
-    }
-  }
-
-  async function handleToggleNsfw(root: LibraryRoot) {
-    const next = !root.isNsfw;
-    roots = roots.map((r) => (r.id === root.id ? { ...r, isNsfw: next } : r));
-    try {
-      await updateLibraryRoot(root.id, { isNsfw: next });
-      await invalidateAll();
-    } catch {
-      roots = roots.map((r) => (r.id === root.id ? { ...r, isNsfw: !next } : r));
+      onError(err instanceof Error ? err.message : "Failed to start the scan");
+    } finally {
+      scanningRootId = null;
     }
   }
 
@@ -163,32 +139,28 @@
       await invalidateAll();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to remove root");
+    } finally {
+      removeDialogRoot = null;
     }
   }
 </script>
 
 <Panel>
   <div class="p-5 space-y-5">
-  <div class="flex flex-wrap items-center justify-between gap-3">
-    <div class="flex items-center gap-2.5">
-      <FolderOpen class="h-4 w-4 text-text-accent" />
-      <div>
-        <h2 class="text-kicker text-text-primary">Watched Libraries</h2>
-        <p class="text-[0.68rem] text-text-muted">
-          Add mounted folders to scan for media files
-        </p>
-      </div>
+  <div class="flex flex-wrap items-center justify-end gap-3">
+    <div class="flex flex-wrap items-center gap-2">
+      {#if session.isAdmin}<ProviderLibraryDialog {roots} onComplete={onRootsChanged} {onError} {onMessage} />{/if}
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onclick={() => void openBrowser(browser?.path)}
+        class="no-lift gap-1.5 px-3 py-1.5 text-xs"
+      >
+        <Plus class="h-3.5 w-3.5" />
+        Browse Folder
+      </Button>
     </div>
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      onclick={() => void openBrowser(browser?.path)}
-      class="no-lift gap-1.5 px-3 py-1.5 text-xs"
-    >
-      <Plus class="h-3.5 w-3.5" />
-      Browse Folder
-    </Button>
   </div>
 
   {#if browserVisible}
@@ -316,10 +288,7 @@
             class="gap-1.5 px-4 py-2 text-xs"
           >
             {#if addingRoot}
-              <StatusLed status="accent" size="sm" pulse class="shrink-0" />
-              <Loader2
-                class="h-3.5 w-3.5 shrink-0 animate-spin text-accent-300 drop-shadow-[0_0_6px_rgba(199,155,92,0.35)]"
-              />
+              <Loader2 class="h-3.5 w-3.5 shrink-0 animate-spin" />
             {:else}
               <Plus class="h-3.5 w-3.5" />
             {/if}
@@ -344,205 +313,24 @@
   {/if}
 
   {#if loading}
-    <div class="surface-card no-lift flex flex-col items-center justify-center gap-3 p-8">
-      <div class="flex items-center gap-2">
-        <StatusLed status="accent" pulse />
-        <Loader2
-          class="h-5 w-5 animate-spin text-accent-400 drop-shadow-[0_0_8px_rgba(199,155,92,0.3)]"
-        />
-      </div>
-      <span class="text-mono-sm text-text-muted">Loading library configuration…</span>
-    </div>
+    <StatePlaceholder icon={FolderOpen} title="Loading libraries" busy />
   {:else if roots.length === 0}
-    <div class="empty-rack-slot flex flex-col items-center p-8 text-center">
-      <FolderOpen class="mx-auto mb-2 h-8 w-8 text-text-disabled" />
-      <p class="text-sm text-text-muted">
-        No library roots configured. Browse to a mounted folder to begin.
-      </p>
-    </div>
+    <StatePlaceholder icon={FolderOpen} title="No libraries yet" />
   {:else if rootsVisible.length === 0}
-    <div class="empty-rack-slot flex flex-col items-center p-8 text-center">
-      <FolderOpen class="mx-auto mb-2 h-8 w-8 text-text-disabled" />
-      <p class="text-sm text-text-muted">No library roots to display.</p>
-    </div>
+    <StatePlaceholder icon={FolderOpen} title="No libraries to show" />
   {:else}
-    <div class="space-y-2">
+    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {#each rootsVisible as root (root.id)}
-        <div
-          class={cn(
-            "surface-card no-lift flex flex-col gap-3 p-4 transition-opacity duration-fast",
-            !root.enabled && "opacity-50",
-          )}
-        >
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0 flex items-start gap-3">
-              <div
-                class={cn("led mt-1.5 flex-shrink-0", root.enabled ? "led-active" : "led-idle")}
-              ></div>
-              <div class="min-w-0">
-                <h3 class="text-[0.85rem] font-semibold text-text-primary truncate">
-                  {root.label}
-                </h3>
-                <p
-                  class="mt-1.5 truncate text-mono-sm text-text-disabled bg-surface-1/50 rounded-xs border border-border-subtle px-2 py-0.5 inline-block max-w-full shadow-sm"
-                >
-                  {root.path}
-                </p>
-              </div>
-            </div>
-            <div class="flex items-center gap-1 shrink-0">
-              {#if session.isAdmin}
-                <Button variant="outline" size="sm"
-                  type="button"
-                  onclick={() => (accessDialogRoot = root)}
-                  class="p-1.5"
-                  title="Library access"
-                >
-                  <UsersRound class="h-4 w-4" />
-                </Button>
-              {/if}
-              <Button variant="outline" size="sm"
-                type="button"
-                onclick={() => void handleToggleRoot(root)}
-                class="p-1.5"
-                title={root.enabled ? "Disable Library" : "Enable Library"}
-              >
-                {#if root.enabled}
-                  <ToggleRight class="h-4 w-4 text-text-accent" />
-                {:else}
-                  <ToggleLeft class="h-4 w-4" />
-                {/if}
-              </Button>
-              <Button variant="destructive" size="sm"
-                type="button"
-                onclick={() => void handleDeleteRoot(root)}
-                class="p-1.5"
-                title="Remove Library"
-              >
-                <Trash2 class="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div
-            class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border-subtle/50"
-          >
-            <div class="flex flex-wrap items-center gap-2">
-              <span
-                class="text-[0.65rem] font-medium text-text-muted uppercase tracking-wider mr-1 hidden sm:inline-block"
-              >
-                Scans:
-              </span>
-
-              <Button variant="outline" size="sm"
-                type="button"
-                onclick={() => void handleToggleMediaType(root, "scanVideos")}
-                title={root.scanVideos ? "Videos: scanning" : "Videos: skipped"}
-                class={cn(
-                  "flex items-center gap-1.5 rounded-xs px-2 py-1 text-[0.68rem] font-medium border transition-all duration-fast",
-                  root.scanVideos
-                    ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
-                    : "bg-surface-1 border-border-subtle text-text-disabled hover:text-text-muted hover:border-border-default",
-                )}
-              >
-                <Film class="h-3.5 w-3.5" />
-                Video
-              </Button>
-
-              <Button variant="outline" size="sm"
-                type="button"
-                onclick={() => void handleToggleMediaType(root, "scanImages")}
-                title={root.scanImages ? "Images: scanning" : "Images: skipped"}
-                class={cn(
-                  "flex items-center gap-1.5 rounded-xs px-2 py-1 text-[0.68rem] font-medium border transition-all duration-fast",
-                  root.scanImages
-                    ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
-                    : "bg-surface-1 border-border-subtle text-text-disabled hover:text-text-muted hover:border-border-default",
-                )}
-              >
-                <ImageIcon class="h-3.5 w-3.5" />
-                Image
-              </Button>
-
-              <Button variant="outline" size="sm"
-                type="button"
-                onclick={() => void handleToggleMediaType(root, "scanAudio")}
-                title={root.scanAudio ? "Audio: scanning" : "Audio: skipped"}
-                class={cn(
-                  "flex items-center gap-1.5 rounded-xs px-2 py-1 text-[0.68rem] font-medium border transition-all duration-fast",
-                  root.scanAudio
-                    ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
-                    : "bg-surface-1 border-border-subtle text-text-disabled hover:text-text-muted hover:border-border-default",
-                )}
-              >
-                <Music class="h-3.5 w-3.5" />
-                Audio
-              </Button>
-
-              <Button variant="outline" size="sm"
-                type="button"
-                onclick={() => void handleToggleMediaType(root, "scanBooks")}
-                title={
-                  root.scanBooks && root.scanImages
-                    ? "Books and Images: ZIP/CBZ files can appear in both"
-                    : root.scanBooks
-                      ? "Books: scanning"
-                      : "Books: skipped"
-                }
-                class={cn(
-                  "flex items-center gap-1.5 rounded-xs px-2 py-1 text-[0.68rem] font-medium border transition-all duration-fast",
-                  root.scanBooks
-                    ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
-                    : "bg-surface-1 border-border-subtle text-text-disabled hover:text-text-muted hover:border-border-default",
-                )}
-              >
-                <BookOpen class="h-3.5 w-3.5" />
-                Books
-              </Button>
-
-              <div class="w-px h-4 bg-border-subtle mx-1 hidden sm:block"></div>
-
-              {#if session.allowNsfw}
-                <Button variant="outline" size="sm"
-                  type="button"
-                  onclick={() => void handleToggleNsfw(root)}
-                  title={root.isNsfw ? "NSFW library: on" : "NSFW library: off"}
-                  class={cn(
-                    "flex items-center gap-1.5 rounded-xs px-2 py-1 text-[0.68rem] font-medium border transition-all duration-fast",
-                    root.isNsfw
-                      ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
-                      : "bg-surface-1 border-border-subtle text-text-disabled hover:text-text-muted hover:border-border-default",
-                  )}
-                >
-                  <Eye class="h-3.5 w-3.5" />
-                  NSFW
-                </Button>
-              {/if}
-
-              <Button variant="outline" size="sm"
-                type="button"
-                onclick={() => void handleToggleMediaType(root, "autoIdentify")}
-                title={root.autoIdentify ? "Auto Identify: on" : "Auto Identify: off"}
-                class={cn(
-                  "flex items-center gap-1.5 rounded-xs px-2 py-1 text-[0.68rem] font-medium border transition-all duration-fast",
-                  root.autoIdentify
-                    ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
-                    : "bg-surface-1 border-border-subtle text-text-disabled hover:text-text-muted hover:border-border-default",
-                )}
-              >
-                <Sparkles class="h-3.5 w-3.5" />
-                Auto ID
-              </Button>
-            </div>
-
-            <div
-              class="text-[0.65rem] text-text-disabled flex items-center gap-1.5 whitespace-nowrap ml-auto"
-            >
-              <Clock class="h-3 w-3" />
-              Last scan: {formatTimestamp(root.lastScannedAt)}
-            </div>
-          </div>
-        </div>
+        <LibraryCard
+          {root}
+          scanning={scanningRootId === root.id}
+          canManageAccess={session.isAdmin}
+          showNsfw={session.allowNsfw}
+          onToggle={(target, flag) => void handleToggle(target, flag)}
+          onScan={(target) => void handleScanRoot(target)}
+          onAccess={(target) => (accessDialogRoot = target)}
+          onRemove={(target) => (removeDialogRoot = target)}
+        />
       {/each}
     </div>
   {/if}
@@ -561,3 +349,13 @@
     onClose={() => (accessDialogRoot = null)}
   />
 {/if}
+
+<ConfirmDialog
+  open={removeDialogRoot !== null}
+  title="Remove {removeDialogRoot?.label ?? 'library'}"
+  message="Its items leave Prismedia. Files on disk stay where they are."
+  confirmLabel="Remove"
+  danger
+  onConfirm={() => (removeDialogRoot ? handleDeleteRoot(removeDialogRoot) : undefined)}
+  onClose={() => (removeDialogRoot = null)}
+/>

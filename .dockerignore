@@ -1,0 +1,36 @@
+# Local state and secrets must not enter a Docker build context.
+.git
+.tmp
+.tools
+.turbo
+.claude
+.vscode
+.DS_Store
+.env
+.env.*
+**/.env
+**/.env.*
+**/node_modules
+**/bin
+**/obj
+**/coverage
+**/playwright-report
+**/test-results
+**/*.log
+**/*.lscache
+
+# Generated frontend and API output is rebuilt inside the image.
+apps/web-svelte/.svelte-kit
+apps/web-svelte/build
+apps/backend/src/Prismedia.Api/wwwroot
+documentation-site/.docusaurus
+documentation-site/build
+apps/backend/data
+
+# Local media and private working notes are outside the image source.
+/videos
+docs/audits
+docs/launch
+docs/discover-request-roadmap.md
+infra/docker/apple-review.compose.yml
+scripts/launch

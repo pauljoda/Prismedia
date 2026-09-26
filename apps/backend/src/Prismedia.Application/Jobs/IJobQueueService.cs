@@ -68,6 +68,13 @@ public interface IJobQueueService {
     /// </summary>
     Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>Cancels active runs for exactly one typed durable target, leaving other operations untouched.</summary>
+    Task<int> CancelTargetAsync(JobType type, string targetEntityId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This queue does not support targeted cancellation.");
+
+    /// <summary>Makes queued reconciliation for exactly one target due now without bypassing dependencies, resource limits, or running leases.</summary>
+    Task WakeTargetAsync(JobType type, string targetEntityId, CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <summary>
     /// Checks whether a claimed job run has been cancelled by an operator while a handler is still running.
     /// </summary>
@@ -129,7 +136,8 @@ public interface IJobQueueService {
 
     /// <summary>
     /// Returns a claimed job to the queue without consuming the claim as a failed attempt.
-    /// Use for local capacity throttles such as provider slots, not for work that actually ran.
+    /// Use for local capacity throttles or persisted remote reconciliation waits.
+    /// Keep hard execution failures on the bounded failure/retry path.
     /// </summary>
     Task DeferAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) =>
         FailAsync(id, message, retryDelay, cancellationToken);

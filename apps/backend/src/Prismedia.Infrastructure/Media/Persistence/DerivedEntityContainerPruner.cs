@@ -32,9 +32,18 @@ internal static class DerivedEntityContainerPruner {
                 return removed;
             }
 
-            db.Entities.RemoveRange(orphanContainers);
+            var retained = await ExternalLibraryEntityRetention.ListProtectedCandidateIdsAsync(
+                db,
+                orphanContainers.Select(entity => entity.Id).ToArray(),
+                cancellationToken);
+            var removable = orphanContainers.Where(entity => !retained.Contains(entity.Id)).ToArray();
+            if (removable.Length == 0) {
+                return removed;
+            }
+
+            db.Entities.RemoveRange(removable);
             await saveChanges(cancellationToken);
-            removed += orphanContainers.Length;
+            removed += removable.Length;
         }
     }
 }

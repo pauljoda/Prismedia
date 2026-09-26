@@ -9,4 +9,13 @@ public static class JobTargetKinds {
 
     /// <summary>Library-root scoped target used by scan jobs and their tests.</summary>
     public const string LibraryRoot = "library-root";
+
+    /// <summary>Durable plugin transfer operation, independent of a library entity or queue run.</summary>
+    public const string IntegrationTransfer = "integration-transfer";
+
+    /// <summary>Durable association with an externally managed holding.</summary>
+    public const string ManagedHolding = "managed-holding";
+
+    /// <summary>Durable manager configuration or search action.</summary>
+    public const string ManagedControl = "managed-control";
 }

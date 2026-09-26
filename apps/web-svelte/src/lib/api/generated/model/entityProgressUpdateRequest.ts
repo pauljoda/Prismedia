@@ -5,19 +5,28 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityProgressUpdateRequestActivityKind } from './entityProgressUpdateRequestActivityKind';
-import type { ProgressUnit } from './progressUnit';
-import type { ReaderMode } from './readerMode';
+import type { EntityProgressUpdateRequestModality } from './entityProgressUpdateRequestModality';
+import type { EntityProgressUpdateRequestMode } from './entityProgressUpdateRequestMode';
+import type { EntityProgressUpdateRequestUnit } from './entityProgressUpdateRequestUnit';
+import type { ListeningPositionRequest } from './listeningPositionRequest';
 
 export interface EntityProgressUpdateRequest {
-  currentEntityId: string;
-  unit: ProgressUnit;
-  /** @pattern ^-?(?:0|[1-9]\d*)$ */
-  index: number | string;
-  /** @pattern ^-?(?:0|[1-9]\d*)$ */
-  total: number | string;
-  mode: null | ReaderMode;
   /** @nullable */
-  completed: boolean | null;
+  currentEntityId?: string | null;
+  unit?: EntityProgressUpdateRequestUnit;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  index?: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  total?: number | string | null;
+  mode?: EntityProgressUpdateRequestMode;
+  /** @nullable */
+  completed?: boolean | null;
   reset?: boolean;
   /** @nullable */
   location?: string | null;
@@ -32,4 +41,6 @@ export interface EntityProgressUpdateRequest {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   utcOffsetMinutes?: number | string | null;
+  modality?: EntityProgressUpdateRequestModality;
+  listening?: null | ListeningPositionRequest;
 }

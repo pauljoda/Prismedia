@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Prismedia.Application.Books;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Audio;
 using Prismedia.Application.Files;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Handlers.Identity;
@@ -33,6 +35,7 @@ public static class DependencyInjection {
     public static IServiceCollection AddPrismediaApplication(this IServiceCollection services) {
         services.AddScoped<JobService>();
         services.AddScoped<EntityCapabilityService>();
+        services.AddScoped<BookAlignmentService>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<SettingsService>();
         services.AddScoped<IAutomaticSubtitleAcquisitionScheduler, AutomaticSubtitleAcquisitionScheduler>();
@@ -53,6 +56,14 @@ public static class DependencyInjection {
         services.AddScoped<RequestTargetResolver>();
         services.AddScoped<IRequestAcquisitionFanoutScheduler, RequestAcquisitionFanoutScheduler>();
         services.AddScoped<RequestCommitService>();
+        services.AddScoped<ReviewedWantedMovieService>();
+        services.AddScoped<ReviewedWantedBookService>();
+        services.AddScoped<ReviewedWantedSeriesService>();
+        services.AddScoped<ReviewedWantedComicIssueService>();
+        services.AddScoped<IManagedWantedWorkPreparer>(provider => provider.GetRequiredService<ReviewedWantedMovieService>());
+        services.AddScoped<IManagedWantedWorkPreparer>(provider => provider.GetRequiredService<ReviewedWantedSeriesService>());
+        services.AddScoped<IManagedWantedWorkPreparer>(provider => provider.GetRequiredService<ReviewedWantedBookService>());
+        services.AddScoped<IManagedConnectedTargetPreparer>(provider => provider.GetRequiredService<ReviewedWantedComicIssueService>());
         services.AddScoped<IMonitoredEntityRecovery>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestChildHydrator>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestGraphAcquisitionStarter>(sp => sp.GetRequiredService<RequestCommitService>());
@@ -114,6 +125,10 @@ public static class DependencyInjection {
         Acquisition.AcquisitionStrategyRegistration.RegisterWorkerStrategies(services);
         services.AddScoped<IImportedVideoMaterializer, ImportedVideoMaterializer>();
         services.AddScoped<IImportedEntityMaterializer, ImportedEntityMaterializer>();
+        services.AddScoped<Integrations.SourceTransferProcessor>();
+        services.AddScoped<Integrations.SourceAcquisitionProcessor>();
+        services.AddScoped<Integrations.RemoteTransferProcessor>();
+        services.AddScoped<Integrations.IntegrationGalleryImporter>();
         services.AddScoped<DownloadClientCleanupService>();
         services.AddScoped<IAcquisitionImportEngineFactory, AcquisitionImportEngineFactory>();
 
@@ -133,7 +148,11 @@ public static class DependencyInjection {
         services.AddHostedService<MonitoredSearchWorker>();
         services.AddHostedService<LibraryFileChangeMonitor>();
         services.AddHostedService<EntityAvailabilityReconciliationWorker>();
+        services.AddHostedService<ManagedLibraryTrackingWorker>();
+        services.AddSingleton<Integrations.ConnectionRevalidationService>();
+        services.AddHostedService<ConnectionRevalidationWorker>();
         services.AddHostedService<EntityAssetRowSweepWorker>();
+        services.AddHostedService<IntegrationArtifactCleanupWorker>();
 
         return services;
     }

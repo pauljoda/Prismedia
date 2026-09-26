@@ -250,6 +250,24 @@ const _JOB_DEFINITIONS = [
   },
   // Acquisition
   {
+    type: JOB_TYPE.managedControl,
+    queueName: JOB_TYPE.managedControl,
+    label: "Manager Action",
+    description: "Applies reviewed settings or observes a connected manager's search command.",
+  },
+  {
+    type: JOB_TYPE.managedLibraryReconcile,
+    queueName: JOB_TYPE.managedLibraryReconcile,
+    label: "Connected Library Refresh",
+    description: "Verifies externally managed files while preserving existing library items and history.",
+  },
+  {
+    type: JOB_TYPE.integrationTransfer,
+    queueName: JOB_TYPE.integrationTransfer,
+    label: "Publication Transfer",
+    description: "Verifies a connected source's outputs and imports exact files into the library.",
+  },
+  {
     type: JOB_TYPE.acquisitionSearch,
     queueName: "acquisition",
     label: "Acquisition Search",

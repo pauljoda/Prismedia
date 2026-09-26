@@ -85,6 +85,19 @@ public sealed class PluginManifestCompatibilityTests {
             Version.Parse(PluginProtocol.CurrentSemanticVersion).Major);
 
     [Theory]
+    [InlineData("assets/icon.svg", true)]
+    [InlineData("icon.png", true)]
+    [InlineData("../icon.svg", false)]
+    [InlineData("/icon.svg", false)]
+    [InlineData("assets/icon.jpg", false)]
+    [InlineData("assets\\icon.svg", false)]
+    public void PluginIconsUseContainedSvgOrPngPaths(string icon, bool expected) {
+        var manifest = Manifest(new PluginCompatibility("1.0.0", null, "1.0.0", null)) with { Icon = icon };
+
+        Assert.Equal(expected, PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Theory]
     [InlineData(PluginSearchFieldType.Text, "text")]
     [InlineData(PluginSearchFieldType.Number, "number")]
     [InlineData(PluginSearchFieldType.Year, "year")]

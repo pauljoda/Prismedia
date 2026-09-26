@@ -10,6 +10,7 @@ using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Serialization;
 using Prismedia.Infrastructure.StashCompat;
+using Prismedia.Infrastructure.Security;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -54,9 +55,12 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
     private readonly PluginCatalogOptions _options;
     private readonly HttpClient _http;
     private readonly PluginIndexCache _indexCache;
+    private readonly ProviderCredentialStore _credentials;
 
+    /// <summary>Uses the shared protected credential store independently of transient plugin caches.</summary>
     public PluginCatalogService(
-        PrismediaDbContext db, PluginCatalogOptions options, HttpClient? http = null, PluginIndexCache? indexCache = null) {
+        ProviderCredentialStore credentials, PrismediaDbContext db, PluginCatalogOptions options, HttpClient? http = null, PluginIndexCache? indexCache = null) {
+        _credentials = credentials;
         _db = db;
         _options = options;
         // A bounded timeout: the remote index and artifact downloads ride this client, and a hung
@@ -103,10 +107,16 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
                 group => group.Select(row => row.CredentialKey).ToHashSet(StringComparer.Ordinal),
                 StringComparer.OrdinalIgnoreCase);
 
-        var providers = descriptors
-            .Select(descriptor => {
-                indexedById.TryGetValue(descriptor.Manifest.Id, out var remote);
-                return ToProvider(descriptor, configs, credentialKeys, remote);
+        var providers = descriptors.GroupBy(descriptor => descriptor.Manifest.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => {
+                configs.TryGetValue(group.Key, out var config);
+                indexedById.TryGetValue(group.Key, out var remote);
+                var latest = group.OrderByDescending(item => ParseVersion(item.Manifest.Version)).First();
+                var selected = SelectInstalledDescriptor(group, config);
+                var available = remote is not null && ParseVersion(remote.Version) > ParseVersion(latest.Manifest.Version)
+                    ? remote.Version : latest.Manifest.Version;
+                if (selected is not null) return ToProvider(selected, configs, credentialKeys, available);
+                return UnavailableProvider(config!, available);
             })
             .ToList();
         var localIds = providers.Select(provider => provider.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -114,6 +124,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
             .Where(entry => !localIds.Contains(entry.Id))
             .Select(entry => {
                 configs.TryGetValue(entry.Id, out var config);
+                if (config is not null && ReadInstalledSettings(config)?.Version is not null) return UnavailableProvider(config, entry.Version);
                 return new PluginProvider(
                     entry.Id,
                     entry.Name,
@@ -123,8 +134,13 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
                     IsNsfw: entry.IsNsfw || config?.IsNsfw == true,
                     entry.Supports,
                     Auth: [],
-                    MissingAuthKeys: []);
+                    MissingAuthKeys: [],
+                    Integration: entry.Integration,
+                    IconUrl: PluginIconUrl(entry.Id, entry.Version, entry.Icon));
             }));
+        var listedIds = providers.Select(provider => provider.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        providers.AddRange(configs.Values.Where(config => !listedIds.Contains(config.ProviderCode)
+            && ReadInstalledSettings(config)?.Version is not null).Select(config => UnavailableProvider(config, null)));
 
         return providers
             .OrderBy(provider => provider.Name)
@@ -132,25 +148,60 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
     }
 
     /// <summary>
-    /// Finds the latest compatible local provider artifact for an identify request.
+    /// Finds the explicitly installed artifact, or the latest compatible local artifact for an uninstalled provider.
     /// </summary>
     public async Task<PluginDescriptor?> FindProviderAsync(
         string providerId,
         string? entityKind,
         CancellationToken cancellationToken) {
         var descriptors = await DiscoverAsync(cancellationToken);
-        return descriptors
+        var config = await _db.ProviderConfigs.AsNoTracking().FirstOrDefaultAsync(row => row.ProviderCode == providerId, cancellationToken);
+        var selected = SelectInstalledDescriptor(descriptors.Where(descriptor => descriptor.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase)), config);
+        return selected is not null && (entityKind is null || selected.Manifest.Supports.Any(support =>
+            PluginEntityKindCompatibility.SupportsKind(support, entityKind))) ? selected : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<PluginIconAsset?> GetIconAsync(string providerId, string? version, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(providerId)) return null;
+
+        var local = (await DiscoverAsync(cancellationToken))
             .Where(descriptor => descriptor.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase))
-            .Where(descriptor => entityKind is null || descriptor.Manifest.Supports.Any(support =>
-                PluginEntityKindCompatibility.SupportsKind(support, entityKind)))
+            .Where(descriptor => version is null || descriptor.Manifest.Version == version)
             .OrderByDescending(descriptor => ParseVersion(descriptor.Manifest.Version))
             .FirstOrDefault();
+        if (local is not null && PluginIconAssetReader.TryRead(local, out var icon)) return icon;
+
+        var current = ParseVersion(_options.CurrentPrismediaVersion);
+        var remote = (await ListRemoteIndexEntriesAsync(current, cancellationToken))
+            .Where(entry => entry.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(entry => version is null || entry.Version == version);
+        return remote is null ? null : await FetchCatalogIconAsync(remote, cancellationToken);
+    }
+
+    private static PluginDescriptor? SelectInstalledDescriptor(IEnumerable<PluginDescriptor> candidates, ProviderConfigRow? config) {
+        var installed = config is null ? null : ReadInstalledSettings(config);
+        if (installed?.Version is not null)
+            return candidates.FirstOrDefault(item => item.Manifest.Version == installed.Version && item.ManifestPath == installed.ManifestPath && item.EntryPath == installed.EntryPath);
+        return candidates.OrderByDescending(item => ParseVersion(item.Manifest.Version)).FirstOrDefault();
+    }
+
+    private static InstalledPluginSettings? ReadInstalledSettings(ProviderConfigRow config) =>
+        config.ProviderType is ProviderType.ExternalProcess or ProviderType.StashCompat
+            ? JsonSerializer.Deserialize<InstalledPluginSettings>(config.SettingsJson, JsonOptions) : null;
+
+    private static PluginProvider UnavailableProvider(ProviderConfigRow config, string? availableVersion) {
+        var installed = ReadInstalledSettings(config)!;
+        var recoverable = availableVersion is not null && ParseVersion(availableVersion) >= ParseVersion(installed.Version);
+        return new(config.ProviderCode, config.DisplayName, installed.Version, true, false, config.IsNsfw, [], [], [],
+            recoverable, recoverable ? availableVersion : null);
     }
 
     /// <summary>
     /// Saves a provider config row so the plugin is visible as installed/enabled.
     /// </summary>
     public async Task<PluginProvider?> InstallAsync(string providerId, CancellationToken cancellationToken) {
+        await using var transaction = await PluginLifecycleLease.AcquireAsync(_db, providerId, cancellationToken);
         var descriptor = await FindProviderAsync(providerId, null, cancellationToken);
         if (descriptor is null && providerId.StartsWith("stash-", StringComparison.OrdinalIgnoreCase)) {
             var installer = new StashScraperInstaller(_http, StashScrapersRoot(), _options.StashScraperIndexUrl);
@@ -159,14 +210,31 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
             }
         }
 
+        // A missing installed artifact must be repaired explicitly; credential saves and repeated installs cannot switch versions.
+        if (descriptor is null && await _db.ProviderConfigs.AnyAsync(row => row.ProviderCode == providerId, cancellationToken)) return null;
         descriptor ??= await PullProviderAsync(providerId, cancellationToken);
         if (descriptor is null) {
             return null;
         }
 
+        var installed = await ActivateAsync(descriptor, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        return installed;
+    }
+
+    private async Task<PluginProvider?> ActivateAsync(PluginDescriptor descriptor, CancellationToken cancellationToken) {
+        var providerId = descriptor.Manifest.Id;
         var now = DateTimeOffset.UtcNow;
         var config = await _db.ProviderConfigs
             .FirstOrDefaultAsync(row => row.ProviderCode == providerId, cancellationToken);
+        if (config is not null) {
+            await _db.Entry(config).ReloadAsync(cancellationToken);
+            if (ReadInstalledSettings(config) is { Version: not null } previous
+                && (previous.Version != descriptor.Manifest.Version || previous.ManifestPath != descriptor.ManifestPath || previous.EntryPath != descriptor.EntryPath)) {
+                await RequireNoUnfinishedWorkAsync(providerId, allowAcceptedHoldingObservation: true, cancellationToken);
+                await InvalidateConnectionProbesAsync(providerId, cancellationToken);
+            }
+        }
         if (config is null) {
             config = new ProviderConfigRow {
                 Id = Guid.NewGuid(),
@@ -197,40 +265,59 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
     /// Pulls the newest compatible remote artifact for an installed provider and re-points its config to it.
     /// </summary>
     public async Task<PluginProvider?> UpdateAsync(string providerId, CancellationToken cancellationToken) {
+        if (!await _db.ProviderConfigs.AnyAsync(row => row.ProviderCode == providerId, cancellationToken)) return null;
+        // Record the existing selection before staging a new artifact, including installations predating explicit selection.
+        await SealInstalledSelectionAsync(providerId, cancellationToken);
         var current = ParseVersion(_options.CurrentPrismediaVersion);
         var remote = PluginCompatibilityResolver.LatestCompatible(
             await FetchRemoteIndexAsync(cancellationToken),
             providerId,
             current);
-        if (remote is null) {
-            return null;
-        }
-
         var currentDescriptor = await FindProviderAsync(providerId, null, cancellationToken);
-        if (currentDescriptor is not null &&
-            ParseVersion(currentDescriptor.Manifest.Version) >= ParseVersion(remote.Version)) {
+        var local = (await DiscoverAsync(cancellationToken)).Where(item => item.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => ParseVersion(item.Manifest.Version)).FirstOrDefault();
+        var candidateVersion = remote is not null && (local is null || ParseVersion(remote.Version) > ParseVersion(local.Manifest.Version))
+            ? remote.Version : local?.Manifest.Version;
+        if (candidateVersion is null) return null;
+        if (currentDescriptor is not null && ParseVersion(currentDescriptor.Manifest.Version) >= ParseVersion(candidateVersion)) {
             return (await ListInstalledProvidersAsync(cancellationToken))
                 .FirstOrDefault(provider => provider.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase));
         }
 
-        var updated = await PullProviderAsync(providerId, cancellationToken, remote);
-        return updated is null
-            ? null
-            : await InstallAsync(providerId, cancellationToken);
+        var updated = local?.Manifest.Version == candidateVersion ? local : await PullProviderAsync(providerId, cancellationToken, remote);
+        if (updated is null) return null;
+        await using var transaction = await PluginLifecycleLease.AcquireAsync(_db, providerId, cancellationToken);
+        var currentConfig = await _db.ProviderConfigs.AsNoTracking().FirstOrDefaultAsync(row => row.ProviderCode == providerId, cancellationToken);
+        if (currentConfig is null || ReadInstalledSettings(currentConfig) is { Version: not null } selection
+            && ParseVersion(selection.Version) > ParseVersion(updated.Manifest.Version)) return null;
+        var installedNow = await FindProviderAsync(providerId, null, cancellationToken);
+        if (installedNow is not null && ParseVersion(installedNow.Manifest.Version) >= ParseVersion(updated.Manifest.Version))
+            return (await ListInstalledProvidersAsync(cancellationToken)).FirstOrDefault(provider => provider.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase));
+        var result = await ActivateAsync(updated, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        return result;
     }
 
     /// <summary>
     /// Removes installed provider state while leaving local plugin files untouched.
     /// </summary>
     public async Task<bool> RemoveAsync(string providerId, CancellationToken cancellationToken) {
+        await using var transaction = await PluginLifecycleLease.AcquireAsync(_db, providerId, cancellationToken);
         var config = await _db.ProviderConfigs
             .FirstOrDefaultAsync(row => row.ProviderCode == providerId, cancellationToken);
         if (config is null) {
             return false;
         }
 
+        await RequireNoUnfinishedWorkAsync(providerId, allowAcceptedHoldingObservation: false, cancellationToken);
+        var connections = _db.IntegrationConnections.Where(row => row.PluginId == providerId);
+        if (await connections.AnyAsync(row => row.Enabled, cancellationToken)
+            || await _db.ExternalLibraryMounts.AnyAsync(mount => connections.Select(row => row.Id).Contains(mount.ConnectionId), cancellationToken))
+            throw new PluginInUseException("Disable this plugin's Connections before removing it. Connections with mapped external libraries must retain their plugin.");
+
         _db.ProviderConfigs.Remove(config);
         await _db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return true;
     }
 
@@ -241,6 +328,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
         string providerId,
         IReadOnlyDictionary<string, string?> values,
         CancellationToken cancellationToken) {
+        await using var transaction = await PluginLifecycleLease.AcquireAsync(_db, providerId, cancellationToken);
         var provider = await InstallAsync(providerId, cancellationToken);
         if (provider is null) {
             return false;
@@ -272,12 +360,12 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
                 _db.ProviderCredentials.Add(credential);
             }
 
-            credential.EncryptedValue = value;
-            credential.UpdatedAt = now;
+            _credentials.SetValue(credential, value, now);
         }
 
         config.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return true;
     }
 
@@ -290,19 +378,13 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
         var config = await _db.ProviderConfigs
             .AsNoTracking()
             .FirstOrDefaultAsync(row => row.ProviderCode == manifest.Id && row.Enabled, cancellationToken);
+        var environment = manifest.Auth.Select(field => (field.Key, Value: PluginCredentialResolver.ResolveEnvironmentCredential(manifest.Id, field.Key)))
+            .Where(field => !string.IsNullOrWhiteSpace(field.Value)).ToDictionary(field => field.Key, field => field.Value!, StringComparer.Ordinal);
         var stored = config is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : await _db.ProviderCredentials
-                .AsNoTracking()
-                .Where(row => row.ProviderConfigId == config.Id)
-                .ToDictionaryAsync(row => row.CredentialKey, row => row.EncryptedValue, StringComparer.Ordinal, cancellationToken);
+            : await _credentials.ReadAsync(config.Id, manifest.Auth.Select(field => field.Key).Where(key => !environment.ContainsKey(key)).ToArray(), cancellationToken);
 
-        foreach (var field in manifest.Auth) {
-            var value = PluginCredentialResolver.ResolveEnvironmentCredential(manifest.Id, field.Key);
-            if (!string.IsNullOrWhiteSpace(value)) {
-                stored[field.Key] = value;
-            }
-        }
+        foreach (var (key, value) in environment) stored[key] = value;
 
         return stored;
     }
@@ -322,6 +404,9 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
                 var manifest = PluginManifestContract.Normalize(discoveredManifest);
 
                 var directory = Path.GetDirectoryName(manifestPath) ?? root;
+                if (manifest.Icon is not null && !PluginIconAssetReader.TryRead(directory, manifest.Icon, out _)) {
+                    continue;
+                }
                 var entryPath = Path.GetFullPath(Path.IsPathRooted(manifest.Entry)
                     ? manifest.Entry
                     : Path.Combine(directory, manifest.Entry));
@@ -331,10 +416,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
 
         descriptors.AddRange(await DiscoverStashScrapersAsync(cancellationToken));
 
-        return descriptors
-            .GroupBy(descriptor => descriptor.Manifest.Id, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderByDescending(descriptor => ParseVersion(descriptor.Manifest.Version)).First())
-            .ToArray();
+        return descriptors;
     }
 
     /// <summary>
@@ -401,7 +483,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
         PluginDescriptor descriptor,
         IReadOnlyDictionary<string, ProviderConfigRow> configs,
         IReadOnlyDictionary<string, HashSet<string>> credentialKeys,
-        PluginIndexEntry? remote) {
+        string? availableVersion) {
         configs.TryGetValue(descriptor.Manifest.Id, out var config);
         credentialKeys.TryGetValue(descriptor.Manifest.Id, out var keys);
         keys ??= [];
@@ -412,8 +494,8 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
             .Select(field => field.Key)
             .ToArray();
         var updateAvailable = config is not null &&
-            remote is not null &&
-            ParseVersion(remote.Version) > ParseVersion(descriptor.Manifest.Version);
+            availableVersion is not null &&
+            ParseVersion(availableVersion) > ParseVersion(descriptor.Manifest.Version);
 
         return new PluginProvider(
             descriptor.Manifest.Id,
@@ -426,8 +508,13 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
             descriptor.Manifest.Auth,
             missing,
             UpdateAvailable: updateAvailable,
-            AvailableVersion: updateAvailable ? remote?.Version : null);
+            AvailableVersion: updateAvailable ? availableVersion : null,
+            Integration: descriptor.Manifest.Integration,
+            IconUrl: PluginIconUrl(descriptor.Manifest.Id, descriptor.Manifest.Version, descriptor.Manifest.Icon));
     }
+
+    private static string? PluginIconUrl(string id, string version, string? icon) =>
+        icon is null ? null : $"/api/plugins/{Uri.EscapeDataString(id)}/icon?v={Uri.EscapeDataString(version)}";
 
     private IEnumerable<string> EnumerateDiscoveryRoots() {
         foreach (var path in _options.DevPaths) {

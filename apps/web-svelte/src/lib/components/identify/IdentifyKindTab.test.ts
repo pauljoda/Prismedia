@@ -91,7 +91,7 @@ describe("IdentifyKindTab", () => {
 
     expect(store.queueEntity).not.toHaveBeenCalled();
     expect(goto).not.toHaveBeenCalledWith("/identify/studio-1");
-    expect(await screen.findByRole("button", { name: /Queue 1/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Identify 1 with The Movie Database/i })).toBeEnabled();
   });
 });
 

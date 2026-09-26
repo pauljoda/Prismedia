@@ -47,14 +47,19 @@ public sealed record ImportTemplateContext(
 /// deterministic so the format rules, ambiguity handling, and path sanitization are unit-testable.
 /// </summary>
 public static partial class ImportPlanBuilder {
-    private static readonly IReadOnlySet<string> PrimaryBookExtensions =
+    /// <summary>Standalone ebook formats accepted by publication import and file-based discovery.</summary>
+    public static IReadOnlySet<string> PrimaryBookExtensions { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".epub", ".pdf" };
 
-    private static readonly IReadOnlySet<string> ComicArchiveExtensions =
+    /// <summary>Serialized comic archives accepted by publication import and file-based discovery.</summary>
+    public static IReadOnlySet<string> ComicArchiveExtensions { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".cbz", ".zip" };
 
-    private static readonly IReadOnlySet<string> AudiobookExtensions =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".m4b", ".m4a", ".mp3" };
+    /// <summary>Audiobook formats accepted by publication import and file-based discovery.</summary>
+    public static IReadOnlySet<string> AudiobookExtensions { get; } = AudiobookReleaseShape.ImportableExtensions;
+
+    // Download clients and providers report either separator.
+    private static readonly char[] PathSeparators = ['/', '\\'];
 
     [GeneratedRegex(@"[<>:""/\\|?*\x00-\x1f]")]
     private static partial Regex IllegalPathCharsRegex();
@@ -81,19 +86,19 @@ public static partial class ImportPlanBuilder {
         string pathTemplate,
         BookRendition rendition = BookRendition.Ebook) {
         if (rendition == BookRendition.Audiobook) {
-            var audio = relativeFilePaths
-                .Where(path => AudiobookExtensions.Contains(Path.GetExtension(path)))
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            if (audio.Length == 0) {
+            // One coherent set: a download that mixes formats imports only its preferred one (M4B/M4A before MP3).
+            var audio = AudiobookReleaseShape.ImportSet(relativeFilePaths
+                .Select(path => new ImportCandidateFile(path, 0))
+                .ToArray());
+            if (audio.Count == 0) {
                 return ImportPlan.Block(ImportBlockReason.NoSupportedPayload);
             }
 
             var audioFolder = RenderFolder(pathTemplate, context);
-            return ImportPlan.For(audio
-                .Select(path => new ImportPlanItem(
-                    path,
-                    CombineRelative(audioFolder, SanitizeSegment(Path.GetFileName(path)))))
+            return ImportPlan.For(OrderAudiobookParts(audio.Select(file => file.RelativePath).ToArray())
+                .Select(part => new ImportPlanItem(
+                    part.SourceRelativePath,
+                    CombineRelative(audioFolder, SanitizeSegment(part.FileName))))
                 .ToArray());
         }
 
@@ -123,9 +128,15 @@ public static partial class ImportPlanBuilder {
             if (distinctBooks > 1) {
                 return ImportPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
             }
+            if (BookNamingTemplates.ValidateFileTemplate(pathTemplate) is { } problem) {
+                throw new InvalidDataException(problem);
+            }
 
             var chosen = PreferredPrimary(primaries);
             var target = RenderPath(pathTemplate, context, Path.GetExtension(chosen), fileNameOnly: false);
+            if (BookNamingTemplates.ValidateRenderedFile(target, Path.GetExtension(chosen)) is { } renderedProblem) {
+                throw new InvalidDataException(renderedProblem);
+            }
             return ImportPlan.For([new ImportPlanItem(chosen, target)]);
         }
 
@@ -169,7 +180,7 @@ public static partial class ImportPlanBuilder {
                 StringComparison.Ordinal)
             .Replace("{Title}", context.Title, StringComparison.Ordinal)
             .Replace("{Year}", context.Year?.ToString() ?? string.Empty, StringComparison.Ordinal)
-            .Replace("{ext}", extension.TrimStart('.'), StringComparison.Ordinal);
+            .Replace(BookNamingTemplates.ExtensionToken, extension.TrimStart('.'), StringComparison.Ordinal);
 
         return CleanEmptyDecorations(result);
     }
@@ -213,4 +224,82 @@ public static partial class ImportPlanBuilder {
         primaries.FirstOrDefault(path => string.Equals(Path.GetExtension(path), ".epub", StringComparison.OrdinalIgnoreCase))
         ?? primaries.FirstOrDefault(path => string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
         ?? primaries[0];
+
+    /// <summary>
+    /// Orders an audiobook's files disc by disc, then track by track, and names them so a natural sort of the
+    /// flattened audiobook folder keeps that order. Files from one folder keep their names. Files from several
+    /// folders gain a "Disc NN - " prefix, numbered from the folders' disc markers (CD1, Disc 2) when every
+    /// folder has a distinct one and by natural folder order otherwise, so CD1/01.mp3 and CD2/01.mp3 neither
+    /// collide nor interleave.
+    /// </summary>
+    private static IEnumerable<(string SourceRelativePath, string FileName)> OrderAudiobookParts(IReadOnlyList<string> paths) {
+        var folders = paths
+            .GroupBy(FolderOf, StringComparer.OrdinalIgnoreCase)
+            .Select(folder => (
+                Path: folder.Key,
+                Disc: DiscOf(folder.Key),
+                Files: folder.OrderBy(FileNameOf, NaturalOrder.Instance).ToArray()))
+            .ToArray();
+        var numberedDiscs = folders.Length > 1
+            && folders.All(folder => folder.Disc is not null)
+            && folders.Select(folder => folder.Disc).Distinct().Count() == folders.Length;
+        var ordered = numberedDiscs
+            ? folders.OrderBy(folder => folder.Disc)
+            : folders.OrderBy(folder => folder.Path, NaturalOrder.Instance);
+        var position = 0;
+        foreach (var folder in ordered) {
+            position++;
+            var disc = numberedDiscs ? folder.Disc!.Value : position;
+            foreach (var path in folder.Files) {
+                yield return (path, folders.Length > 1 ? $"Disc {disc:00} - {FileNameOf(path)}" : FileNameOf(path));
+            }
+        }
+    }
+
+    /// <summary>The disc number declared by the deepest folder segment that names one, or null.</summary>
+    private static int? DiscOf(string folder) =>
+        folder.Split(PathSeparators, StringSplitOptions.RemoveEmptyEntries)
+            .Reverse()
+            .Select(BookReleaseTokens.ParseAudioDisc)
+            .FirstOrDefault(disc => disc is not null);
+
+    private static string FolderOf(string path) => path[..Math.Max(0, path.LastIndexOfAny(PathSeparators))];
+
+    private static string FileNameOf(string path) => path[(path.LastIndexOfAny(PathSeparators) + 1)..];
+
+    /// <summary>Compares names with embedded numbers by value, so "2" sorts before "10".</summary>
+    private sealed class NaturalOrder : IComparer<string> {
+        public static readonly NaturalOrder Instance = new();
+
+        public int Compare(string? x, string? y) {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+
+            var ix = 0;
+            var iy = 0;
+            while (ix < x.Length && iy < y.Length) {
+                if (char.IsDigit(x[ix]) && char.IsDigit(y[iy])) {
+                    var startX = ix;
+                    var startY = iy;
+                    while (ix < x.Length && char.IsDigit(x[ix])) ix++;
+                    while (iy < y.Length && char.IsDigit(y[iy])) iy++;
+                    var digitsX = x.AsSpan(startX, ix - startX).TrimStart('0');
+                    var digitsY = y.AsSpan(startY, iy - startY).TrimStart('0');
+                    var number = digitsX.Length != digitsY.Length
+                        ? digitsX.Length.CompareTo(digitsY.Length)
+                        : digitsX.CompareTo(digitsY, StringComparison.Ordinal);
+                    if (number != 0) return number;
+                    continue;
+                }
+
+                var character = char.ToUpperInvariant(x[ix]).CompareTo(char.ToUpperInvariant(y[iy]));
+                if (character != 0) return character;
+                ix++;
+                iy++;
+            }
+
+            return x.Length.CompareTo(y.Length);
+        }
+    }
 }

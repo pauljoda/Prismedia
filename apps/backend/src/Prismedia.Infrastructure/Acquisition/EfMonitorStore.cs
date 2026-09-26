@@ -361,7 +361,8 @@ public sealed partial class EfMonitorStore(
     /// score, and — for Entity-backed atomic video — whether subtitle extraction found a usable track. When the kind does not upgrade (upgrade off, or a multi-file/unsupported kind)
     /// the copy is treated as at cutoff (nothing to chase). When owned quality has not been captured yet the
     /// verdict is <c>OwnedQuality</c> null and <c>CutoffMet</c> false — the caller decides whether "not yet
-    /// judgeable" belongs in the list.
+    /// judgeable" belongs in the list. An audiobook upgrades on structure alone: only a recorded chapterless
+    /// layout (part files, one long MP3) sits below the chaptered floor; any other audiobook has nothing to chase.
     /// </summary>
     private static (bool KindUpgrades, bool HaveOwned, bool CutoffMet, string? OwnedQuality, string? CutoffQuality) EvaluateCutoff(
         EntityKind kind,
@@ -373,12 +374,21 @@ public sealed partial class EfMonitorStore(
         bool hasEntityTarget = false,
         bool subtitleStatusKnown = false,
         bool hasSubtitles = false,
-        int? measuredVideoResolution = null) {
+        int? measuredVideoResolution = null,
+        BookRendition? bookRendition = null,
+        AudiobookReleaseShape? ownedAudiobookShape = null) {
         var upgradeEnabled = policy is { UpgradeUntilCutoff: true, AutoPick: true };
         var isBook = kind == EntityKind.Book;
-        var kindUpgrades = upgradeEnabled && (isBook || MediaQualityLadder.IsUpgradeCapableKind(kind));
+        var isAudiobook = isBook && bookRendition == BookRendition.Audiobook;
+        var kindUpgrades = upgradeEnabled && (isBook || MediaQualityLadder.IsUpgradeCapableKind(kind))
+            && (!isAudiobook || (captured && ownedAudiobookShape is { IsChapterless: true }));
         if (!kindUpgrades) {
             return (KindUpgrades: false, HaveOwned: false, CutoffMet: true, OwnedQuality: null, CutoffQuality: null);
+        }
+
+        if (isAudiobook) {
+            return (KindUpgrades: true, HaveOwned: true, CutoffMet: false, ownedAudiobookShape!.Code,
+                AudiobookReleaseShape.ChapteredFloor.Code);
         }
 
         if (isBook) {
@@ -510,6 +520,7 @@ public sealed partial class EfMonitorStore(
                 OwnedQuality = acquisition == null ? (BookQualityRank?)null : new BookQualityRank(acquisition.OwnedSourceTier, acquisition.OwnedFormatTier),
                 OwnedMediaQuality = acquisition == null ? null : acquisition.OwnedMediaQuality,
                 OwnedFormatScore = acquisition == null ? 0 : acquisition.OwnedFormatScore,
+                OwnedAudiobookShape = acquisition == null ? null : acquisition.AudiobookShape,
                 Captured = acquisition != null && acquisition.UpgradeQualityCaptured,
                 HasSubtitles = monitor.EntityId != null
                     && db.EntitySubtitles.Any(subtitle => subtitle.EntityId == monitor.EntityId),
@@ -629,16 +640,8 @@ public sealed partial class EfMonitorStore(
                     // Imported atomic files retain their quality baseline even with upgrades off or at
                     // cutoff. The durable Entity monitor can then respond to later profile changes without
                     // re-requesting an already owned item. Acquisition-only legacy monitors still fulfill;
-                    // structural units detach their completed attempt and continue child discovery.
-                    if (monitor.BookRendition == BookRendition.Audiobook) {
-                        if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
-                            statusTransitions.Add((monitor.Id, terminalStatus));
-                        } else {
-                            changed = true;
-                        }
-                        continue;
-                    }
-
+                    // structural units detach their completed attempt and continue child discovery. An
+                    // audiobook stays in the loop only while its recorded layout lacks chapter boundaries.
                     var policy = policies.Resolve(row.AcquisitionProfileId, monitor.Kind);
                     // Existing import receipts can outlive their probe/subtitle inventory. Inspect before
                     // judging the historical grade, and never turn an unresolved inspection into a grab.
@@ -664,9 +667,11 @@ public sealed partial class EfMonitorStore(
                         monitor.EntityId is not null,
                         row.SubtitleStatusKnown,
                         row.HasSubtitles,
-                        VideoPayloadProfileValidation.ResolutionTier(row.MeasuredWidth, row.MeasuredHeight));
+                        VideoPayloadProfileValidation.ResolutionTier(row.MeasuredWidth, row.MeasuredHeight),
+                        monitor.BookRendition,
+                        row.OwnedAudiobookShape);
                     if (!verdict.KindUpgrades) {
-                        if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
+                        if (CompleteEntityAcquisition(monitor, now, row.OwnedAudiobookShape) is { } terminalStatus) {
                             statusTransitions.Add((monitor.Id, terminalStatus));
                         } else {
                             changed = true;
@@ -681,7 +686,7 @@ public sealed partial class EfMonitorStore(
                     }
 
                     if (verdict.CutoffMet) {
-                        if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
+                        if (CompleteEntityAcquisition(monitor, now, row.OwnedAudiobookShape) is { } terminalStatus) {
                             statusTransitions.Add((monitor.Id, terminalStatus));
                         } else {
                             changed = true;
@@ -1252,16 +1257,22 @@ public sealed partial class EfMonitorStore(
 
     /// <summary>
     /// Retains the imported quality baseline for upgrade-capable Entity monitors, so later profile changes
-    /// can resume upgrades. Other stable Entities detach completed acquisition bookkeeping.
+    /// can resume upgrades. An audiobook retains it only while its recorded layout is chapterless, the one
+    /// case a later upgrade could improve. Other stable Entities detach completed acquisition bookkeeping.
     /// </summary>
-    private static MonitorStatus? CompleteEntityAcquisition(MonitorRow monitor, DateTimeOffset now) {
+    private static MonitorStatus? CompleteEntityAcquisition(
+        MonitorRow monitor,
+        DateTimeOffset now,
+        AudiobookReleaseShape? ownedAudiobookShape = null) {
         if (monitor.EntityId is null) {
             return MonitorStatus.Fulfilled;
         }
 
-        if (monitor.BookRendition != BookRendition.Audiobook
-            && EntityKindRegistry.Describe(monitor.Kind).UpgradeMode is
-                EntityUpgradeMode.AtomicBookFile or EntityUpgradeMode.AtomicMediaFile) {
+        var retainsBaseline = monitor.BookRendition == BookRendition.Audiobook
+            ? ownedAudiobookShape is { IsChapterless: true }
+            : EntityKindRegistry.Describe(monitor.Kind).UpgradeMode is
+                EntityUpgradeMode.AtomicBookFile or EntityUpgradeMode.AtomicMediaFile;
+        if (retainsBaseline) {
             return null;
         }
 

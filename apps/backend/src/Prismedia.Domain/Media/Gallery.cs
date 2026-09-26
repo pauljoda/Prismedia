@@ -4,6 +4,7 @@ using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
 using GalleryMetadataDocumentCapability = Prismedia.Contracts.Entities.GalleryMetadataCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
+using MediaContentTypes = Prismedia.Contracts.Media.MediaContentTypes;
 
 namespace Prismedia.Domain.Media;
 
@@ -34,7 +35,17 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
         catalogVisibility: new(topLevelOnlySurfaces: EntityCatalogSurface.KindBrowse),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true),
-    defaultCapabilities: static () => [new CapabilityCredits(), new CapabilityConsumption()]) {
+    defaultCapabilities: static () => [new CapabilityCredits(), new CapabilityConsumption()]),
+    IIntegrationImportKindDefinition {
+    /// <inheritdoc />
+    /// <remarks>A gallery arrives as an ordered set of still images in its own folder.</remarks>
+    public IntegrationImportPolicy IntegrationImport { get; } = new(
+        LibraryRootMediaCapability.ScanImages,
+        extensions: [],
+        mediaTypes: [],
+        requiresRecursiveRoot: true,
+        contentKind: EntityKind.Image);
+
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
 
@@ -43,6 +54,9 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
 
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
+    public override JobType? ImportScanJobType => JobType.ScanGallery;
 
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
@@ -71,12 +85,16 @@ public sealed class Gallery : Entity<GalleryEntityKindDefinition> {
         string title,
         GalleryType galleryType,
         Guid? coverImageId,
-        IEnumerable<EntityCapability>? capabilities = null)
+        IEnumerable<EntityCapability>? capabilities = null,
+        bool preserveContainer = false)
         : base(id, title, capabilities) {
         GalleryType = galleryType;
         CoverImageId = coverImageId;
+        PreserveContainer = preserveContainer;
     }
 
+    /// <summary>Whether explicitly selected grouping survives single-image folder collapse.</summary>
+    public bool PreserveContainer { get; }
     public GalleryType GalleryType { get; private set; }
     public Guid? CoverImageId { get; private set; }
 }

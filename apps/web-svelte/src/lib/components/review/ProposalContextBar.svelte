@@ -2,6 +2,7 @@
   import { Layers } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
+  import { displayNameForEntityKind } from "$lib/entities/entity-codes";
 
   type ImageShape = "portrait" | "square" | "wide";
 
@@ -57,7 +58,7 @@
     <h2 class="truncate">{title}</h2>
     <div class="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
       <span class="rounded-xs border border-phosphor-600/20 bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6rem] leading-none text-phosphor-600">
-        {kindLabel ?? proposal.targetKind}
+        {kindLabel ?? displayNameForEntityKind(proposal.targetKind)}
       </span>
       {#if subtitle}
         <span class="min-w-0 truncate font-mono text-[0.7rem] text-text-muted">{subtitle}</span>

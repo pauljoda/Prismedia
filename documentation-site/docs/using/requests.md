@@ -38,6 +38,27 @@ available. Supported connections include Prowlarr, Torznab, and Newznab indexers
 Transmission, and SABnzbd download clients. Configure the connections you already use under
 **Settings → Acquisition**, then choose them in a profile that targets the appropriate library.
 
+### Books and comics through Soulseek
+
+An existing slskd server can serve as both a **Soulseek (slskd)** indexer and download client.
+Configure both entries, including the download directory visible to Prismedia, and test that slskd
+has a connected Soulseek session. Choose the ebook or audiobook rendition when requesting a book.
+
+- EPUB and PDF books are separate choices, including alternate formats in the same peer folder.
+- CBZ and ZIP comics are selected one archive at a time, retaining issue and chapter labels.
+- M4B audiobooks are separate file choices. MP3 and M4A chapter files are grouped within their exact
+  peer folder and format; alternate encodings are separate choices.
+
+Publication searches exclude cover images and formats the publication importer cannot read.
+Review the title, author, language, and completeness of a peer's release before downloading.
+Profile matching and import verification still apply; a peer filename alone cannot establish an
+edition or a complete audiobook. Music searches retain their album and track behavior.
+
+Book profile filenames must end with `.{ext}`, for example `{Author}/{Title}/{Title}.{ext}`.
+This preserves the selected EPUB or PDF extension. An existing invalid template fails before new files
+are placed; correct the profile and retry the import. If an earlier import already placed files,
+Prismedia retains its recovery evidence and explains why cancellation is blocked.
+
 Keep download staging outside your watched roots. If the download client and Prismedia use different
 paths for the same files, follow the [download-path example](../getting-started/organize-folders.md#an-example-with-a-separate-download-client).
 
@@ -63,7 +84,12 @@ relationships, and structural children the plugin supplied. Container results ex
 requestable children, so you can choose seasons, books, or albums instead of accepting an opaque
 all-or-nothing request.
 
-Before committing, choose a compatible library root and acquisition profile. Container requests use the
+Before committing, choose a compatible library root and acquisition profile. These choices appear beside
+the metadata review. Administrators can choose a compatible external provider under **Fulfillment**; its
+own library and quality options appear in that same pane. Choosing **Request** saves the reviewed
+selection and opens the normal Entity page.
+
+Prismedia-managed container requests use the
 same medium-neutral policies everywhere: **All current and future**, **Missing now**, **Future only**, or
 **Manual selection**. The shared child picker applies them to seasons, books, albums, and future Entity
 hierarchies; the selected policy also controls whether newly discovered direct children begin acquisition.
@@ -88,6 +114,8 @@ Requesting content creates real fileless Entities immediately:
 
 The Entity's normal detail page is the management surface after commit. Its Acquisition section shows
 monitoring, release search, active transfer/import state, retry controls, and file-management actions.
+Externally managed items use the **External library** tab instead: it identifies the provider and
+shows request progress while that application manages acquisition and file organization.
 
 ## Request workspace
 

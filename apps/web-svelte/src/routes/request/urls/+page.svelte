@@ -1,0 +1,141 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+  import { page } from "$app/state";
+  import { Download, Link, Search, ShieldUser } from "@lucide/svelte";
+  import { Alert, Button, Panel, Select, TextInput, buttonVariants } from "@prismedia/ui-svelte";
+  import type { ConnectionResponse, EntityKind, ExecutorInspectionResponse, IntegrationTransferResponse, LibraryRoot } from "$lib/api/generated/model";
+  import { executorKinds } from "$lib/integrations/executor-options";
+  import { integrationImportRoots } from "$lib/integrations/import-options";
+  import { fetchConnections } from "$lib/api/connections";
+  import { inspectPublicationUrl, acquireExecutorPublication, fetchIntegrationTransfers } from "$lib/api/integration-transfers";
+  import { fetchLibraryRoots } from "$lib/api/settings";
+  import TransferList from "$lib/components/integrations/TransferList.svelte";
+  import { isTransferTerminal } from "$lib/integrations/transfer-labels";
+  import BackLink from "$lib/components/BackLink.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import { getEntityKindLabel } from "$lib/entities/entity-grid";
+  import { useSession } from "$lib/stores/session.svelte";
+
+  import { createUuid } from "$lib/utils/uuid";
+  const session = useSession();
+  let connections = $state<ConnectionResponse[]>([]);
+  let connectionId = $state("");
+  let kind = $state<EntityKind | undefined>();
+  let url = $state("");
+  let inspection = $state<ExecutorInspectionResponse | null>(null);
+  let roots = $state<LibraryRoot[]>([]);
+  let rootId = $state("");
+  let transfers = $state<IntegrationTransferResponse[]>([]);
+  let loading = $state(true);
+  let busy = $state(false);
+  let error = $state<string | null>(null);
+  let refreshError = $state<string | null>(null);
+  const operations = new Map<string, string>();
+  const connection = $derived(connections.find(item => item.id === connectionId));
+  const kinds = $derived(executorKinds(connection));
+  const destinations = $derived(integrationImportRoots(roots, kind));
+  $effect(() => { if (!destinations.some(root => root.id === rootId)) rootId = destinations[0]?.id ?? ""; });
+
+  onMount(() => {
+    if (session.isAdmin) void initialize(); else loading = false;
+    const timer = setInterval(() => {
+      if (session.isAdmin && transfers.some(item => !isTransferTerminal(item.phase))) void refreshTransfers();
+    }, 5000);
+    return () => clearInterval(timer);
+  });
+  async function refreshTransfers() {
+    try { transfers = await fetchIntegrationTransfers(); refreshError = null; }
+    catch (cause) { refreshError = cause instanceof Error ? cause.message : "Could not refresh transfers"; }
+  }
+  async function initialize() {
+    try {
+      const [available, libraries] = await Promise.all([fetchConnections(), fetchLibraryRoots()]);
+      connections = available.filter(item => item.hasPersistentRemoteIdentity && executorKinds(item).length > 0);
+      roots = libraries;
+      rootId = "";
+      const requested = page.url.searchParams.get("connection");
+      chooseConnection(connections.find(item => item.id === requested)?.id ?? connections[0]?.id ?? "");
+      await refreshTransfers();
+    } catch (cause) { error = cause instanceof Error ? cause.message : "Could not load URL connections"; }
+    finally { loading = false; }
+  }
+  function chooseConnection(value: string) {
+    connectionId = value;
+    kind = executorKinds(connections.find(item => item.id === value))[0];
+    inspection = null; error = null;
+  }
+  async function inspect() {
+    if (!connectionId || !kind || busy) return;
+    busy = true; error = null; inspection = null;
+    try { inspection = await inspectPublicationUrl(connectionId, { url: url.trim(), entityKind: kind }); }
+    catch (cause) { error = cause instanceof Error ? cause.message : "Could not inspect this URL"; }
+    finally { busy = false; }
+  }
+  async function acquire(itemId: string) {
+    if (!inspection || !rootId || busy) return;
+    const key = JSON.stringify([connectionId, inspection.selectionToken, itemId, rootId]);
+    const operationId = operations.get(key) ?? createUuid();
+    operations.set(key, operationId);
+    busy = true; error = null;
+    try {
+      const accepted = await acquireExecutorPublication(connectionId, { operationId, selectionToken: inspection.selectionToken, itemId, libraryRootId: rootId });
+      transfers = [accepted, ...transfers.filter(item => item.id !== accepted.id)];
+    } catch (cause) { error = cause instanceof Error ? cause.message : "Could not accept this item. Retry to check the same request."; }
+    finally { busy = false; }
+  }
+</script>
+
+<svelte:head><title>Import from URL · Prismedia</title></svelte:head>
+
+{#if !session.isAdmin}
+  <StatePlaceholder icon={ShieldUser} title="Administrator access required" description="URL acquisition connections are managed by a server administrator." />
+{:else}
+  <div class="flex min-w-0 flex-col gap-5">
+    <header class="flex flex-wrap items-end justify-between gap-3">
+      <div class="space-y-2">
+        <BackLink fallback="/request" label="Requests" />
+        <h1 class="flex items-center gap-2.5"><Link class="size-5 text-text-accent" />Import from URL</h1>
+        <p class="text-sm text-text-muted">Inspect a source, choose a book, comic, image, or gallery, and import it into your library.</p>
+      </div>
+      <a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/settings/connections">Manage connections</a>
+    </header>
+    {#if loading}
+      <StatePlaceholder icon={Link} title="Loading connections" busy />
+    {:else if !connections.length}
+      <StatePlaceholder icon={Link} title="Connect a URL executor" description="Add and test a connection that supports URL inspection and downloads." />
+    {:else}
+      <Panel class="flex flex-col gap-4 p-4">
+        <div class="grid min-w-0 gap-3 sm:grid-cols-2">
+          <Select ariaLabel="URL executor" value={connectionId} options={connections.map(item => ({ value: item.id, label: item.name }))} onchange={chooseConnection} disabled={busy} />
+          <Select ariaLabel="Media type" value={kind} options={kinds.map(value => ({ value, label: getEntityKindLabel(value) }))}
+            onchange={value => { kind = kinds.find(item => item === value); inspection = null; }} disabled={busy} />
+        </div>
+        <form class="flex min-w-0 flex-col gap-3 sm:flex-row" onsubmit={event => { event.preventDefault(); void inspect(); }}>
+          <TextInput type="url" aria-label="Source URL" placeholder="https://…" bind:value={url} oninput={() => inspection = null} maxlength={8192} required disabled={busy} class="min-w-0 flex-1" />
+          <Button type="submit" variant="secondary" disabled={busy || !url.trim()}><Search />{busy ? "Working…" : "Inspect URL"}</Button>
+        </form>
+        <div class="space-y-2">
+          <p class="text-xs font-medium text-text-muted">Import destination</p>
+          <Select ariaLabel="Import destination" value={rootId} options={destinations.map(root => ({ value: root.id, label: root.label }))} onchange={value => rootId = value}
+            disabled={busy || !destinations.length} placeholder="Choose an import library" />
+          {#if !destinations.length}<p class="text-sm text-text-muted">Add an enabled library with scanning for this media type in Settings.</p>{/if}
+        </div>
+      </Panel>
+    {/if}
+    {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
+    {#if refreshError}<Alert.Root variant="destructive"><Alert.Description>{refreshError}</Alert.Description></Alert.Root>{/if}
+    {#if inspection}
+      <section class="space-y-3" aria-label="Inspected items">
+        <h2 class="text-base font-semibold">Choose an item</h2>
+        {#each inspection.warnings as warning}<Alert.Root><Alert.Description>{warning}</Alert.Description></Alert.Root>{/each}
+        {#each inspection.items as item (item.id)}
+          <Panel class="flex min-w-0 flex-wrap items-center justify-between gap-3 p-4">
+            <h3 class="min-w-0 break-words text-sm font-semibold">{item.title}</h3>
+            <Button variant="secondary" size="sm" disabled={busy || !rootId} onclick={() => void acquire(item.id)}><Download />Import item</Button>
+          </Panel>
+        {/each}
+      </section>
+    {/if}
+    <TransferList {transfers} onrefresh={refreshTransfers} />
+  </div>
+{/if}

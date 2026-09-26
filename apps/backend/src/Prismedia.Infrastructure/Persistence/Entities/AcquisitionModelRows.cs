@@ -392,6 +392,14 @@ public sealed class AcquisitionRow {
     public int OwnedFormatScore { get; set; }
 
     /// <summary>
+    /// Layout of this acquisition's audiobook payload: observed from the download client's file list while
+    /// downloading, then replaced by the shape of the files actually imported, which is the owned shape the
+    /// upgrade loop compares against (and is advanced when an upgrade replaces the audiobook). Null for
+    /// ebooks, other kinds, and payloads not yet observed.
+    /// </summary>
+    public AudiobookReleaseShape? AudiobookShape { get; set; }
+
+    /// <summary>
     /// For an upgrade child acquisition, the parent acquisition it replaces. Self-FK, nulled if the parent is
     /// hard-deleted. Null for an ordinary (non-upgrade) acquisition.
     /// </summary>

@@ -54,6 +54,44 @@ public sealed class EntityAlternativeTitleTests {
     }
 
     [Theory]
+    [InlineData(EntityKind.Book, EntityKind.Book)]
+    [InlineData(EntityKind.ComicSeries, EntityKind.ComicInstallment)]
+    public async Task BookAndComicAcquisitionsReadOnlyCurrentWorkTitles(EntityKind workKind, EntityKind targetKind) {
+        await using var db = CreateContext();
+        var workId = await SeedAsync(db, workKind);
+        var targetId = targetKind == workKind ? workId : Guid.NewGuid();
+        if (targetId != workId) {
+            db.Entities.Add(new EntityRow { Id = targetId, ParentEntityId = workId,
+                KindCode = targetKind.ToCode(), Title = "Issue 12.5" });
+        }
+        db.EntityAlternativeTitles.Add(new EntityAlternativeTitleRow {
+            EntityId = workId, Title = "Translated Work", PluginId = "provider",
+            IdentityNamespace = "provider", IdentityValue = "work-id"
+        });
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow { Id = acquisitionId, EntityId = targetId,
+            Kind = targetKind, Title = targetKind == EntityKind.Book ? "Formal Name" : "Issue 12.5",
+            Series = targetKind == EntityKind.ComicInstallment ? "Formal Name" : null,
+            Status = AcquisitionStatus.Pending, ExternalIdsJson = "{}", SourceUrlsJson = "[]" });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        Assert.Equal(["Translated Work"], (await store.GetSearchInputAsync(acquisitionId, default))!.AlternativeWorkTitles);
+        Assert.Equal(["Translated Work"], (await store.GetImportContextAsync(acquisitionId, default))!.AlternativeWorkTitles);
+
+        if (targetKind == EntityKind.ComicInstallment) {
+            (await db.Entities.FindAsync(workId))!.Title = "Corrected Work";
+            await db.SaveChangesAsync();
+            Assert.Equal("Corrected Work", (await store.GetSearchInputAsync(acquisitionId, default))!.Series);
+            Assert.Equal("Corrected Work", (await store.GetImportContextAsync(acquisitionId, default))!.Series);
+        }
+
+        (await db.EntityProviderIdentities.SingleAsync()).IdentityValue = "retired-work";
+        await db.SaveChangesAsync();
+        Assert.Empty((await store.GetSearchInputAsync(acquisitionId, default))!.AlternativeWorkTitles);
+    }
+
+    [Theory]
     [InlineData(EntityKind.VideoSeason, "provider", "work-id", true)]
     [InlineData(EntityKind.VideoSeries, "another-provider", "work-id", true)]
     [InlineData(EntityKind.VideoSeries, "provider", "another-work", true)]

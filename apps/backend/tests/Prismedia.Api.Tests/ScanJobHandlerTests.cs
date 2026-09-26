@@ -13,6 +13,43 @@ namespace Prismedia.Api.Tests;
 
 public sealed class ScanJobHandlerTests {
     [Fact]
+    public async Task TrackedRootDelegatesBeforeDiscoveringRenamedFoldersOrRebindingSignatures() {
+        var root = new LibraryRootData(Guid.NewGuid(), "/media/external", "External", true, true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var holding = Guid.NewGuid();
+        var persistence = new FakeScanPersistence([root]) { ManagedHoldings = [holding] };
+        var queue = new RecordingJobQueue();
+        var handler = new ScanLibraryJobHandler(NullLogger<ScanLibraryJobHandler>.Instance,
+            new RecordingFileDiscovery(["/media/external/new-name/movie.mkv"]), persistence, persistence, persistence);
+        await handler.HandleAsync(new JobContext(SingleRootScanJob(root), queue), default);
+        Assert.Empty(persistence.UpsertedVideoItems);
+        var reconcile = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.ManagedLibraryReconcile, reconcile.Type);
+        Assert.Equal(holding.ToString(), reconcile.TargetEntityId);
+        Assert.Equal(JobResourceKeys.LibraryScan, reconcile.ResourceKey);
+    }
+
+    [Fact]
+    public async Task TrackedComicRootDelegatesBeforeArchiveDiscovery() {
+        var root = new LibraryRootData(Guid.NewGuid(), "/media/comics", "Comics", true, true,
+            ScanVideos: false, ScanImages: false, ScanAudio: false, ScanBooks: true, IsNsfw: false);
+        var holding = Guid.NewGuid();
+        var persistence = new FakeScanPersistence([root]) { ManagedComicHoldings = [holding] };
+        var queue = new RecordingJobQueue();
+        var handler = new ScanComicJobHandler(NullLogger<ScanComicJobHandler>.Instance,
+            new RecordingFileDiscovery(["/media/comics/renamed.cbz"]), persistence, persistence,
+            new RecordingPageManifestStore(), persistence);
+
+        await handler.HandleAsync(new JobContext(SingleRootScanJob(root) with { Type = JobType.ScanComic }, queue), default);
+
+        Assert.Empty(persistence.UpsertedComicInstallments);
+        var reconcile = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.ManagedLibraryReconcile, reconcile.Type);
+        Assert.Equal(holding.ToString(), reconcile.TargetEntityId);
+        Assert.Equal(JobResourceKeys.LibraryScan, reconcile.ResourceKey);
+    }
+
+    [Fact]
     public async Task VideoScanDefersPendingReplacementWithoutHidingUnrelatedFiles() {
         var root = new LibraryRootData(Guid.NewGuid(), "/media/videos", "Videos", true, true,
             ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
@@ -3000,6 +3037,29 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task ExplicitReconcileRebuildsUnchangedCatalogRows() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos", "Videos",
+            Enabled: true, Recursive: true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]);
+        var snapshots = new FakeScanSnapshotStore();
+        var handler = new RecordingScanHandler(persistence, snapshots,
+            new RecordingFileDiscovery(["/media/videos/a.mkv"]));
+        var normal = SingleRootScanJob(root);
+
+        await handler.HandleAsync(new JobContext(normal, new NoopJobQueue()), CancellationToken.None);
+        var explicitRescan = normal with {
+            PayloadJson = new ScanRootPayload(root.Id, ForceReconcile: true).ToJson()
+        };
+        await handler.HandleAsync(new JobContext(explicitRescan, new NoopJobQueue()), CancellationToken.None);
+
+        Assert.Equal([root.Id, root.Id], handler.ScannedRootIds);
+        Assert.Equal(1, snapshots.ApplyCount);
+    }
+
+    [Fact]
     public async Task SnapshotRescansWhenAFileIsAdded() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
@@ -3456,6 +3516,10 @@ public sealed class ScanJobHandlerTests {
     }
 
     private sealed class FakeScanPersistence(IReadOnlyList<LibraryRootData> roots) : ILibraryScanRootPersistence, IVideoScanPersistence, IDownstreamNeedsPersistence, IImageGalleryScanPersistence, IAudioScanPersistence, IBookScanPersistence, IComicScanPersistence {
+        public IReadOnlyList<Guid> ManagedHoldings { get; init; } = [];
+        public Task<IReadOnlyList<Guid>> ListManagedHoldingsForRootAsync(Guid rootId, CancellationToken token) => Task.FromResult(ManagedHoldings);
+        public IReadOnlyList<Guid> ManagedComicHoldings { get; init; } = [];
+        public Task<IReadOnlyList<Guid>> ListManagedComicHoldingsForRootAsync(Guid rootId, CancellationToken token) => Task.FromResult(ManagedComicHoldings);
         public IReadOnlyList<string> PendingReplacementPaths { get; set; } = [];
         public Task<IReadOnlyList<string>> ListPendingVideoReplacementPathsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(PendingReplacementPaths);
@@ -3785,7 +3849,7 @@ public sealed class ScanJobHandlerTests {
         public Task<int> RemoveEmptyComicContainersAsync(CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
-        public Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) =>
+        public Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken, bool authoritativeSnapshot = true) =>
             Task.FromResult(0);
 
         public Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
@@ -3970,7 +4034,7 @@ public sealed class ScanJobHandlerTests {
         public Task UpsertSubtitleAsync(Guid entityId, string language, string? label, string format, EntitySubtitleSource source, string storagePath, string sourceFormat, int streamIndex, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, int? trackNumber, CancellationToken cancellationToken) =>
+        public Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, string? title, int? trackNumber, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<EntityTechnicalData?> GetEntityTechnicalAsync(Guid entityId, CancellationToken cancellationToken) =>

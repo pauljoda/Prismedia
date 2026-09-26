@@ -7,6 +7,33 @@ namespace Prismedia.Contracts.System;
 /// constants instead of bare string literals.
 /// </summary>
 public static class ApiProblemCodes {
+    #region Static Variables
+
+    /// <summary>A metadata plugin failed to answer, rather than confirming that no matching work exists.</summary>
+    public const string PluginProviderUnavailable = "plugin_provider_unavailable";
+    public const string ManagedControlConflict = "managed_control_conflict";
+    /// <summary>Managed request identity, ownership, or progress changed after review.</summary>
+    public const string ManagedRequestConflict = "managed_request_conflict";
+    /// <summary>The requested connection no longer exists.</summary>
+    public const string ConnectionNotFound = "connection_not_found";
+    /// <summary>A connection owns persisted transfer history and cannot be deleted.</summary>
+    public const string ConnectionInUse = "connection_in_use";
+    /// <summary>A connection changed since the submitted revision.</summary>
+    public const string ConnectionConflict = "connection_conflict";
+    public const string FulfillmentOwnershipConflict = "fulfillment_ownership_conflict";
+    /// <summary>Connection configuration violates its plugin schema.</summary>
+    public const string ConnectionInvalid = "connection_invalid";
+    /// <summary>The installed integration plugin is unavailable.</summary>
+    public const string ConnectionUnavailable = "connection_unavailable";
+    /// <summary>An integration operation no longer exists.</summary>
+    public const string IntegrationTransferNotFound = "integration_transfer_not_found";
+    /// <summary>A transfer operation or active fulfillment owner conflicts with the submitted request.</summary>
+    public const string IntegrationTransferConflict = "integration_transfer_conflict";
+    /// <summary>A transfer selection or destination is invalid.</summary>
+    public const string IntegrationTransferInvalid = "integration_transfer_invalid";
+    /// <summary>Accepted transfer intent cannot be decrypted using the current persistent keys.</summary>
+    public const string IntegrationTransferUnavailable = "integration_transfer_unavailable";
+
     /// <summary>Problem code <c>calendar_range_invalid</c>.</summary>
     public const string CalendarRangeInvalid = "calendar_range_invalid";
 
@@ -142,6 +169,9 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>invalid_entity</c>.</summary>
     public const string InvalidEntity = "invalid_entity";
 
+    /// <summary>A progress report is malformed for the work's declared consumption modalities.</summary>
+    public const string InvalidProgress = "invalid_progress";
+
     /// <summary>Problem code <c>invalid_entity_image_upload</c>.</summary>
     public const string InvalidEntityImageUpload = "invalid_entity_image_upload";
 
@@ -150,6 +180,10 @@ public static class ApiProblemCodes {
 
     /// <summary>Problem code <c>invalid_entity_metadata_patch</c>.</summary>
     public const string InvalidEntityMetadataPatch = "invalid_entity_metadata_patch";
+    /// <summary>A metadata protection edit used stale value provenance.</summary>
+    public const string MetadataFieldConflict = "metadata_field_conflict";
+    /// <summary>A filesystem mutation overlaps an externally managed library boundary.</summary>
+    public const string ReadOnlyLibrary = "read_only_library";
 
     /// <summary>Problem code <c>invalid_path</c>.</summary>
     public const string InvalidPath = "invalid_path";
@@ -189,6 +223,9 @@ public static class ApiProblemCodes {
 
     /// <summary>Problem code <c>plugin_update_not_found</c>.</summary>
     public const string PluginUpdateNotFound = "plugin_update_not_found";
+
+    /// <summary>A plugin still owns connected work or library authority and cannot be changed yet.</summary>
+    public const string PluginInUse = "plugin_in_use";
 
     /// <summary>Problem code <c>request_invalid</c>.</summary>
     public const string RequestInvalid = "request_invalid";
@@ -246,4 +283,6 @@ public static class ApiProblemCodes {
 
     /// <summary>Problem code <c>video_trickplay_tile_not_found</c>.</summary>
     public const string VideoTrickplayTileNotFound = "video_trickplay_tile_not_found";
+
+    #endregion
 }

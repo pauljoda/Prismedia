@@ -2,13 +2,18 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "$app/state";
 import {
+  BOOK_RENDITION,
   ENTITY_KIND,
   EXTERNAL_ID_PROVIDER,
+  FULFILLMENT_OWNER_KIND,
+  MANAGED_REQUEST_PHASE,
   MONITOR_PRESET,
   PROBLEM_CODE,
   REQUEST_COMMIT_OUTCOME,
   REQUEST_MEDIA_KIND,
   REQUEST_REVIEW_SELECTION,
+  CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY,
+  CREDIT_ROLE, METADATA_PATCH_FIELD,
 } from "$lib/api/generated/codes";
 import type {
   BookAcquisitionProfileView,
@@ -16,6 +21,7 @@ import type {
   LibraryRootSummary,
   RequestReviewResponse,
 } from "$lib/api/generated/model";
+import { ManagedRequestRejectedError } from "$lib/api/managed-requests";
 import { ApiError } from "$lib/api/orval-fetch";
 import { deriveRequestReviewSelection } from "$lib/requests/request-review-selection";
 import Page from "./+page.svelte";
@@ -27,13 +33,30 @@ const mocks = vi.hoisted(() => ({
   fetchAccessibleLibraryRoots: vi.fn(),
   goto: vi.fn(async () => {}),
   reviewRequest: vi.fn(),
+  reviewManagerTitle: vi.fn(), prepareManagerTitle: vi.fn(),
+  fetchReviewedManagedRequest: vi.fn(), saveReviewedManagedRequest: vi.fn(),
+  prepareManagedMovie: vi.fn(), prepareManagedSeries: vi.fn(), fetchConnections: vi.fn(), fetchManagedRequests: vi.fn(), fetchLibraryMounts: vi.fn(), isAdmin: false,
 }));
 
 vi.mock("$lib/api/requests", () => ({
   commitReviewedRequest: mocks.commitReviewedRequest,
   fetchRequestReview: mocks.fetchRequestReview,
   reviewRequest: mocks.reviewRequest,
+  prepareManagedMovie: mocks.prepareManagedMovie,
+  prepareManagedSeries: mocks.prepareManagedSeries,
 }));
+vi.mock("$lib/api/connections", () => ({ fetchConnections: mocks.fetchConnections }));
+vi.mock("$lib/api/managed-discovery", () => ({ reviewManagerTitle: mocks.reviewManagerTitle, prepareManagerTitle: mocks.prepareManagerTitle }));
+vi.mock("$lib/stores/app-chrome.svelte", () => ({ useAppChrome: () => ({ setBreadcrumbs: () => () => {} }) }));
+vi.mock("$lib/api/managed-requests", async (original) => ({
+  ...await original<typeof import("$lib/api/managed-requests")>(), fetchManagedRequests: mocks.fetchManagedRequests,
+}));
+vi.mock("$lib/api/reviewed-managed-requests", () => ({
+  fetchReviewedManagedRequest: mocks.fetchReviewedManagedRequest,
+  saveReviewedManagedRequest: mocks.saveReviewedManagedRequest,
+  reviewScope: (review: { scopes: unknown[] }) => review.scopes[0],
+}));
+vi.mock("$lib/api/managed-libraries", () => ({ fetchLibraryMounts: mocks.fetchLibraryMounts }));
 
 vi.mock("$lib/api/acquisitions", async (importOriginal) => ({
   ...await importOriginal<typeof import("$lib/api/acquisitions")>(),
@@ -56,12 +79,35 @@ vi.mock("$lib/nsfw/store.svelte", () => ({
 }));
 
 vi.mock("$lib/stores/session.svelte", () => ({
-  useSession: () => ({ canRequestContent: true }),
+  useSession: () => ({ canRequestContent: true, isAdmin: mocks.isAdmin }),
 }));
+
+/** The unified review shape: a whole-work review carries its evidence in one scope. */
+function scoped({ work, mount, options, existing, existingFulfillments, expansion, ...rest }: Record<string, unknown>) {
+  return { ...rest, scopes: [{ rendition: null, work, mount, options, existing, existingFulfillments, expansion }] };
+}
 
 describe("reviewed request route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isAdmin = false;
+    mocks.fetchConnections.mockResolvedValue([]);
+    mocks.fetchManagedRequests.mockResolvedValue([]);
+    mocks.fetchLibraryMounts.mockResolvedValue([{ id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" }]);
+    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => scoped({
+      connectionRevision: 7, managerDiscoveryRevision: input.managerDiscoveryRevision ?? null,
+      request: input.request, title: "Reviewed title", work: {
+        entityKind: input.request.review.entityKind,
+        externalIds: {},
+        targets: input.request.review.entityKind === ENTITY_KIND.videoSeries
+          ? input.request.selectedProposalIds.map(() => ({ entityKind: ENTITY_KIND.videoEpisode, externalIds: {} }))
+          : undefined,
+      },
+      mount: { id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" },
+      options: { profiles: [{ id: "profile", label: "Any" }], roots: [{ id: "1", path: "/movies" }] }, existing: null,
+      existingFulfillments: [],
+    }));
+    mocks.saveReviewedManagedRequest.mockResolvedValue({ entityId: "wanted-movie", scopes: [{ rendition: null, targetEntityIds: null, managedRequest: null }] });
     page.params = {};
     page.url = new URL("http://localhost/request") as unknown as typeof page.url;
     mocks.fetchAccessibleLibraryRoots.mockResolvedValue([videoRoot()]);
@@ -71,6 +117,267 @@ describe("reviewed request route", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("preloads provider choices in the metadata review and submits once before opening the entity", async () => {
+    mocks.isAdmin = true;
+    const review = movieReview();
+    const connection = { id: "manager", pluginId: "radarr", name: "Selected movie manager", enabled: true, status: CONNECTION_STATUS.ready,
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie],
+        operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged, INTEGRATION_OPERATION.requestManaged, INTEGRATION_OPERATION.reconcileManaged, INTEGRATION_OPERATION.configureManaged] }, { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.movie, ENTITY_KIND.videoSeries], operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] }] };
+    mocks.fetchConnections.mockResolvedValue([connection]);
+    mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `connection=manager&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+    render(Page);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request" })).toBeEnabled());
+    expect(mocks.reviewManagerTitle).toHaveBeenCalledWith("manager", { entityKind: ENTITY_KIND.movie, externalIdentity: review.externalIdentity });
+    expect(mocks.fetchReviewedManagedRequest).toHaveBeenCalledWith("manager", expect.objectContaining({
+      managerDiscoveryRevision: 7, request: expect.objectContaining({ proposalRevision: review.revision }),
+    }));
+    expect(mocks.saveReviewedManagedRequest).not.toHaveBeenCalled();
+    expect(mocks.prepareManagerTitle).not.toHaveBeenCalled();
+    expect(screen.getByRole("checkbox", { name: "Accept Title" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Request" })).toHaveLength(1);
+    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith("/movies/wanted-movie"));
+    expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledWith("manager", expect.objectContaining({
+      expectedConnectionRevision: 7, scopes: [{ libraryRootId: "external-root" }], profileId: "profile", managerDiscoveryRevision: 7,
+      request: expect.objectContaining({ rootExternalIdentity: review.externalIdentity }),
+    }));
+    expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
+  });
+
+  it("opens the existing library entity from preflight without committing again", async () => {
+    mocks.isAdmin = true;
+    const review = movieReview();
+    const connection = { id: "manager", pluginId: "radarr", name: "Selected movie manager", enabled: true, status: CONNECTION_STATUS.ready,
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie],
+        operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged, INTEGRATION_OPERATION.requestManaged, INTEGRATION_OPERATION.reconcileManaged, INTEGRATION_OPERATION.configureManaged] }, { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.movie], operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] }] };
+    mocks.fetchConnections.mockResolvedValue([connection]);
+    mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
+    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => scoped({
+      connectionRevision: 7, managerDiscoveryRevision: input.managerDiscoveryRevision ?? null,
+      request: input.request, title: "Reviewed title", work: { entityKind: ENTITY_KIND.movie, externalIds: {} },
+      mount: { id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" },
+      options: { profiles: [{ id: "profile", label: "Any" }], roots: [] }, existing: null,
+      existingFulfillments: [{
+        entityId: "existing-movie", targetEntityIds: null, ownerKind: FULFILLMENT_OWNER_KIND.externalManager, connectionId: "other-manager",
+        connectionName: "House Radarr", requestId: "existing-request", requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles, hasLocalSource: false,
+      }],
+    }));
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `connection=manager&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+
+    render(Page);
+
+    const open = await screen.findByRole("button", { name: "Open in library" });
+    expect(screen.getByText("Already requested through House Radarr")).toBeInTheDocument();
+    await fireEvent.click(open);
+    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith("/movies/existing-movie"));
+    expect(mocks.saveReviewedManagedRequest).not.toHaveBeenCalled();
+  });
+
+  it("retains the operation and reviewed metadata when retrying uncertain provider acceptance", async () => {
+    mocks.isAdmin = true;
+    const review = movieReview();
+    mocks.reviewRequest.mockResolvedValue(review);
+    mocks.fetchConnections.mockResolvedValue([{ id: "manager", pluginId: "radarr", name: "Movie manager", enabled: true, status: CONNECTION_STATUS.ready,
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie],
+        operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged, INTEGRATION_OPERATION.requestManaged, INTEGRATION_OPERATION.reconcileManaged, INTEGRATION_OPERATION.configureManaged] }, { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.movie, ENTITY_KIND.videoSeries], operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] }] }]);
+    mocks.saveReviewedManagedRequest.mockRejectedValueOnce(new Error("Response lost"));
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `plugin=${review.pluginId}&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+    render(Page);
+    await fireEvent.keyDown(await screen.findByRole("button", { name: "Acquisition owner" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(await screen.findByRole("option", { name: "Movie manager" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request" })).toBeEnabled());
+    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+    await screen.findByText("Response lost");
+    expect(screen.getByRole("checkbox", { name: "Accept Title" })).toBeDisabled();
+    await fireEvent.click(screen.getByRole("button", { name: "Retry request" }));
+    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith("/movies/wanted-movie"));
+    expect(mocks.saveReviewedManagedRequest.mock.calls[1]).toEqual(mocks.saveReviewedManagedRequest.mock.calls[0]);
+    expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
+  });
+
+  it("requires a new metadata review after a definite provider proposal rejection", async () => {
+    mocks.isAdmin = true;
+    const review = movieReview();
+    const connection = { id: "manager", pluginId: "radarr", name: "Movie manager", enabled: true, status: CONNECTION_STATUS.ready, effectiveCapabilities: [] };
+    mocks.fetchConnections.mockResolvedValue([connection]);
+    mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
+    mocks.saveReviewedManagedRequest.mockRejectedValueOnce(new ManagedRequestRejectedError("Proposal changed", PROBLEM_CODE.requestProposalChanged));
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `connection=manager&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+    render(Page);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request" })).toBeEnabled());
+    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+    await screen.findByRole("button", { name: "Reload review" });
+    expect(screen.getByRole("button", { name: "Request" })).toBeDisabled();
+    expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes an ownership race into the existing item without retrying the commit", async () => {
+    mocks.isAdmin = true;
+    const review = movieReview();
+    const connection = { id: "manager", pluginId: "radarr", name: "Movie manager", enabled: true, status: CONNECTION_STATUS.ready, effectiveCapabilities: [] };
+    mocks.fetchConnections.mockResolvedValue([connection]);
+    mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
+    const reviewedResult = (existingFulfillments: Array<Record<string, unknown>>) => scoped({
+      connectionRevision: 7, managerDiscoveryRevision: 7,
+      title: "Reviewed title", work: { entityKind: ENTITY_KIND.movie, externalIds: {} },
+      mount: { id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" },
+      options: { profiles: [{ id: "profile", label: "Any" }], roots: [] }, existing: null, existingFulfillments,
+    });
+    let ownershipClaimed = false;
+    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => ({
+      ...reviewedResult(ownershipClaimed
+        ? [{
+          entityId: "race-winner", targetEntityIds: null, ownerKind: FULFILLMENT_OWNER_KIND.externalManager,
+          connectionId: "other-manager", connectionName: "House Radarr", requestId: "winning-request",
+          requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles, hasLocalSource: false,
+        }]
+        : []),
+      request: input.request,
+    }));
+    mocks.saveReviewedManagedRequest.mockImplementationOnce(async () => {
+      ownershipClaimed = true;
+      throw new ManagedRequestRejectedError("Ownership changed", PROBLEM_CODE.fulfillmentOwnershipConflict);
+    });
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `connection=manager&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+
+    render(Page);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request" })).toBeEnabled());
+    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+
+    await waitFor(() => expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledTimes(1));
+    const open = await screen.findByRole("button", { name: "Open in library" }, { timeout: 3_000 });
+    expect(screen.queryByText("Ownership changed")).not.toBeInTheDocument();
+    expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledTimes(1);
+    await fireEvent.click(open);
+    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith("/movies/race-winner"));
+    expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("requests only hydrated episodes retained by season and nested episode review", async () => {
+    mocks.isAdmin = true;
+    const review = seriesReview();
+    const seasonOne = review.proposal.children[0] as EntityMetadataProposal;
+    const seasonTwo = review.proposal.children[1] as EntityMetadataProposal;
+    const episodeThree = proposal("episode-3", ENTITY_KIND.videoEpisode, "Episode 3", [], {
+      seasonNumber: 1,
+      episodeNumber: 3,
+    });
+    const episodeFour = proposal("episode-4", ENTITY_KIND.videoEpisode, "Episode 4", [], {
+      seasonNumber: 1,
+      episodeNumber: 4,
+    });
+    const episodeTwo = proposal("episode-2", ENTITY_KIND.videoEpisode, "Episode 2", [], {
+      seasonNumber: 2,
+      episodeNumber: 2,
+    });
+    seasonOne.children.push(episodeThree);
+    seasonOne.children.push(episodeFour);
+    seasonTwo.children.push(episodeTwo);
+    review.proposal.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: review.externalIdentity.value };
+    seasonOne.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:1" };
+    seasonTwo.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:2" };
+    seasonOne.children[0]!.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:1:1" };
+    episodeThree.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:1:3" };
+    episodeFour.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:1:4" };
+    episodeTwo.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:2:2" };
+    review.targets.push(
+      {
+        proposalId: episodeThree.proposalId,
+        kind: REQUEST_MEDIA_KIND.episode,
+        entityKind: ENTITY_KIND.videoEpisode,
+        externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:3" },
+        requestable: true,
+        position: 3,
+      },
+      {
+        proposalId: episodeTwo.proposalId,
+        kind: REQUEST_MEDIA_KIND.episode,
+        entityKind: ENTITY_KIND.videoEpisode,
+        externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:2:2" },
+        requestable: true,
+        position: 2,
+      },
+      {
+        proposalId: episodeFour.proposalId,
+        kind: REQUEST_MEDIA_KIND.episode,
+        entityKind: ENTITY_KIND.videoEpisode,
+        externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:4" },
+        requestable: true,
+        position: 4,
+      },
+    );
+    mocks.reviewRequest.mockResolvedValue(review);
+    mocks.fetchConnections.mockResolvedValue([{ id: "manager", name: "Series manager", enabled: true, status: CONNECTION_STATUS.ready,
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.videoSeries],
+        operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged, INTEGRATION_OPERATION.requestManaged, INTEGRATION_OPERATION.reconcileManaged, INTEGRATION_OPERATION.configureManaged] }, { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.movie, ENTITY_KIND.videoSeries], operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] }] }]);
+    setRoute(REQUEST_MEDIA_KIND.series, review.externalIdentity.value, `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`);
+    render(Page);
+
+    await screen.findByRole("heading", { name: "Andor" });
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Season 2" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Review Season 1" }));
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Episode 1" }));
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Acquisition owner" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(await screen.findByRole("option", { name: "Series manager" }));
+    expect(screen.getAllByText("Request selected episodes").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Monitor" })).not.toBeInTheDocument();
+    expect(screen.queryByText("All current and future")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Choose seasons and episodes in the metadata review/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Back to Andor" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request 2 episodes" })).toBeEnabled());
+    await fireEvent.click(screen.getByRole("button", { name: "Request 2 episodes" }));
+
+    await waitFor(() => expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledWith("manager", expect.objectContaining({ monitored: false, search: true, request: expect.objectContaining({
+      selectedProposalIds: ["episode-3", "episode-4"],
+      proposal: expect.objectContaining({
+        children: [expect.objectContaining({
+          proposalId: "season-1",
+          children: [
+            expect.objectContaining({ proposalId: "episode-3" }),
+            expect.objectContaining({ proposalId: "episode-4" }),
+          ],
+        })],
+      }),
+    }) })));
+    expect(mocks.prepareManagedSeries).not.toHaveBeenCalled();
+    expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
+  });
+
+  it("uses only new episodes for the managed series expansion CTA", async () => {
+    mocks.isAdmin = true;
+    const review = seriesReview();
+    const connection = { id: "manager", pluginId: "sonarr", name: "Series manager", enabled: true, status: CONNECTION_STATUS.ready,
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.videoSeries],
+        operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged, INTEGRATION_OPERATION.requestManaged, INTEGRATION_OPERATION.reconcileManaged, INTEGRATION_OPERATION.configureManaged] }, { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.videoSeries], operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] }] };
+    mocks.fetchConnections.mockResolvedValue([connection]);
+    mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
+    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => scoped({
+      connectionRevision: 7, managerDiscoveryRevision: 7, request: input.request, title: "Reviewed title",
+      work: {
+        entityKind: ENTITY_KIND.videoSeries,
+        externalIds: {},
+        targets: [
+          { entityKind: ENTITY_KIND.videoEpisode, externalIds: {} },
+          { entityKind: ENTITY_KIND.videoEpisode, externalIds: {} },
+        ],
+      },
+      mount: { id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Series library", remoteRootId: "1", remotePath: "/series", localPath: "/series" },
+      options: { profiles: [{ id: "profile", label: "Any" }], roots: [{ id: "1", path: "/series" }] }, existing: null,
+      existingFulfillments: [{
+        entityId: "existing-series", targetEntityIds: ["existing-episode-one"], ownerKind: FULFILLMENT_OWNER_KIND.externalManager,
+        connectionId: "manager", connectionName: "Series manager", requestId: "holding-one", requestPhase: MANAGED_REQUEST_PHASE.completed, hasLocalSource: true,
+      }],
+      expansion: { holdingId: "holding-one", retainedTargetEntityIds: ["existing-episode-one"], selectedOwnedTargetCount: 1, newTargetCount: 1 },
+    }));
+    setRoute(REQUEST_MEDIA_KIND.series, review.externalIdentity.value, `connection=manager&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+    render(Page);
+
+    const request = await screen.findByRole("button", { name: "Request 1 more episode" });
+    expect(request).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Request 2 episodes" })).not.toBeInTheDocument();
   });
 
   it("loads the exact plugin and opaque external identity under the NSFW ceiling", async () => {
@@ -207,6 +514,26 @@ describe("reviewed request route", () => {
     expect(mocks.goto).toHaveBeenCalledWith("/series/series-entity");
   });
 
+  it("reviews direct credits through All/None and omits rejected credits from the request", async () => {
+    const review = movieReview();
+    review.proposal.patch.credits = [{ name: "Direct provider credit", role: CREDIT_ROLE.actor, character: null, sortOrder: 0 }];
+    mocks.reviewRequest.mockResolvedValue(review);
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`);
+    render(Page);
+    const credits = await screen.findByRole("checkbox", { name: "Accept Credits" });
+    expect(credits).toBeChecked();
+    await fireEvent.click(screen.getByRole("button", { name: "None" }));
+    expect(credits).not.toBeChecked();
+    await fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(credits).toBeChecked();
+    await fireEvent.click(credits);
+    await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
+    await waitFor(() => expect(mocks.commitReviewedRequest).toHaveBeenCalled());
+    const payload = mocks.commitReviewedRequest.mock.calls[0][0];
+    expect(payload.selectedFields).not.toContain(METADATA_PATCH_FIELD.credits);
+    expect(payload.proposal.patch.credits).toEqual([]);
+  });
+
   it("uses the identify metadata controls and sends the cached filtered proposal", async () => {
     const review = movieReview();
     const person = proposal("person-amy", ENTITY_KIND.person, "Amy Adams");
@@ -247,7 +574,7 @@ describe("reviewed request route", () => {
 
     render(Page);
 
-    expect(await screen.findAllByRole("region", { name: "Request options" })).toHaveLength(2);
+    expect(await screen.findAllByRole("complementary", { name: "Request options" })).toHaveLength(1);
     await fireEvent.click(screen.getByRole("checkbox", { name: "Accept Description" }));
     await fireEvent.click(screen.getByRole("button", { name: "Deselect tag Drama" }));
     await fireEvent.click(screen.getByRole("checkbox", { name: "Select Amy Adams" }));
@@ -447,7 +774,7 @@ describe("reviewed request route", () => {
     expect(mocks.goto).toHaveBeenCalledWith("/movies/movie-entity");
   });
 
-  it("commits audiobook intent with Book targets and lands on the Book entity", async () => {
+  it("commits both Book formats from one review and lands on the shared Book", async () => {
     const review = audiobookReview();
     setRoute(
       REQUEST_MEDIA_KIND.audiobook,
@@ -459,13 +786,24 @@ describe("reviewed request route", () => {
     mocks.fetchAcquisitionProfiles.mockResolvedValue([bookProfile()]);
     mocks.commitReviewedRequest.mockResolvedValue({
       containerEntityId: null,
-      items: [{
+      items: [BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook].map((rendition) => ({
         externalId: review.externalIdentity.value,
         title: "Project Hail Mary",
         outcome: REQUEST_COMMIT_OUTCOME.requested,
         entityId: "book-entity",
-        acquisitionId: "acquisition-audiobook",
-      }],
+        acquisitionId: `acquisition-${rendition}`,
+      })),
+      bookRenditions: [BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook].map((rendition) => ({
+        rendition,
+        item: {
+          externalId: review.externalIdentity.value,
+          title: "Project Hail Mary",
+          outcome: REQUEST_COMMIT_OUTCOME.requested,
+          entityId: "book-entity",
+          acquisitionId: `acquisition-${rendition}`,
+        },
+        error: null,
+      })),
     });
 
     render(Page);
@@ -477,7 +815,8 @@ describe("reviewed request route", () => {
       externalIdentity: review.externalIdentity,
       hideNsfw: true,
     });
-    await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Ebook" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Request both formats" }));
 
     await waitFor(() => {
       expect(mocks.commitReviewedRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -486,13 +825,42 @@ describe("reviewed request route", () => {
         rootExternalIdentity: review.externalIdentity,
         proposalRevision: "audiobook-revision",
         selectedProposalIds: ["audiobook-root"],
-        targetLibraryRootId: "root-books",
-        profileId: "profile-book",
+        bookRenditions: [
+          { rendition: BOOK_RENDITION.ebook, targetLibraryRootId: "root-books", profileId: "profile-book" },
+          { rendition: BOOK_RENDITION.audiobook, targetLibraryRootId: "root-books", profileId: "profile-book" },
+        ],
         review,
         proposal: expect.objectContaining({ proposalId: "audiobook-root" }),
       }), true);
     });
     expect(mocks.goto).toHaveBeenCalledWith("/books/book-entity");
+  });
+
+  it("keeps reviewed Book manager controls in the same Request flow", async () => {
+    mocks.isAdmin = true;
+    const review = audiobookReview();
+    review.proposal.patch!.externalIds[EXTERNAL_ID_PROVIDER.openLibraryWork] = "OL43053199W";
+    mocks.reviewRequest.mockResolvedValue(review);
+    mocks.fetchConnections.mockResolvedValue([{
+      id: "book-manager", pluginId: "lazylibrarian", name: "Book manager", enabled: true,
+      status: CONNECTION_STATUS.ready, effectiveCapabilities: [
+        { kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.book],
+          operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.reconcileManaged,
+            INTEGRATION_OPERATION.configureManaged] },
+        { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.book],
+          operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] },
+      ],
+    }]);
+    setRoute(REQUEST_MEDIA_KIND.audiobook, review.externalIdentity.value,
+      `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`);
+
+    render(Page);
+
+    await fireEvent.click(await screen.findByRole("checkbox", { name: "Use a connected Book manager" }));
+    expect(screen.getByRole("checkbox", { name: "Ebook" })).toBeInTheDocument();
+    expect(await screen.findByText("Request through a connected book manager")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue to Book manager" })).not.toBeInTheDocument();
+    expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
   });
 
   it("treats sibling volumes as direct selections even though a book is not a container kind", () => {
@@ -532,7 +900,7 @@ describe("reviewed request route", () => {
     await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
 
     expect((await screen.findAllByText(/proposal changed after you reviewed it/i)).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: "Reload review" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Reload review" })).toHaveLength(1);
     expect(mocks.goto).not.toHaveBeenCalled();
   });
 

@@ -182,7 +182,7 @@ public sealed class AcquisitionImportResetCleanupTests {
     }
 
     private static AcquisitionImportResetCleanup Cleaner(PrismediaDbContext db) =>
-        new(db, new VideoScanConcurrencyGate(), NullLogger<AcquisitionImportResetCleanup>.Instance);
+        new(new TestFileMutationGuard(), db, new VideoScanConcurrencyGate(), NullLogger<AcquisitionImportResetCleanup>.Instance);
 
     private static AcquisitionImportContext Context(
         Guid entityId,

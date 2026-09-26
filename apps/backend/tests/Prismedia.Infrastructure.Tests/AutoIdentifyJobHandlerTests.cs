@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Integrations;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
@@ -38,20 +39,97 @@ public sealed class AutoIdentifyJobHandlerTests {
         Assert.Equal(1, runner.StartedCalls);
     }
 
-    private static JobRunSnapshot CreateJob(Guid entityId) =>
+    [Fact]
+    public async Task HandleAsyncRoutesExternalPeoplePayloadWithoutRunningOrdinaryAutoIdentify() {
+        var runner = new BusyAutoIdentifyRunner();
+        var external = new StubExternalPeopleRunner();
+        var holdingId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var payload = new AutoIdentifyJobPayload(
+            ExternalPeopleHoldingId: holdingId,
+            ExternalPeopleFingerprint: "fingerprint").ToJson();
+        var handler = new AutoIdentifyJobHandler(
+            runner,
+            NullLogger<AutoIdentifyJobHandler>.Instance,
+            externalPeople: external);
+
+        await handler.HandleAsync(
+            new JobContext(CreateJob(entityId, payload), new NoopJobQueue()),
+            CancellationToken.None);
+
+        Assert.Equal(0, runner.StartedCalls);
+        Assert.Equal((holdingId, entityId, "fingerprint"), external.LastRun);
+    }
+
+    [Fact]
+    public async Task HandleAsyncRecordsTerminalExternalPeopleAttemptOnlyOnFinalQueueAttempt() {
+        var external = new StubExternalPeopleRunner { Failure = new InvalidOperationException("offline") };
+        var holdingId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var payload = new AutoIdentifyJobPayload(
+            ExternalPeopleHoldingId: holdingId,
+            ExternalPeopleFingerprint: "fingerprint").ToJson();
+        var handler = new AutoIdentifyJobHandler(
+            new BusyAutoIdentifyRunner(),
+            NullLogger<AutoIdentifyJobHandler>.Instance,
+            externalPeople: external);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => handler.HandleAsync(
+            new JobContext(CreateJob(entityId, payload, attempts: 1, maxAttempts: 2), new NoopJobQueue()),
+            CancellationToken.None));
+        Assert.Null(external.RecordedTerminalAttempt);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => handler.HandleAsync(
+            new JobContext(CreateJob(entityId, payload, attempts: 2, maxAttempts: 2), new NoopJobQueue()),
+            CancellationToken.None));
+        Assert.Equal((holdingId, "fingerprint"), external.RecordedTerminalAttempt);
+    }
+
+    private static JobRunSnapshot CreateJob(
+        Guid entityId,
+        string payload = "{}",
+        int attempts = 0,
+        int maxAttempts = 0) =>
         new(
             Guid.NewGuid(),
             JobType.AutoIdentify,
             JobRunStatus.Running,
             Progress: 0,
             Message: null,
-            PayloadJson: "{}",
+            PayloadJson: payload,
             TargetEntityKind: "video",
             TargetEntityId: entityId.ToString(),
             TargetLabel: "Auto identify test",
             CreatedAt: DateTimeOffset.UtcNow,
             StartedAt: DateTimeOffset.UtcNow,
-            FinishedAt: null);
+            FinishedAt: null,
+            Attempts: attempts,
+            MaxAttempts: maxAttempts);
+
+    private sealed class StubExternalPeopleRunner : IExternalPeopleEnrichmentRunner {
+        public Exception? Failure { get; init; }
+        public (Guid HoldingId, Guid EntityId, string Fingerprint)? LastRun { get; private set; }
+        public (Guid HoldingId, string Fingerprint)? RecordedTerminalAttempt { get; private set; }
+
+        public Task<ExternalPeopleEnrichmentResult> RunAsync(
+            Guid holdingId,
+            Guid entityId,
+            string fingerprint,
+            CancellationToken cancellationToken) {
+            LastRun = (holdingId, entityId, fingerprint);
+            return Failure is null
+                ? Task.FromResult(new ExternalPeopleEnrichmentResult(true, "test", "Applied"))
+                : Task.FromException<ExternalPeopleEnrichmentResult>(Failure);
+        }
+
+        public Task RecordTerminalAttemptAsync(
+            Guid holdingId,
+            string fingerprint,
+            CancellationToken cancellationToken) {
+            RecordedTerminalAttempt = (holdingId, fingerprint);
+            return Task.CompletedTask;
+        }
+    }
 
     private sealed class BusyAutoIdentifyRunner : IAutoIdentifyRunner {
         private int _startedCalls;

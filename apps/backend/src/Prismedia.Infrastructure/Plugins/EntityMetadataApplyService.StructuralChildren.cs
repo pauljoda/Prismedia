@@ -294,20 +294,23 @@ public sealed partial class EntityMetadataApplyService {
         var path = parentPath.Count == 0 ? [title] : parentPath.Concat([title]).ToArray();
         await ReportApplyProgressAsync(progress, entity.KindCode.DecodeAs<EntityKind>(), title, path, cancellationToken);
 
-        await ApplyPatchToEntityAsync(entity, node.Patch, isRelationship ? [] : node.Images, now, cancellationToken);
+        var locked = await LockedMetadataFieldsAsync(entity.Id, cancellationToken);
+        var acceptedPatch = PreserveLockedMetadata(node.Patch, locked);
+        await ApplyPatchToEntityAsync(entity, acceptedPatch, isRelationship ? [] : node.Images, now, cancellationToken);
+        await RecordMetadataEvidenceAsync(entity.Id, acceptedPatch, MetadataFieldProtection.Fields.Select(field => field.ToCode()), node, now, cancellationToken);
         await BindProviderIdentityAsync(
             entity,
             node.Provider,
             node.Patch.ExternalIds,
             cancellationToken);
-        await ReplaceProviderAlternativeTitlesAsync(entity, node, now, cancellationToken);
+        if (!locked.Contains(MetadataPatchField.Title)) await ReplaceProviderAlternativeTitlesAsync(entity, node, now, cancellationToken);
         if (isRelationship) {
             await ApplyRelationshipArtworkAsync(entity, node, now, cancellationToken);
         }
 
-        var hasRelationshipFields = node.Patch.Credits.Count > 0
-            || !string.IsNullOrWhiteSpace(node.Patch.Studio)
-            || node.Patch.Tags.Count > 0;
+        var hasRelationshipFields = acceptedPatch.Credits.Count > 0
+            || !string.IsNullOrWhiteSpace(acceptedPatch.Studio)
+            || acceptedPatch.Tags.Count > 0;
         await ApplyChildNodesAsync(
             entity.Id,
             entity.KindCode.DecodeAs<EntityKind>(),
@@ -386,8 +389,8 @@ public sealed partial class EntityMetadataApplyService {
             await UpsertStatsAsync(entity.Id, patch.Stats, now, cancellationToken);
         }
 
-        if (patch.Positions.Count > 0) {
-            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch.Positions);
+        if (patch.Positions.Count > 0 || patch.PositionEntries is { Count: > 0 }) {
+            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch);
             // A complete canonical episode numbering snapshot replaces its optional absolute alias.
             // Sparse patches and fill-missing enrichment retain positions they do not address.
             if (entity.KindCode == EntityKind.VideoEpisode.ToCode()
@@ -397,7 +400,7 @@ public sealed partial class EntityMetadataApplyService {
                 && await _db.EntityPositions.FindAsync([entity.Id, EntityPositionCodes.AbsoluteEpisode], cancellationToken) is { } obsolete) {
                 _db.EntityPositions.Remove(obsolete);
             }
-            await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken);
+            await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken, EntityMetadataPositionRules.Labels(patch));
         }
 
         if (!string.IsNullOrWhiteSpace(patch.Classification)) {

@@ -66,7 +66,8 @@ public static class LibraryEndpoints {
                     root.ScanImages,
                     root.ScanAudio,
                     root.ScanBooks,
-                    root.IsNsfw))
+                    root.IsNsfw,
+                    root.IsReadOnly))
                 .ToArray());
         })
             .WithName("ListAccessibleLibraryRoots")
@@ -100,6 +101,8 @@ public static class LibraryEndpoints {
             LibraryRoot created;
             try {
                 created = await settings.CreateLibraryRootAsync(request, cancellationToken, user.Id);
+            } catch (ReadOnlyLibraryException exception) {
+                return Results.Conflict(new ApiProblem(ApiProblemCodes.ReadOnlyLibrary, exception.Message));
             } catch (LibraryRootPathConflictException exception) {
                 return LibraryRootPathConflict(exception);
             }
@@ -134,6 +137,8 @@ public static class LibraryEndpoints {
                 LibraryRoot? root;
                 try {
                     root = await settings.UpdateLibraryRootAsync(id, request, cancellationToken);
+                } catch (ReadOnlyLibraryException exception) {
+                    return Results.Conflict(new ApiProblem(ApiProblemCodes.ReadOnlyLibrary, exception.Message));
                 } catch (LibraryRootPathConflictException exception) {
                     return LibraryRootPathConflict(exception);
                 }
@@ -156,8 +161,12 @@ public static class LibraryEndpoints {
                     return LibraryManagementForbidden();
                 }
 
-                var deleted = await settings.DeleteLibraryRootAsync(id, cancellationToken);
-                return deleted ? Results.Ok(new { ok = true }) : Results.NotFound();
+                try {
+                    var deleted = await settings.DeleteLibraryRootAsync(id, cancellationToken);
+                    return deleted ? Results.Ok(new { ok = true }) : Results.NotFound();
+                } catch (ReadOnlyLibraryException exception) {
+                    return Results.Conflict(new ApiProblem(ApiProblemCodes.ReadOnlyLibrary, exception.Message));
+                }
             })
             .WithName("DeleteLibraryRoot")
             .WithSummary("Deletes a watched media root.")

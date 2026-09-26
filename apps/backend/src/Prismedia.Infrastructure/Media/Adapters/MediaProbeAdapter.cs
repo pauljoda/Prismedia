@@ -55,7 +55,8 @@ public sealed class MediaProbeAdapter(MediaProbeService inner) : IMediaProbe {
                 chapter.Index,
                 chapter.Title,
                 chapter.StartSeconds,
-                chapter.EndSeconds)).ToArray());
+                chapter.EndSeconds,
+                chapter.Untitled)).ToArray());
     }
 
     public async Task<ImageProbeData?> ProbeImageAsync(string filePath, CancellationToken cancellationToken) {

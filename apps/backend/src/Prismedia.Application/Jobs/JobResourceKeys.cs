@@ -7,6 +7,10 @@ public static class JobResourceKeys {
     public const string IdentifyProviderWalk = "integration:identify-provider-walk";
     public const string AcquisitionIndexerSearch = "integration:acquisition-indexer-search";
     public const string LibraryScan = "library:scan";
+    public const string ManagerConnectionPrefix = "manager-connection:";
+
+    /// <summary>Serializes manager effects within one configured instance.</summary>
+    public static string ManagerConnection(Guid id) => $"{ManagerConnectionPrefix}{id}";
 
     public static string Entity(string entityId) => $"{EntityPrefix}{entityId}";
 

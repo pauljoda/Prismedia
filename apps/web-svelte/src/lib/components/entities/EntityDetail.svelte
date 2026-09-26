@@ -17,6 +17,7 @@
   import { resolve } from "$app/paths";
   import {
     Badge,
+    ArrowUpRight,
     BarChart3,
     Building2,
     Calendar,
@@ -25,6 +26,7 @@
     Star,
     Heart,
     Flame,
+    HardDrive,
     CheckCircle,
     Link,
     ListOrdered,
@@ -33,7 +35,7 @@
     Play,
     Users,
   } from "@lucide/svelte";
-  import { Button, Tabs } from "@prismedia/ui-svelte";
+  import { Button, Tabs, buttonVariants } from "@prismedia/ui-svelte";
   import EntityDetailEditLayout from "./EntityDetailEditLayout.svelte";
   import EntityDetailArtworkEditor from "./EntityDetailArtworkEditor.svelte";
   import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
@@ -47,6 +49,8 @@
     type EntityThumbnailCard,
   } from "$lib/entities/entity-thumbnail";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import MetadataCard from "$lib/components/MetadataCard.svelte";
+  import EntityExternalLibrary from "$lib/components/integrations/EntityExternalLibrary.svelte";
   import MetadataCardGrid from "$lib/components/MetadataCardGrid.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityDateEditRequest from "./EntityDateEditRequest.svelte";
@@ -76,8 +80,11 @@
   import EntityDetailMetadataSection from "./EntityDetailMetadataSection.svelte";
   import { EntityDetailEditController } from "./entity-detail-edit-controller.svelte";
   import { useEntityArtworkTransition } from "$lib/motion/entity-artwork-transition";
+  import { managedHoldingInputHref, managedHoldingSourceHref } from "$lib/integrations/managed-holding-route";
+  import { useSession } from "$lib/stores/session.svelte";
 
   const artworkTransition = useEntityArtworkTransition();
+  const session = useSession();
 
   type Props = EntityDetailProps;
 
@@ -94,6 +101,7 @@
     showHero = true,
     showFlagActions = true,
     tabs = [],
+    allowExternalAcquisitionTab = false,
     standaloneMetadataSectionIds = DEFAULT_STANDALONE_METADATA_SECTION_IDS,
     onMetadataSave,
     onImageAssetUpload,
@@ -129,6 +137,23 @@
       background: "#000000",
     },
   );
+  const externalLibraryProvenance = $derived(card.externalLibraryProvenance ?? null);
+  const externalLibraryLink = $derived.by(() => {
+    if (!session.isAdmin || !externalLibraryProvenance) return null;
+    const holding = externalLibraryProvenance.holding;
+    const identities = Object.entries(holding?.item.expectedExternalIds ?? {});
+    const hasIdentityPin = identities.length > 0
+      && identities.every(([provider, value]) => provider.trim().length > 0 && value.trim().length > 0);
+    return {
+      href: holding && hasIdentityPin
+        ? managedHoldingInputHref(externalLibraryProvenance.connectionId, holding.item)
+        : managedHoldingSourceHref(externalLibraryProvenance.connectionId, holding?.item.entityKind ?? card.entity.kind),
+      label: holding && hasIdentityPin ? "Open connected title" : "Browse source",
+      ariaLabel: holding && hasIdentityPin
+        ? `Open ${externalLibraryProvenance.connectionName} connected title`
+        : `Browse ${externalLibraryProvenance.connectionName} connected source`,
+    };
+  });
 
   function captureArtworkPalette(image: HTMLImageElement) {
     const palette = paletteFromImage(image);
@@ -144,6 +169,8 @@
   });
 
   type HeroMode = "image" | "poster-blur" | "gradient";
+  const standaloneDetailsTabId = "entity-details";
+  const externalLibraryTabId = "external-library";
 
   const renderedDescription = $derived(renderEntityDescriptionMarkdown(card.description));
   const hasStandaloneBodyContent = $derived(Boolean(renderedDescription) || card.tags.length > 0);
@@ -170,10 +197,32 @@
   const availableSections = $derived([...sections, ...coreSections]);
   const cardFull = $derived(card as EntityDetailCard & Partial<EntityDetailCardFull>);
   const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
-  const visibleTabs = $derived.by(() => tabs.filter(tabHasContent));
+  const routeTabs = $derived.by(() => tabs.filter(tab => tabHasContent(tab)
+    && (!externalLibraryProvenance || allowExternalAcquisitionTab || tab.id !== "acquisition")));
+  const visibleTabs = $derived.by((): EntityDetailTab[] => {
+    if (!externalLibraryProvenance) return routeTabs;
+
+    const externalLibraryTab: EntityDetailTab = {
+      id: externalLibraryTabId,
+      label: "External library",
+      icon: HardDrive,
+      sections: [],
+    };
+    const contentTabs = routeTabs.length > 0
+      ? routeTabs
+      : [{
+          id: standaloneDetailsTabId,
+          label: "Details",
+          sections: [...new Set(["description", "tags", ...standaloneMetadataSectionIds])],
+        }];
+
+    return [contentTabs[0], externalLibraryTab, ...contentTabs.slice(1)];
+  });
   const hasTabs = $derived(visibleTabs.length > 0);
   const activeTab = $derived(visibleTabs.find((tab) => tab.id === activeTabId) ?? visibleTabs[0] ?? null);
   const activeTabSections = $derived(activeTab ? sectionsForTab(activeTab) : []);
+  const isExternalLibraryTab = $derived(activeTab?.id === externalLibraryTabId);
+  const isStandaloneDetailsTab = $derived(activeTab?.id === standaloneDetailsTabId);
   const standaloneMetadataSections = $derived.by(() =>
     standaloneMetadataSectionIds
       .map(findSection)
@@ -223,6 +272,7 @@
     { role: ENTITY_FILE_ROLE.backdrop, label: "Header", hasAsset: headerHasAsset },
   ].filter(asset => artwork.supports(asset.role)));
   const canEdit = $derived(Boolean(onMetadataSave));
+  const canEditActiveTab = $derived(canEdit && !isExternalLibraryTab);
   const editActionLabel = $derived(activeTab ? `Edit ${activeTab.label}` : "Edit details");
   const cancelEditActionLabel = $derived(activeTab ? `Cancel ${activeTab.label}` : "Cancel editing");
   const standaloneSections = $derived.by(() => {
@@ -307,7 +357,7 @@
         return card.flags.length > 0;
       case "source":
       case "sources":
-        return (cardFull.sources?.length ?? 0) > 0 || (cardFull.fingerprints?.length ?? 0) > 0;
+        return (cardFull.sources?.length ?? 0) > 0 || (cardFull.fingerprints?.length ?? 0) > 0 || Boolean(cardFull.acquisitionAttribution);
       case "fingerprints":
         return (cardFull.fingerprints?.length ?? 0) > 0;
       default:
@@ -530,6 +580,13 @@
   {/if}
 {/snippet}
 
+{#snippet externalLibraryContent()}
+  {#if externalLibraryProvenance}
+    <EntityExternalLibrary origin={externalLibraryProvenance} sourceLink={externalLibraryLink}
+      hasSourceMedia={card.entity.hasSourceMedia === true} />
+  {/if}
+{/snippet}
+
 <EntityDateEditRequest
   {canEdit}
   {hasTabs}
@@ -591,7 +648,7 @@
 
           <EntityDetailHeroControls
             actionButtons={visibleActionButtons}
-            {canEdit}
+            canEdit={canEditActiveTab}
             {cancelEditActionLabel}
             {card}
             {editActionLabel}
@@ -688,19 +745,28 @@
       {#if activeTab}
         <Tabs.Content
           value={activeTab.id}
-          class="detail-tab-panel detail-content-card detail-content-card--tabbed"
+          class={isStandaloneDetailsTab
+            ? "detail-tab-panel"
+            : "detail-tab-panel detail-content-card detail-content-card--tabbed"}
           id={`entity-detail-panel-${activeTab.id}`}
           aria-labelledby={`entity-detail-tab-${activeTab.id}`}
         >
           {#key activeTab.id}
-            <div class="detail-tab-sections">
+            {#if isStandaloneDetailsTab}
+              {@render defaultDetailContent()}
+            {:else if isExternalLibraryTab}
+              <div class="detail-tab-sections">
+                {@render externalLibraryContent()}
+              </div>
+            {:else}
+              <div class="detail-tab-sections">
               {#if activeTabSections.length === 0 && !isEditingActiveTab}
                 {@const EmptyTabIcon = activeTab.icon ?? Pencil}
                 <StatePlaceholder
                   icon={EmptyTabIcon}
                   title={`No ${activeTab.label.toLowerCase()} yet`}
                 >
-                  {#if canEdit}
+                  {#if canEditActiveTab}
                     <Button
                       type="button"
                       variant="secondary"
@@ -721,9 +787,10 @@
                   {/each}
                 </MetadataCardGrid>
               {/if}
-            </div>
+              </div>
+            {/if}
           {/key}
-          {#if isEditingActiveTab}
+          {#if isEditingActiveTab && !isStandaloneDetailsTab}
             <EntityDetailEditControls
               cancelLabel={`Cancel ${activeTab.label}`}
               errors={editErrors}

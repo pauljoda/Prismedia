@@ -8,7 +8,9 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Files;
+using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -124,6 +126,23 @@ public sealed class MediaEntityDeletionService(
         }
 
         var ids = (await hierarchy.ListSubtreeIdsAsync(id, cancellationToken)).ToArray();
+        // External file ownership refuses deletion before cancelling work or publishing lifecycle claims.
+        var protectedRoots = await db.ExternalLibraryMounts.AsNoTracking().Select(mount => mount.LocalPath).ToArrayAsync(cancellationToken);
+        if (protectedRoots.Length > 0) {
+            if (await db.EntityLibraryRoots.AnyAsync(link => ids.Contains(link.EntityId)
+                && db.ExternalLibraryMounts.Any(mount => mount.LibraryRootId == link.LibraryRootId), cancellationToken))
+                return Conflict("This Entity belongs to an externally managed library. Manage those files in the connected application.");
+            var physical = await physicalManagedPaths.ListAsync(ids, cancellationToken);
+            if (physical.Any(source => protectedRoots.Any(root => CompletedPayloadFileSystem.Overlaps(
+                    CompletedPayloadFileSystem.CanonicalPath(root), CompletedPayloadFileSystem.CanonicalPath(source.Path)))))
+                return Conflict("This Entity owns files in an externally managed library. Manage those files in the connected application.");
+        }
+        // Active connected ownership must be cancelled or released first; settled request history and
+        // released reservations are removed with the Entity.
+        var activeRequestPhases = ManagedRequestPhaseDefinition.Active;
+        if (await db.FulfillmentReservations.AnyAsync(owner => owner.ReleasedAt == null && ids.Contains(owner.EntityId), cancellationToken)
+            || await db.ManagedRequests.AnyAsync(request => ids.Contains(request.EntityId) && activeRequestPhases.Contains(request.Phase), cancellationToken))
+            return Conflict("A connected application still owns this Entity. Cancel its request or stop managing it before deleting.");
         // Confirmed deletion is the terminal owner of this subtree. Resolve every acquisition and graph
         // before any other preflight so active workers cannot keep creating state while removal proceeds.
         var acquisitionIdsByEntity = new Dictionary<Guid, IReadOnlyList<Guid>>();

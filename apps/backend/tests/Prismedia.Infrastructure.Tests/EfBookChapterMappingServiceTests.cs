@@ -41,6 +41,40 @@ public sealed class EfBookChapterMappingServiceTests {
         var mapping = Assert.Single(response!.Mappings);
         Assert.Equal("Text/prologue.xhtml", mapping.ReadableChapterKey);
         Assert.Equal(secondTrackId, mapping.AudioTrackId);
+        Assert.Equal(BookChapterMappingOrigin.Manual.ToCode(), mapping.Origin);
+    }
+
+    [Fact]
+    public async Task KeepsEachSavedRowsConfirmedOriginAndRejectsAutomaticRows() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKind.Book, "Book");
+        var firstTrackId = AddEntity(db, EntityKind.AudioTrack, "Part 1", bookId, 0);
+        var secondTrackId = AddEntity(db, EntityKind.AudioTrack, "Part 2", bookId, 1);
+        AddSource(db, firstTrackId);
+        AddSource(db, secondTrackId);
+        await db.SaveChangesAsync();
+        var service = CreateService(db, new VisibleEntityScope());
+
+        var saved = await service.ReplaceAsync(
+            bookId,
+            new ReplaceBookChapterMappingsRequest([
+                new BookChapterAudioMapping("Text/prologue.xhtml", firstTrackId, BookChapterMappingOrigin.Ordered.ToCode()),
+                new BookChapterAudioMapping("Text/chapter-01.xhtml", secondTrackId, BookChapterMappingOrigin.Manual.ToCode())
+            ]),
+            CancellationToken.None);
+        var automatic = await service.ReplaceAsync(
+            bookId,
+            new ReplaceBookChapterMappingsRequest([
+                new BookChapterAudioMapping("Text/prologue.xhtml", firstTrackId, BookChapterMappingOrigin.Auto.ToCode())
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(BookChapterMappingSaveStatus.Saved, saved.Status);
+        Assert.Equal(BookChapterMappingSaveStatus.Invalid, automatic.Status);
+        var origins = (await service.GetAsync(bookId, CancellationToken.None))!.Mappings
+            .ToDictionary(mapping => mapping.ReadableChapterKey, mapping => mapping.Origin);
+        Assert.Equal(BookChapterMappingOrigin.Ordered.ToCode(), origins["Text/prologue.xhtml"]);
+        Assert.Equal(BookChapterMappingOrigin.Manual.ToCode(), origins["Text/chapter-01.xhtml"]);
     }
 
     [Fact]
@@ -122,6 +156,33 @@ public sealed class EfBookChapterMappingServiceTests {
     }
 
     [Fact]
+    public async Task RejectsChaptersMissingFromCurrentReadableContentsWithoutReplacingSavedPairs() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKind.Book, "Book");
+        var trackId = AddEntity(db, EntityKind.AudioTrack, "Part 1", bookId, 0);
+        AddSource(db, trackId);
+        await db.SaveChangesAsync();
+        var service = CreateService(db, new VisibleEntityScope());
+
+        var saved = await service.ReplaceAsync(
+            bookId,
+            new ReplaceBookChapterMappingsRequest([
+                new BookChapterAudioMapping("Text/prologue.xhtml", trackId)
+            ]),
+            CancellationToken.None);
+        var rejected = await service.ReplaceAsync(
+            bookId,
+            new ReplaceBookChapterMappingsRequest([
+                new BookChapterAudioMapping("Text/removed.xhtml", trackId)
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(BookChapterMappingSaveStatus.Saved, saved.Status);
+        Assert.Equal(BookChapterMappingSaveStatus.Invalid, rejected.Status);
+        Assert.Equal("Text/prologue.xhtml", Assert.Single(db.BookChapterAudioMappings).ReadableChapterKey);
+    }
+
+    [Fact]
     public async Task HiddenOrNonBookEntitiesBehaveAsMissing() {
         await using var db = CreateContext();
         var videoId = AddEntity(db, EntityKind.Video, "Video");
@@ -147,7 +208,23 @@ public sealed class EfBookChapterMappingServiceTests {
     private static EfBookChapterMappingService CreateService(
         PrismediaDbContext db,
         IEntityVisibilityChecker visibility) =>
-        new(db, visibility, new EfBookChapterMapService(db, new EpubBookContentsCache()));
+        new(db, visibility, new EfBookChapterMapService(db, new EpubBookContentsCache()),
+            new StaticBookContentsService());
+
+    private sealed class StaticBookContentsService : IBookContentsService {
+        private static readonly BookContentsResponse Contents = new([
+            Entry("Text/prologue.xhtml", 0),
+            Entry("Text/chapter-01.xhtml", 1),
+            Entry("opening", 2),
+            Entry("chapter-1", 3)
+        ]);
+
+        public Task<BookContentsResponse?> GetAsync(Guid bookId, CancellationToken cancellationToken) =>
+            Task.FromResult<BookContentsResponse?>(Contents);
+
+        private static BookContentsEntry Entry(string key, int order) =>
+            new(key, key, key, 0, order, null, null, null);
+    }
 
     private static Guid AddEntity(
         PrismediaDbContext db,
@@ -192,6 +269,8 @@ public sealed class EfBookChapterMappingServiceTests {
             Title = title,
             Seconds = seconds,
             EndSeconds = endSeconds,
+            // Container-imported chapters are the only markers that split a track into chapters.
+            SourceIndex = db.EntityMarkers.Local.Count(marker => marker.EntityId == entityId),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });

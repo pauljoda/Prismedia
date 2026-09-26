@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { BookRenditionRequestChoice } from './bookRenditionRequestChoice';
 import type { EntityMetadataProposal } from './entityMetadataProposal';
 import type { ExternalIdentity } from './externalIdentity';
 import type { RequestMediaKind } from './requestMediaKind';
@@ -28,4 +29,6 @@ export interface ReviewedRequestCommitRequest {
   selectedFields?: string[] | null;
   /** @nullable */
   selectedImages?: ReviewedRequestCommitRequestSelectedImages;
+  /** @nullable */
+  bookRenditions?: BookRenditionRequestChoice[] | null;
 }

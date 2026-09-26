@@ -45,6 +45,17 @@ public sealed class ScanLibraryJobHandler(
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanVideos;
 
+    protected override async Task<bool> DelegateRootReconciliationAsync(JobContext context, LibraryRootData root, CancellationToken token) {
+        var holdings = await videos.ListManagedHoldingsForRootAsync(root.Id, token);
+        if (holdings.Count == 0) return false;
+        // Reserve the whole mapped root: an external manager can rename the holding folder as well
+        // as its files. A folder-only reservation would let path discovery duplicate established IDs.
+        foreach (var id in holdings) await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ManagedLibraryReconcile,
+            TargetEntityKind: JobTargetKinds.ManagedHolding, TargetEntityId: id.ToString(), TargetLabel: root.Label,
+            ResourceKey: JobResourceKeys.LibraryScan), token);
+        return true;
+    }
+
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Video];
 
     protected override IReadOnlyList<MediaCategory> SnapshotCategories =>
@@ -154,6 +165,7 @@ public sealed class ScanLibraryJobHandler(
             files,
             files,
             reconcileWholeRoot: true,
+            authoritativeSnapshot: true,
             timer,
             cancellationToken);
     }
@@ -168,6 +180,7 @@ public sealed class ScanLibraryJobHandler(
         LibraryRootData root,
         IReadOnlyList<FileSignature> current,
         ScanDelta delta,
+        bool authoritativeSnapshot,
         CancellationToken cancellationToken) {
         if (delta.Added.Count + delta.Removed.Count + delta.Changed.Count > SurgicalChangeLimit) {
             return await ScanRootCoreAsync(context, root, cancellationToken);
@@ -209,6 +222,7 @@ public sealed class ScanLibraryJobHandler(
             files,
             allVideoFiles,
             reconcileWholeRoot: false,
+            authoritativeSnapshot,
             timer,
             cancellationToken);
     }
@@ -219,6 +233,7 @@ public sealed class ScanLibraryJobHandler(
         IReadOnlyList<string> files,
         IReadOnlyList<string> classificationFiles,
         bool reconcileWholeRoot,
+        bool authoritativeSnapshot,
         JobPhaseTimer timer,
         CancellationToken cancellationToken) {
 
@@ -443,9 +458,13 @@ public sealed class ScanLibraryJobHandler(
         int excluded;
         int orphans;
         using (timer.Phase("cleanup-stale-videos")) {
-            removed = await videos.RemoveStalePlayableVideosByRootAsync(root.Id, validPaths, cancellationToken);
+            removed = await videos.RemoveStalePlayableVideosByRootAsync(
+                root.Id,
+                validPaths,
+                cancellationToken,
+                authoritativeSnapshot);
             if (removed > 0)
-                logger.LogInformation("ScanLibrary: removed {Count} stale video entities from {Label}", removed, root.Label);
+                logger.LogInformation("ScanLibrary: reconciled {Count} stale video source(s) in {Label}", removed, root.Label);
         }
 
         using (timer.Phase("cleanup-stale-movies")) {
@@ -468,7 +487,7 @@ public sealed class ScanLibraryJobHandler(
 
         var report = timer.Finish();
         logger.LogInformation(
-            "[METRICS] scan-library {Label} — mode={Mode} affected={FileCount} total={TotalCount}, {Removed} stale videos, {StaleMovies} stale movies, {Excluded} excluded, {Orphans} orphans — {Timing}",
+            "[METRICS] scan-library {Label} — mode={Mode} affected={FileCount} total={TotalCount}, {Reconciled} stale videos, {StaleMovies} stale movies, {Excluded} excluded, {Orphans} orphans — {Timing}",
             root.Label,
             reconcileWholeRoot ? "full" : "surgical",
             files.Count,

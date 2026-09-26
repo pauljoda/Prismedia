@@ -58,7 +58,16 @@ public sealed class BookTitleIdentitySpecification : IReleaseSpecification {
             return Reason;
         }
 
-        if (ReleaseTitleIdentity.ContainsRun(release.Title, rules.TargetTitle)) {
+        if (rules.Kind is (EntityKind.ComicVolume or EntityKind.ComicInstallment) &&
+            (string.IsNullOrWhiteSpace(rules.TargetSeriesTitle) ||
+             (!ReleaseTitleIdentity.ContainsRun(release.Title, rules.TargetSeriesTitle) &&
+              !rules.TargetAlternativeTitles.Any(title => ReleaseTitleIdentity.ContainsRun(release.Title, title))))) {
+            return Reason;
+        }
+
+        if (ReleaseTitleIdentity.ContainsRun(release.Title, rules.TargetTitle) ||
+            rules.Kind == EntityKind.Book &&
+            rules.TargetAlternativeTitles.Any(title => ReleaseTitleIdentity.ContainsRun(release.Title, title))) {
             return null;
         }
 
@@ -68,25 +77,25 @@ public sealed class BookTitleIdentitySpecification : IReleaseSpecification {
         return rules.VolumeNumber is { } volume && BookReleaseTokens.ParseVolume(release.Title) == volume
             ? null
             : rules.Kind == EntityKind.ComicInstallment
-                && BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty) is { } installment
+                && (rules.TargetInstallmentNumber ?? BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty)) is { } installment
                 && BookReleaseTokens.ParseInstallment(release.Title) == installment
                     ? null
                     : Reason;
     }
 }
 
-/// <summary>Rejects a serialized-comic release that explicitly names a different chapter or issue.</summary>
+/// <summary>Requires an exact declared chapter or issue when a comic request identifies one.</summary>
 public sealed class ComicInstallmentSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.WrongInstallment;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
         if (rules.Kind != EntityKind.ComicInstallment
-            || BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty) is not { } expected) {
+            || (rules.TargetInstallmentNumber ?? BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty)) is not { } expected) {
             return null;
         }
 
         var declared = BookReleaseTokens.ParseInstallment(release.Title);
-        return declared is null || declared == expected ? null : Reason;
+        return declared == expected ? null : Reason;
     }
 }
 
@@ -112,14 +121,20 @@ public sealed class BookUnitSpecification : IReleaseSpecification {
 
 /// <summary>
 /// Rejects releases the importer can't handle. A title naming only an unimportable format (CBR/RAR/MOBI/AZW)
-/// is rejected up front so it is never downloaded only to dead-end at import. When a profile restricts
-/// formats, a title naming an importable format outside that set is also rejected. Titles that name no
-/// recognizable format pass — the actual payload is checked at import.
+/// is rejected up front so it is never downloaded only to dead-end at import; for the audiobook rendition the
+/// same holds for audio Prismedia cannot import (a FLAC, Opus, OGG, AAX, MKA, or AAC release, or advertised
+/// files with no MP3/M4A/M4B). When a profile restricts formats, a title naming an importable format outside
+/// that set is also rejected. Titles that name no recognizable format pass — the actual payload is checked
+/// while downloading and at import.
 /// </summary>
 public sealed class FormatSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.UnsupportedFormat;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (rules.BookRendition == BookRendition.Audiobook && !AudiobookReleaseShape.Expected(release).IsAdmissible) {
+            return Reason;
+        }
+
         var detected = BookFormatDetection.Detect(release.Title);
         if (detected.Count == 0) {
             // No importable format named — reject only if the title declares an unimportable format.
@@ -281,6 +296,8 @@ public sealed class QualityFloorSpecification : IReleaseSpecification {
 /// never affected and a genuinely-unknown owned quality can't silently disable the gate. When the owned source
 /// is unknown (the owned file's provenance could not be parsed), a source-only gain is NOT trusted to authorize
 /// a replacement — only a verifiable format improvement counts — matching the conservative-replace policy.
+/// An audiobook whose owned layout is recorded upgrades on structure instead: the candidate must be expected
+/// to carry chapter boundaries and outrank the owned layout (see <see cref="AudiobookReleaseShape.Upgrades"/>).
 /// </summary>
 public sealed class UpgradeSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.NotAnUpgrade;
@@ -288,6 +305,10 @@ public sealed class UpgradeSpecification : IReleaseSpecification {
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
         if (!rules.IsUpgradeSearch) {
             return null;
+        }
+
+        if (rules.BookRendition == BookRendition.Audiobook && rules.OwnedAudiobookShape is { } ownedShape) {
+            return AudiobookReleaseShape.Expected(release).Upgrades(ownedShape) ? null : Reason;
         }
 
         var owned = rules.OwnedQuality;
@@ -312,7 +333,8 @@ public sealed class UpgradeSpecification : IReleaseSpecification {
 /// web EPUB) can never replace the owned file. Gated on <see cref="BookAcquisitionRules.IsUpgradeSearch"/>. A
 /// title that names no format makes no downgrade claim, so it passes here and is judged by
 /// <see cref="UpgradeSpecification"/> (which rejects it as <see cref="ReleaseRejectionReason.NotAnUpgrade"/>) —
-/// avoiding a misleading downgrade reason for a format-anonymous title.
+/// avoiding a misleading downgrade reason for a format-anonymous title. For an audiobook with a recorded
+/// layout, a candidate known to be worse structured (for example one long MP3 over part files) is the downgrade.
 /// </summary>
 public sealed class FormatFloorSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.FormatDowngrade;
@@ -320,6 +342,10 @@ public sealed class FormatFloorSpecification : IReleaseSpecification {
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
         if (!rules.IsUpgradeSearch) {
             return null;
+        }
+
+        if (rules.BookRendition == BookRendition.Audiobook && rules.OwnedAudiobookShape is { } ownedShape) {
+            return AudiobookReleaseShape.Expected(release).Downgrades(ownedShape) ? Reason : null;
         }
 
         var tier = BookFormatDetection.DetectFormatTier(release.Title);

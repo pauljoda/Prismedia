@@ -34,6 +34,11 @@ describe("file actions", () => {
     ]);
   });
 
+  it("keeps external libraries readable without exposing mutations", () => {
+    expect(fileContextActions("directory", false, false, true).map(action => action.id)).toEqual(["open", "download", "rescan"]);
+    expect(fileContextActions("file", false, false, true).some(action => action.destructive)).toBe(false);
+  });
+
   it("offers removal instead of exclusion for excluded entries", () => {
     expect(fileContextActions("directory", false, true).map((action) => action.id)).toContain("remove-exclusion");
     expect(fileContextActions("directory", false, true).map((action) => action.id)).not.toContain("exclude");

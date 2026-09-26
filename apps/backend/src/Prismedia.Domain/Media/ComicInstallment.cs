@@ -2,6 +2,7 @@ using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using ComicInstallmentMetadataDocumentCapability = Prismedia.Contracts.Entities.ComicInstallmentMetadataCapability;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using MediaContentTypes = Prismedia.Contracts.Media.MediaContentTypes;
 
 namespace Prismedia.Domain.Media;
 
@@ -48,7 +49,14 @@ public sealed class ComicInstallmentEntityKindDefinition() : EntityKindDefinitio
         new CapabilityDates(),
         new CapabilityProgress(),
         new CapabilityConsumption()
-    ]) {
+    ]),
+    IIntegrationImportKindDefinition {
+    /// <inheritdoc />
+    public IntegrationImportPolicy IntegrationImport { get; } = new(
+        LibraryRootMediaCapability.ScanBooks,
+        extensions: [".cbz"],
+        mediaTypes: [MediaContentTypes.ComicBookZip, MediaContentTypes.Zip]);
+
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Chapter,
         EntityPositionCodes.Sort

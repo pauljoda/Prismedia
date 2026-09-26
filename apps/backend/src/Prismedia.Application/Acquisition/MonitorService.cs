@@ -1,6 +1,7 @@
 using Prismedia.Application.Requests;
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
@@ -17,7 +18,8 @@ public sealed class MonitorService(
     IProviderTrackingCatalog tracking,
     EntityUnmonitorService unmonitoring,
     IWantedSuppressionStore suppressions,
-    IJobQueueService? queue = null) {
+    IJobQueueService? queue = null,
+    IExternalFulfillmentOwnershipReader? fulfillmentOwnership = null) {
     public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) =>
         monitors.ListAsync(cancellationToken);
 
@@ -109,7 +111,11 @@ public sealed class MonitorService(
         MonitorPreset? preset,
         CancellationToken cancellationToken) {
         var (entity, trackable) = await ResolveEligibilityAsync(entityId, cancellationToken);
-        if (entity is null || trackable.Count == 0) {
+        if (entity is null) {
+            return null;
+        }
+        await EnsureExternallyUnownedAsync(entity, cancellationToken);
+        if (trackable.Count == 0) {
             return null;
         }
         // A null preset (the bare monitor toggle) keeps whatever preset a prior request recorded, or the All
@@ -124,7 +130,11 @@ public sealed class MonitorService(
                 var (currentEntity, currentTrackable) = await ResolveEligibilityAsync(
                     entityId,
                     leaseCancellationToken);
-                if (currentEntity is null || currentTrackable.Count == 0) {
+                if (currentEntity is null) {
+                    return;
+                }
+                await EnsureExternallyUnownedAsync(currentEntity, leaseCancellationToken);
+                if (currentTrackable.Count == 0) {
                     return;
                 }
 
@@ -171,12 +181,16 @@ public sealed class MonitorService(
         var missingChildEntityKinds = descriptor is null
             ? []
             : RequestKindRegistry.MissingChildEntityKinds(descriptor);
+        var owner = entity is null || descriptor is null
+            ? null
+            : await FindExternalOwnerAsync(entity, cancellationToken);
         return new MonitorEligibilityView(
-            descriptor is not null && trackable.Count > 0,
+            descriptor is not null && trackable.Count > 0 && owner is null,
             trackable,
             descriptor?.IsContainer ?? false,
             missingChildEntityKinds.Count > 0,
-            missingChildEntityKinds);
+            missingChildEntityKinds,
+            owner is null ? null : OwnershipReason(owner));
     }
 
     /// <summary>
@@ -217,6 +231,14 @@ public sealed class MonitorService(
         var trackableByEntity = await tracking.TrackableProvidersBatchAsync(
             trackingQueries,
             cancellationToken);
+        var owners = fulfillmentOwnership is null
+            ? new Dictionary<Guid, ExternalFulfillmentOwnership>()
+            : await fulfillmentOwnership.ListAsync(
+                eligibilityEntities.Values
+                    .Where(entity => descriptors.GetValueOrDefault(entity.EntityId) is not null)
+                    .Select(ToOwnershipQuery)
+                    .ToArray(),
+                cancellationToken);
         return requestedIds.Select(entityId => {
             var descriptor = descriptors.GetValueOrDefault(entityId);
             var missingChildEntityKinds = descriptor is null
@@ -224,18 +246,50 @@ public sealed class MonitorService(
                 : RequestKindRegistry.MissingChildEntityKinds(descriptor);
             var eligibilityEntity = eligibilityEntities.GetValueOrDefault(entityId);
             var trackable = trackableByEntity.GetValueOrDefault(entityId) ?? [];
+            var owner = owners.GetValueOrDefault(entityId);
             return new EntityMonitorStateView(
                 entityId,
-                descriptor is not null && trackable.Count > 0,
-                eligibilityEntity?.IsWanted == true && descriptor?.Committable == true,
+                descriptor is not null && trackable.Count > 0 && owner is null,
+                eligibilityEntity?.IsWanted == true && descriptor?.Committable == true && owner is null,
                 trackable,
                 descriptor?.IsContainer ?? false,
                 missingChildEntityKinds.Count > 0,
                 missingChildEntityKinds,
                 monitorByEntity.GetValueOrDefault(entityId),
-                acquisitionByEntity.GetValueOrDefault(entityId));
+                acquisitionByEntity.GetValueOrDefault(entityId),
+                owner is null ? null : OwnershipReason(owner));
         }).ToArray();
     }
+
+    private async Task EnsureExternallyUnownedAsync(
+        MonitorableEntity entity,
+        CancellationToken cancellationToken) {
+        var owner = await FindExternalOwnerAsync(entity, cancellationToken);
+        if (owner is not null) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.FulfillmentOwnershipConflict,
+                OwnershipReason(owner));
+        }
+    }
+
+    private async Task<ExternalFulfillmentOwnership?> FindExternalOwnerAsync(
+        MonitorableEntity entity,
+        CancellationToken cancellationToken) {
+        if (fulfillmentOwnership is null) return null;
+        var owners = await fulfillmentOwnership.ListAsync([ToOwnershipQuery(entity)], cancellationToken);
+        return owners.GetValueOrDefault(entity.EntityId);
+    }
+
+    private static FulfillmentOwnershipQuery ToOwnershipQuery(MonitorableEntity entity) =>
+        new(entity.EntityId, entity.Kind, entity.Kind == EntityKind.Book ? BookRendition.Ebook : null);
+
+    private static FulfillmentOwnershipQuery ToOwnershipQuery(MonitorEligibilityEntity entity) =>
+        new(entity.EntityId, entity.Kind, entity.Kind == EntityKind.Book ? BookRendition.Ebook : null);
+
+    private static string OwnershipReason(ExternalFulfillmentOwnership owner) =>
+        string.IsNullOrWhiteSpace(owner.ConnectionName)
+            ? "A connected application manages acquisition for this work. Release its ownership before enabling Prismedia monitoring."
+            : $"Acquisition is managed by {owner.ConnectionName}. Release its ownership before enabling Prismedia monitoring.";
 
     /// <summary>
     /// Loads the monitorable Entity and validates its authoritative provider route. Monitoring fails

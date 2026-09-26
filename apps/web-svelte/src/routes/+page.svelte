@@ -22,6 +22,7 @@
   import type { EntityCard } from "$lib/api/entities";
   import { fetchEntityShelfCached } from "$lib/entities/shelf-cache";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
@@ -36,6 +37,8 @@
     label: string;
     icon: typeof Film;
     href: string;
+    /** Card width override for kinds whose artwork reads large at the shelf default. */
+    itemWidth?: string;
   }
 
   interface DashboardSection extends SectionDef {
@@ -52,7 +55,8 @@
     { kind: ENTITY_KIND.image, label: "Images", icon: ImageIcon, href: "/images" },
     { kind: ENTITY_KIND.audioLibrary, label: "Audio", icon: Music, href: "/audio" },
     { kind: ENTITY_KIND.person, label: "People", icon: Users, href: "/people" },
-    { kind: ENTITY_KIND.studio, label: "Studios", icon: Building2, href: "/studios" },
+    // Studio plates match episode cards rather than the full-width poster shelf.
+    { kind: ENTITY_KIND.studio, label: "Studios", icon: Building2, href: "/studios", itemWidth: "clamp(140px, 13vw, 176px)" },
     { kind: ENTITY_KIND.tag, label: "Tags", icon: Tag, href: "/tags" },
   ];
 
@@ -75,6 +79,27 @@
   // second item). Cards without artwork get a material fallback backdrop.
   const heroCard = $derived(continueCards[0] ?? null);
   const continueRowCards = $derived(continueCards.slice(1));
+
+  /** Progress fills in the featured item's own family paint, the same pair its card meter uses. */
+  const heroAccent = $derived(heroCard ? entityAccentForKind(heroCard.entity.kind) : null);
+
+  /**
+   * One meter, or two when a Book keeps reading and listening separate: the billboard never merges
+   * progress the server keeps apart.
+   */
+  const heroProgress = $derived.by(() => {
+    if (!heroCard) return [];
+    const meters: Array<{ label: string | null; percent: number }> = [];
+    const reading = progressPercent(heroCard.progress);
+    const listening = heroCard.separateProgress ? progressPercent(heroCard.listeningProgress) : 0;
+    if (heroCard.separateProgress) {
+      if (reading > 0) meters.push({ label: "Read", percent: reading });
+      if (listening > 0) meters.push({ label: "Listened", percent: listening });
+    } else if (reading > 0) {
+      meters.push({ label: null, percent: reading });
+    }
+    return meters;
+  });
 
   /** Lucide icon for the hero fallback backdrop, derived from the entity kind. */
   const heroFallbackIcon = $derived(
@@ -213,9 +238,8 @@
     };
   }
 
-  function heroProgressPercent(card: EntityThumbnailCard): number {
-    const value = typeof card.progress === "number" ? card.progress : 0;
-    return Math.round(Math.min(1, Math.max(0, value)) * 100);
+  function progressPercent(value: number | null | undefined): number {
+    return Math.round(Math.min(1, Math.max(0, typeof value === "number" ? value : 0)) * 100);
   }
 </script>
 
@@ -317,20 +341,21 @@
               <p class="text-sm text-text-muted">{heroCard.subtitle}</p>
             {/if}
 
-            {#if typeof heroCard.progress === "number" && heroCard.progress > 0}
-              <div class="flex items-center gap-3">
+            {#each heroProgress as meter (meter.label ?? "progress")}
+              <div class="flex max-w-sm items-center gap-3">
+                {#if meter.label}
+                  <span class="w-16 font-mono text-[11px] uppercase tracking-[0.12em] text-text-muted">{meter.label}</span>
+                {/if}
                 <div class="h-1 w-full max-w-xs overflow-hidden rounded-xs bg-white/10">
                   <div
                     class="h-full rounded-xs"
-                    style:width="{heroProgressPercent(heroCard)}%"
-                    style:background="linear-gradient(90deg, #397f70 0 34%, #a1833b 34% 68%, #a24952 68% 100%)"
+                    style:width="{meter.percent}%"
+                    style:background="linear-gradient(90deg, {heroAccent?.primary}, {heroAccent?.secondary})"
                   ></div>
                 </div>
-                <span class="font-mono text-[11px] text-text-muted">
-                  {heroProgressPercent(heroCard)}%
-                </span>
+                <span class="font-mono text-[11px] tabular-nums text-text-muted">{meter.percent}%</span>
               </div>
-            {/if}
+            {/each}
 
             <div class="mt-1 flex items-center gap-3">
               <span
@@ -368,6 +393,7 @@
           icon={section.icon}
           cards={section.cards}
           href={section.href}
+          itemWidth={section.itemWidth}
         />
       {/if}
     {/each}

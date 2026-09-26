@@ -29,7 +29,9 @@ internal static class EntityCatalogQueryPolicy {
         IQueryable<EntityRow> query,
         IQueryable<EntityRow> allEntities,
         EntityCatalogSurface surface,
-        IReadOnlyCollection<string>? selectedKindCodes = null) {
+        IReadOnlyCollection<string>? selectedKindCodes = null,
+        bool includeArchived = false) {
+        if (!includeArchived) query = query.Where(entity => !entity.IsLibraryArchived);
         var selectedKinds = selectedKindCodes is null
             ? null
             : selectedKindCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);

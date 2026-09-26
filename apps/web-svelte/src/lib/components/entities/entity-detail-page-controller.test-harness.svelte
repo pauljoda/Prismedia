@@ -11,6 +11,7 @@
 
   export interface TestDetailEntity {
     capabilities: EntityCapability[];
+    hasSourceMedia?: boolean;
     id: string;
     kind: string;
     title: string;
@@ -20,15 +21,22 @@
     load: (context: EntityDetailPageLoadContext) => Promise<TestDetailEntity>;
     loadKey?: string;
     mutations?: Partial<EntityDetailPageMutations>;
+    freshnessProbe?: (entityId: string, context: EntityDetailPageLoadContext) => Promise<TestDetailEntity>;
+    freshnessIntervalMs?: number;
   }
 
-  let { load, loadKey = "entity-1", mutations }: Props = $props();
+  let { load, loadKey = "entity-1", mutations, freshnessProbe, freshnessIntervalMs }: Props = $props();
 
   const nsfw = provideNsfw(() => ({ initialMode: "off", allowed: true }));
   const chrome = provideAppChrome(() => false);
   // Test dependencies are fixed for the lifetime of each rendered harness.
   // svelte-ignore state_referenced_locally
   const fixedMutations = mutations;
+  // Test freshness dependencies are also fixed for each rendered harness.
+  // svelte-ignore state_referenced_locally
+  const fixedFreshnessProbe = freshnessProbe;
+  // svelte-ignore state_referenced_locally
+  const fixedFreshnessIntervalMs = freshnessIntervalMs;
   const detail = useEntityDetailPage<TestDetailEntity>({
     breadcrumbs: (entity) => [
       { label: "Entities", href: "/entities" },
@@ -37,6 +45,7 @@
     load: (context) => load(context),
     loadKey: () => loadKey,
     mutations: fixedMutations,
+    freshness: { probe: fixedFreshnessProbe, intervalMs: fixedFreshnessIntervalMs },
   });
 
   const metadataRequest: EntityMetadataUpdateRequest = {

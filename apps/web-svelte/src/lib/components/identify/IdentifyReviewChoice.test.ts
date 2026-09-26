@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntitySearchCandidate, PluginProvider } from "$lib/api/identify-types";
 import type { EntityThumbnail as EntityCard } from "$lib/api/generated/model";
 import IdentifyReviewChoice from "./IdentifyReviewChoice.svelte";
+import { ENTITY_KIND } from "$lib/api/generated/codes";
 
 vi.mock("vidstack/player", () => ({}));
 vi.mock("vidstack/player/layouts", () => ({}));
@@ -65,6 +66,21 @@ describe("IdentifyReviewChoice", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("explains missing book metadata setup and preserves the review destination", () => {
+    store.providersForKind.mockReturnValue([]);
+    render(IdentifyReviewChoice, {
+      entity: entity({ id: "book-1", kind: ENTITY_KIND.book, title: "A Game of Thrones" }),
+      candidates: [],
+    });
+
+    expect(screen.getByText("No metadata provider is ready for Books. Install a compatible plugin and configure any required credentials.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Set up metadata providers" })).toHaveAttribute(
+      "href", "/plugins?identifyId=book-1&identifyKind=book",
+    );
+    expect(screen.queryByRole("button", { name: "Rescan" })).not.toBeInTheDocument();
+    expect(store.identifyEntity).not.toHaveBeenCalled();
   });
 
   it("renders the selected plugin's complete search schema before any candidates exist", () => {

@@ -7,6 +7,7 @@ import {
   createJob as createJobRequest,
   getWorkerHealth,
   getJobGraph,
+  listJobActivity,
   listJobGraphs,
   listJobs,
   rebuildPreviews as rebuildPreviewsRequest,
@@ -19,6 +20,7 @@ import type {
   JobGraphDetailResponse,
   JobGraphListResponse,
   JobFailureClearResponse as GeneratedJobFailureClearResponse,
+  JobActivityResponse,
   JobListResponse,
   JobRun as GeneratedJobRun,
   WorkerHealthResponse as GeneratedWorkerHealthResponse,
@@ -30,7 +32,7 @@ export type JobRun = GeneratedJobRun & {
   targetId?: string | null;
   targetLabel?: string | null;
 };
-export type { JobCreateResponse, JobListResponse };
+export type { JobActivityResponse, JobCreateResponse, JobListResponse };
 export type { JobGraphDetailResponse, JobGraphListResponse };
 
 export interface JobCancelResponse {
@@ -60,6 +62,18 @@ export async function fetchJobs(
   return unwrapGenerated(
     await listJobs({ hideNsfw }, requestInit(options)),
     "Failed to load jobs",
+  );
+}
+
+/** Per-type hourly activity for the recent window, bucketed by the server so no row cap shortens it. */
+export async function fetchJobActivity(
+  hideNsfw: boolean,
+  hours = 24,
+  options?: RequestOptions,
+): Promise<JobActivityResponse> {
+  return unwrapGenerated(
+    await listJobActivity({ hideNsfw, hours }, requestInit(options)),
+    "Failed to load job activity",
   );
 }
 

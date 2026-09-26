@@ -44,10 +44,43 @@ Native plugins speak the versioned `IdentifyPluginRequest` /
                    candidate or proposal
 ```
 
-The process is isolated from Prismedia persistence. It receives a minimal Entity
+The protocol keeps persistence in Prismedia. The process receives a minimal Entity
 snapshot, plugin-owned query fields, known identities and structural context; it
 returns candidates or a proposal. The core owns validation, persistence,
 monitoring, acquisition, and metadata application.
+
+### Native process limits and trust
+
+Native .NET plugins are trusted executables running as the Prismedia operating-system
+user. They are not sandboxed. The host passes credentials in a temporary request file,
+created with owner-only access on Unix and deleted after invocation. Children receive
+an explicit platform environment rather than inheriting database and server secrets.
+
+Each invocation has a deadline and limits of 4 Mi characters for the request,
+16 Mi characters for stdout, 64 Ki characters for stderr, and 64 levels of JSON nesting.
+Exceeding an output limit terminates the process tree. Reported plugin errors redact
+supplied credentials and are limited to 4,096 characters. These protections reduce
+accidental exposure and resource use; only install executable packages you trust.
+Stash-compatible scrapers use their separate compatibility runner.
+
+### Saved credentials
+
+Metadata plugin credentials and native OpenSubtitles credentials are encrypted with
+the persistent application key ring. Startup upgrades legacy stored values automatically,
+including disabled providers. Plugins receive only credential keys declared by their
+current manifest. Canonical environment variables override saved values without replacing
+them in storage.
+
+Back up the data directory and its `keys/connections` folder along with the database.
+Restoring a database without these keys requires entering saved credentials again;
+unreadable encrypted values are never treated as plaintext. See
+[credential storage and recovery](./connections.md#credential-storage-and-recovery).
+
+## Connected applications
+
+Packages may also declare separately versioned integration capabilities. Configure
+independent instances in **Settings → Connections**. See [Connections and integration
+capabilities](./connections.md) for configuration, negotiation, and the process envelope.
 
 ## Wrapping Stash community scrapers
 
@@ -112,12 +145,33 @@ credentials.
 ## First-party plugins
 
 The first-party set includes **TMDB**, **AniList**, **YouTube**,
-**MusicBrainz**, **MangaDex**, and **Open Library**. They live in the
+**MusicBrainz**, **MangaDex**, **Open Library**, **Google Books**, and **Metron**. They live in the
 [Prismedia-Plugins](https://github.com/pauljoda/Prismedia-Plugins) sister repo,
 not in the main application repo. They are the best reference implementations
 for the current protocol.
 
 You install them from **Plugins → Prismedia Community** in the web app. One click downloads, verifies, and registers them.
+
+### Book and comic metadata
+
+Open Library and Google Books provide complementary book and edition metadata.
+MangaDex provides manga titles and chapters; AniList supports manga work metadata
+without inventing chapters from aggregate counts.
+
+Metron supplies Western comic series and issue metadata. Configure an account API
+token in its plugin settings, then choose a series run by title, start year,
+publisher, and run volume. Series review exposes independently identified issues
+with exact designations such as `½`, `12.5`, and `Annual 1`. Existing installments
+can also use Metron's issue search in Identify. Writing and art credits, publication
+dates, and supported covers remain reviewable before application.
+
+Metron series and issue identities use separate namespaces; its run-volume number
+does not create a collected-volume entity. Cover variants remain within the provider
+issue until Prismedia supports independently identified variant releases. Series
+expansion is bounded to 500 issues and fails visibly for larger or inconsistent lists.
+The plugin README describes API-token setup, numeric API-URL lookup, quota handling,
+and metadata limits. Metadata results do not provide comic downloads; acquisition
+uses the separately configured discovery and download capabilities.
 
 ## Where plugin code lives
 

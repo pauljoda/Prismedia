@@ -1,17 +1,24 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { AlertTriangle, Loader2, PackageSearch, PlugZap } from "@lucide/svelte";
-  import { Alert, Button, ChoiceGroup } from "@prismedia/ui-svelte";
+  import { onMount, untrack } from "svelte";
+  import { AlertTriangle, PackageSearch, PlugZap, ArrowLeft, ArrowUpRight, Library } from "@lucide/svelte";
+  import { Alert, Button, ChoiceGroup, Select } from "@prismedia/ui-svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { ENTITY_KIND, type RequestMediaKindCode } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, PLUGIN_CAPABILITY, CONNECTION_STATUS, type RequestMediaKindCode } from "$lib/api/generated/codes";
   import { fetchSettingsValues } from "$lib/api/settings";
-  import type { ExternalIdentity, RequestSearchResult } from "$lib/api/generated/model";
+  import type { ConnectionResponse, ExternalIdentity, RequestSearchResult } from "$lib/api/generated/model";
   import type { EntitySearchCandidate, PluginProvider } from "$lib/api/identify-types";
   import { fetchPluginProviders } from "$lib/api/plugins";
   import { searchRequestsByPlugin } from "$lib/api/requests";
-  import PluginSearchSurface from "$lib/components/plugins/PluginSearchSurface.svelte";
+  import PluginSearchForm from "$lib/components/plugins/PluginSearchForm.svelte";
+  import DiscoveryResults from "./DiscoveryResults.svelte";
+  import ConnectionCatalogBrowser from "$lib/components/integrations/ConnectionCatalogBrowser.svelte";
+  import ConnectedLibraryBrowser from "$lib/components/integrations/ConnectedLibraryBrowser.svelte";
+  import ConnectionCapabilityChips from "$lib/components/integrations/ConnectionCapabilityChips.svelte";
+  import ManagerSourceBrowser from "$lib/components/integrations/ManagerSourceBrowser.svelte";
+  import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
+  import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import {
     nextPluginSearchLimit,
     PLUGIN_SEARCH_MAX_LIMIT,
@@ -26,11 +33,21 @@
   import { discoverSearchProviders, discoverSearchSupport } from "$lib/requests/discovery-plugins";
   import { DISCOVERABLE_REQUEST_KINDS, numericValue } from "$lib/requests/request-helpers";
   import { requestKindAccent, requestKindIcon } from "$lib/requests/request-kind-presentation";
+  import { canBrowseRequestSource, requestSourceMode } from "$lib/requests/request-source-compatibility";
   import { settingKeys, valueAsStringMap } from "$lib/settings/app-settings";
+  import { mediaFamilyForKind, mediaFamilyOrder, type MediaFamily } from "$lib/entities/media-families";
+  import RequestFamilyCard, { type RequestFamilyKind } from "./RequestFamilyCard.svelte";
 
   interface Props {
     /** Search-page query state to restore when the review page's Back action is used. */
     back?: string | null;
+    connections?: ConnectionResponse[];
+    initialConnectionId?: string | null;
+    initialKind?: RequestMediaKindCode | null;
+    onConnectionChange?: (id: string | null) => void;
+    onKindChange?: (kind: RequestMediaKindCode | null) => void;
+    /** Concept: family cards and a compact kind-and-source bar instead of tiles and helper text. */
+    preview?: boolean;
   }
 
   type NavigableRequestResult = RequestSearchResult & {
@@ -43,7 +60,30 @@
     candidate: EntitySearchCandidate;
   }
 
-  let { back = null }: Props = $props();
+  let {
+    back = null,
+    connections = [],
+    initialConnectionId = null,
+    initialKind,
+    onConnectionChange,
+    onKindChange,
+    preview = false,
+  }: Props = $props();
+  // Preserve a browse draft while switching between workspace tabs.
+  let selectedConnectionId = $state(untrack(() => initialConnectionId ?? ""));
+  const selectedConnection = $derived(connections.find(item => item.id === selectedConnectionId));
+  const browseConnections = $derived(connections.filter(item => canBrowseRequestSource(item)));
+  const compatibleBrowseConnections = $derived.by(() => {
+    const entityKind = selectedKindInfo?.entityKind;
+    if (!entityKind) return browseConnections;
+    return browseConnections.filter((source) => canBrowseRequestSource(source, entityKind));
+  });
+  function chooseSource(id: string) {
+    const source = compatibleBrowseConnections.find(item => item.id === id);
+    selectedConnectionId = source?.id ?? "";
+    onConnectionChange?.(source?.id ?? null);
+    if (!source) chooseProvider(id);
+  }
 
   const nsfw = useNsfw();
 
@@ -51,7 +91,7 @@
   let defaultProviders = $state<Record<string, string>>({});
   let providersLoading = $state(true);
   let providersError = $state<string | null>(null);
-  let selectedKind = $state<RequestMediaKindCode | null>(null);
+  let selectedKind = $state<RequestMediaKindCode | null>(untrack(() => initialKind ?? null));
   let selectedProviderId = $state("");
   let searchValues = $state<Record<string, string>>({});
   let results = $state.raw<RequestSearchResult[]>([]);
@@ -67,6 +107,8 @@
   const selectedKindInfo = $derived(
     DISCOVERABLE_REQUEST_KINDS.find((kind) => kind.kind === selectedKind) ?? null,
   );
+  const connection = $derived(selectedConnection && canBrowseRequestSource(selectedConnection, selectedKindInfo?.entityKind)
+    ? selectedConnection : undefined);
   const defaultProviderId = $derived(
     selectedKindInfo
       ? defaultProviders[selectedKindInfo.pluginEntityKind]
@@ -77,6 +119,46 @@
       ? discoverSearchProviders(providers, selectedKind, hideNsfw, defaultProviderId)
       : [],
   );
+  $effect(() => {
+    const nextConnectionId = initialConnectionId ?? "";
+    untrack(() => {
+      if (nextConnectionId === selectedConnectionId) return;
+      selectedConnectionId = nextConnectionId;
+    });
+  });
+  $effect(() => {
+    if (initialKind === undefined) return;
+    const nextKind = initialKind ?? null;
+    untrack(() => {
+      if (nextKind === selectedKind) return;
+      if (!nextKind) {
+        selectedKind = null;
+        selectedProviderId = "";
+        searchValues = {};
+        resetSearch();
+        return;
+      }
+      applyKind(nextKind);
+    });
+  });
+  $effect(() => {
+    const source = selectedConnection;
+    const entityKind = selectedKindInfo?.entityKind;
+    if (!source || !entityKind || canBrowseRequestSource(source, entityKind)) return;
+    selectedConnectionId = "";
+    onConnectionChange?.(null);
+  });
+  const sourceOptions = $derived([
+    ...eligibleProviders.map(item => ({ value: item.id, label: item.name, annotation: "Find new titles" })),
+    ...compatibleBrowseConnections.map(item => ({ value: item.id, label: item.name,
+      annotation: item.status !== CONNECTION_STATUS.ready ? "Unavailable"
+        : requestSourceMode(item, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.externalManager ? "Find & request"
+        : requestSourceMode(item, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.connectedLibrary ? "Your collection" : "Browse & import" })),
+  ]);
+  function sourceIconUrl(id: string) {
+    const pluginId = connections.find(item => item.id === id)?.pluginId ?? id;
+    return providers.find(provider => provider.id === pluginId)?.iconUrl;
+  }
   const activeProvider = $derived(
     eligibleProviders.find((provider) => provider.id === selectedProviderId) ?? eligibleProviders[0] ?? null,
   );
@@ -109,8 +191,8 @@
   const kindChoices = orderedKinds.map(kind => ({ value: kind.kind, label: kind.plural, icon: requestKindIcon(kind.kind), iconColor: requestKindAccent(kind.kind) }));
 
   /**
-   * How many installed providers can actually search each kind. Surfacing this on the chooser
-   * answers "what can I even request?" before a selection is made, instead of after.
+   * How many installed providers or connected sources can serve each kind. Surfacing this on the
+   * chooser answers "what can I even request?" before a selection is made, instead of after.
    */
   const sourceCountByKind = $derived.by(() => {
     const counts = new Map<RequestMediaKindCode, number>();
@@ -122,11 +204,36 @@
           info.kind,
           hideNsfw,
           defaultProviders[info.pluginEntityKind] ?? null,
-        ).length,
+        ).length + connections.filter((connection) => canBrowseRequestSource(connection, info.entityKind)).length,
       );
     }
     return counts;
   });
+  /** The requestable kinds grouped by media family, each with the sources that can find it. */
+  const familyGroups = $derived.by(() => {
+    const groups = new Map<string, { family: MediaFamily; kinds: RequestFamilyKind[] }>();
+    for (const info of orderedKinds) {
+      const family = mediaFamilyForKind(info.entityKind);
+      let group = groups.get(family.key);
+      if (!group) {
+        group = { family, kinds: [] };
+        groups.set(family.key, group);
+      }
+      const searchSources = discoverSearchProviders(
+        providers,
+        info.kind,
+        hideNsfw,
+        defaultProviders[info.pluginEntityKind] ?? null,
+      ).map((provider) => ({ id: provider.id, name: provider.name, iconUrl: provider.iconUrl }));
+      const browseSources = connections
+        .filter((source) => canBrowseRequestSource(source, info.entityKind))
+        .map((source) => ({ id: source.id, name: source.name, iconUrl: sourceIconUrl(source.id) }));
+      group.kinds.push({ kind: info.kind, label: info.plural, icon: requestKindIcon(info.kind), sources: [...searchSources, ...browseSources] });
+    }
+    return [...groups.values()].sort((left, right) => mediaFamilyOrder(left.family) - mediaFamilyOrder(right.family));
+  });
+  const activeSourceId = $derived(connection?.id ?? activeProvider?.id ?? "");
+
   const canLoadMore = $derived(
     hasSearched && results.length >= searchLimit && searchLimit < PLUGIN_SEARCH_MAX_LIMIT,
   );
@@ -230,7 +337,7 @@
     searchLimit = PLUGIN_SEARCH_PAGE_SIZE;
   }
 
-  function chooseKind(kind: RequestMediaKindCode) {
+  function applyKind(kind: RequestMediaKindCode) {
     selectedKind = kind;
     const pluginEntityKind = DISCOVERABLE_REQUEST_KINDS
       .find((candidate) => candidate.kind === kind)?.pluginEntityKind;
@@ -249,6 +356,11 @@
     resetSearch();
   }
 
+  function chooseKind(kind: RequestMediaKindCode) {
+    applyKind(kind);
+    onKindChange?.(kind);
+  }
+
   function chooseProvider(providerId: string) {
     selectedProviderId = providerId;
     const provider = eligibleProviders.find((item) => item.id === providerId) ?? null;
@@ -257,6 +369,14 @@
       : [];
     searchValues = seedPluginSearchFields(fields, {}, "");
     resetSearch();
+  }
+
+  function resetToHome() {
+    selectedKind = null;
+    selectedProviderId = "";
+    searchValues = {};
+    resetSearch();
+    onKindChange?.(null);
   }
 
   function clearSearch() {
@@ -312,107 +432,174 @@
       namespace: result.externalIdentity.namespace,
     });
     if (back?.trim()) query.set("back", back.trim());
+    if (preview) query.set("layout", "preview");
 
     const href = `/request/${encodeURIComponent(selectedKind)}/${encodeURIComponent(result.externalIdentity.value)}?${query.toString()}`;
     void goto(resolve(href as "/"));
   }
 </script>
 
-<div class="space-y-4">
-  <section class="surface-panel overflow-visible">
-    <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
-      <PackageSearch class="h-3.5 w-3.5 text-text-accent" />
-      <span class="text-kicker text-text-accent">Discover</span>
-      <span class="font-mono text-[0.7rem] text-text-muted">choose a kind, then a source</span>
-    </header>
-
-    <div class="space-y-3 p-3.5">
-      <div class="space-y-1.5">
-        <span class="font-mono text-[0.72rem] text-text-muted">Content kind</span>
+<div class="space-y-5">
+  {#if preview}
+    {#if !selectedKind && !connection}
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4" role="group" aria-label="Choose what to find">
+        {#each familyGroups as group (group.family.key)}
+          <RequestFamilyCard
+            family={group.family}
+            kinds={group.kinds}
+            ready={!providersLoading}
+            onChoose={(kind) => chooseKind(kind as RequestMediaKindCode)}
+          />
+        {/each}
+      </div>
+      {#if browseConnections.length}
+        <section class="flex flex-col gap-2" aria-labelledby="request-sources">
+          <h2 id="request-sources" class="font-heading text-base font-semibold text-text-primary">
+            Sources <span class="ml-1 font-mono text-caption font-normal text-text-muted">{browseConnections.length}</span>
+          </h2>
+          <ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {#each browseConnections as source (source.id)}
+              <li>
+                <Button variant="outline" class="h-auto w-full min-w-0 justify-start gap-3 p-3 text-left" onclick={() => chooseSource(source.id)}>
+                  <PluginIcon name={source.name} iconUrl={sourceIconUrl(source.id)} class="size-8" />
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-sm font-semibold">{source.name}</span>
+                    <span class="mt-1 block text-xs font-normal text-text-muted"><ConnectionCapabilityChips connection={source} /></span>
+                  </span>
+                  <ArrowUpRight class="size-4 shrink-0 text-text-muted" aria-hidden="true" />
+                </Button>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
+    {:else}
+      <div class="flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-2">
+        <Button variant="ghost" size="icon-sm" aria-label="All media types" title="All media types"
+          onclick={() => { selectedConnectionId = ""; onConnectionChange?.(null); resetToHome(); }}>
+          <ArrowLeft aria-hidden="true" />
+        </Button>
         {#if selectedKind}
-          <!-- Once a kind is chosen the chooser collapses to chips so the search surface leads. -->
-          <ChoiceGroup type="single" options={kindChoices} value={selectedKind} onValueChange={chooseKind} ariaLabel="Choose a content kind" />
-        {:else}
-          <!--
-            Nothing selected is the page's real starting point, so it gets a full chooser rather
-            than a strip of chips over an empty page. Each card states whether a source exists.
-          -->
-          <div class="kind-chooser" role="group" aria-label="Choose a content kind">
-            {#each orderedKinds as kind (kind.kind)}
-              {@const KindIcon = requestKindIcon(kind.kind)}
-              {@const sources = sourceCountByKind.get(kind.kind) ?? 0}
-              <Button variant="outline"
-                class={`kind-card h-auto ${!providersLoading && sources === 0 ? "has-no-source" : ""}`}
-                style={`--family-accent: ${requestKindAccent(kind.kind)}`}
-                aria-label={kind.plural}
-                aria-describedby={`discover-sources-${kind.kind}`}
-                onclick={() => chooseKind(kind.kind)}
+          <Select
+            ariaLabel="Media type"
+            size="sm"
+            class="w-44"
+            options={kindChoices.map((choice) => ({ value: choice.value, label: choice.label }))}
+            value={selectedKind}
+            onchange={(value) => chooseKind(value as RequestMediaKindCode)}
+          >
+            {#snippet optionLeading(option)}
+              {@const OptionIcon = requestKindIcon(option.value as RequestMediaKindCode)}
+              <OptionIcon class="size-4 text-text-muted" aria-hidden="true" />
+            {/snippet}
+          </Select>
+        {/if}
+        {#if sourceOptions.length}
+          <span class="mx-1 hidden h-5 w-px bg-[var(--color-border-subtle)] sm:block" aria-hidden="true"></span>
+          <div class="flex min-w-0 flex-wrap gap-1" role="group" aria-label="Source">
+            {#each sourceOptions as option (option.value)}
+              {@const active = option.value === activeSourceId}
+              <Button
+                variant="ghost"
+                size="sm"
+                class={active ? "bg-[var(--color-surface-3)] text-text-primary" : "text-text-secondary"}
+                aria-pressed={active}
+                title={option.annotation}
+                onclick={() => chooseSource(option.value)}
               >
-                <span class="kind-card-rail" aria-hidden="true"></span>
-                <KindIcon class="kind-card-icon" aria-hidden="true" />
-                <span class="kind-card-label">{kind.plural}</span>
-                <span class="kind-card-sources" id={`discover-sources-${kind.kind}`}>
-                  {#if providersLoading}
-                    Checking sources…
-                  {:else if sources === 0}
-                    No source installed
-                  {:else}
-                    {sources} {sources === 1 ? "source" : "sources"}
-                  {/if}
-                </span>
+                <PluginIcon name={option.label} iconUrl={sourceIconUrl(option.value)} class="size-5" />
+                {option.label}
               </Button>
             {/each}
           </div>
         {/if}
       </div>
-
+    {/if}
+  {:else}
+  {#if !connection}
+    <section aria-label="Choose what to find" class="space-y-3">
       {#if selectedKind}
-        {#if providersLoading}
-          <div class="flex items-center gap-2 py-2 text-[0.78rem] text-text-muted" role="status">
-            <Loader2 class="h-3.5 w-3.5 animate-spin" />
-            Loading discovery sources…
-          </div>
-        {:else if providersError}
-          <Alert.Root variant="destructive">
-            <AlertTriangle />
-            <Alert.Description>{providersError}</Alert.Description>
-          </Alert.Root>
-        {:else if eligibleProviders.length === 0}
-          <StatePlaceholder icon={PlugZap} title="No compatible provider"
-            description={`Enable a provider in Plugins that supports ${selectedKindInfo?.plural.toLowerCase() ?? "this kind"}.`} />
-        {/if}
+        <ChoiceGroup type="single" options={kindChoices} value={selectedKind} onValueChange={chooseKind} ariaLabel="Choose a content kind" />
+      {:else}
+        <div class="space-y-1"><h2 class="text-lg font-semibold">What would you like to find?</h2><p class="text-sm text-text-muted">Choose a media type, or browse one of your connected sources below.</p></div>
+        <div class="kind-chooser" role="group" aria-label="Choose a content kind">
+          {#each orderedKinds as kind (kind.kind)}
+            {@const KindIcon = requestKindIcon(kind.kind)}
+            {@const sources = sourceCountByKind.get(kind.kind) ?? 0}
+            <Button variant="outline" class={`kind-card h-auto ${!providersLoading && sources === 0 ? "has-no-source" : ""}`}
+              style={`--family-accent: ${requestKindAccent(kind.kind)}`} aria-label={kind.plural} onclick={() => chooseKind(kind.kind)}>
+              <span class="kind-card-rail" aria-hidden="true"></span><KindIcon class="kind-card-icon" aria-hidden="true" />
+              <span class="kind-card-label">{kind.plural}</span>
+              <span class="kind-card-sources">{providersLoading ? "Checking sources…" : sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Add a source"}</span>
+            </Button>
+          {/each}
+        </div>
       {/if}
-    </div>
-  </section>
-
-  {#if searchError}
-    <Alert.Root variant="destructive"><AlertTriangle /><Alert.Description>{searchError}</Alert.Description></Alert.Root>
+    </section>
   {/if}
-  {#each providerWarnings as warning (warning)}
-    <Alert.Root role="status"><AlertTriangle /><Alert.Description>{warning}</Alert.Description></Alert.Root>
-  {/each}
 
-  {#if selectedKind && activeProvider}
-    <PluginSearchSurface
-      providers={eligibleProviders}
-      selectedProviderId={activeProvider.id}
-      fields={activeSearchFields}
-      values={searchValues}
-      onProviderChange={chooseProvider}
-      onValuesChange={(values) => (searchValues = values)}
-      onSubmit={() => void runSearch()}
-      onClear={clearSearch}
-      providerLabel="Source"
-      {searching}
-      submitDisabled={!canSubmitSearch}
-      {candidates}
-      entityKind={selectedKindInfo?.entityKind ?? ENTITY_KIND.book}
-      {hasSearched}
-      {activeCandidateKey}
-      onActivate={activateCandidate}
-      onLoadMore={canLoadMore ? () => void runSearch(nextPluginSearchLimit(searchLimit)) : null}
-      loadingMore={searching && results.length > 0}
-    />
+  {#if !selectedKind && !connection && browseConnections.length}
+    <section class="space-y-3" aria-label="Your sources">
+      <div class="space-y-1"><h2 class="text-lg font-semibold">Your sources</h2><p class="text-sm text-text-muted">Explore the collections and services you’ve connected.</p></div>
+      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {#each browseConnections as source (source.id)}
+          {@const sourceMode = requestSourceMode(source)}
+          <Button variant="outline" class="h-auto min-w-0 justify-start gap-3 p-4 text-left" onclick={() => chooseSource(source.id)}>
+            <PluginIcon name={source.name} iconUrl={sourceIconUrl(source.id)} class="size-7" />
+            <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{source.name}</span><span class="mt-1 block text-xs font-normal text-text-muted"><ConnectionCapabilityChips connection={source} /></span></span>
+            <ArrowUpRight class="size-4 shrink-0 text-text-muted" />
+          </Button>
+        {/each}
+      </div>
+    </section>
+  {:else if sourceOptions.length}
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
+      <label class="w-full space-y-1.5 sm:max-w-sm"><span class="text-xs font-medium text-text-muted">Source</span>
+        <Select ariaLabel="Source" options={sourceOptions} value={connection?.id ?? activeProvider?.id ?? ""}
+          placeholder="Browse a connected source" onchange={chooseSource}>
+          {#snippet optionLeading(option)}<PluginIcon name={option.label} iconUrl={sourceIconUrl(option.value)} class="size-5" />{/snippet}
+        </Select>
+      </label>
+      {#if connection}<Button variant="ghost" size="sm" onclick={() => { selectedConnectionId = ""; resetToHome(); onConnectionChange?.(null); }}><ArrowLeft />Back to Request</Button>
+      {:else if activeProvider}<p class="pb-2 text-xs text-text-muted">Search {activeProvider.name}, then choose how to add a title.</p>{/if}
+    </div>
+  {/if}
+
+  {/if}
+
+  {#if connection}
+    {#key connection.id}
+      {#if requestSourceMode(connection, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.externalManager}<ManagerSourceBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />
+      {:else if requestSourceMode(connection, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.connectedLibrary}<ConnectedLibraryBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />
+      {:else}<ConnectionCatalogBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />{/if}
+    {/key}
+  {:else}
+    {#if providersLoading}<StatePlaceholder icon={PackageSearch} title="Loading sources" busy />
+    {:else if providersError}<Alert.Root variant="destructive"><Alert.Description>{providersError}</Alert.Description></Alert.Root>
+    {:else if selectedKind && !eligibleProviders.length && !compatibleBrowseConnections.length}
+      <StatePlaceholder icon={PlugZap} title="No compatible provider" description={`Enable a source in Plugins for ${selectedKindInfo?.plural.toLowerCase() ?? "this media type"}.`} />
+      <a class="text-sm underline" href="/plugins">Browse plugins</a>
+    {:else if selectedKind && !eligibleProviders.length && compatibleBrowseConnections.length}
+      <StatePlaceholder icon={Library} title="Browse a compatible source" description="Choose a source above to browse its catalog or connected library." />
+    {/if}
+    {#if searchError}<Alert.Root variant="destructive"><AlertTriangle /><Alert.Description>{searchError}</Alert.Description></Alert.Root>{/if}
+    {#each providerWarnings as warning (warning)}<Alert.Root role="status"><Alert.Description>{warning}</Alert.Description></Alert.Root>{/each}
+    {#if selectedKind && activeProvider}
+      <div class="surface-panel p-4">
+        <PluginSearchForm compact fields={activeSearchFields} values={searchValues} onValuesChange={values => searchValues = values}
+          onSubmit={() => void runSearch()} onClear={clearSearch} loading={searching} submitDisabled={!canSubmitSearch} />
+      </div>
+      {#if candidates.length}
+        <div class="flex items-baseline justify-between gap-3"><h2 class="text-lg font-semibold">Search results</h2><span class="font-mono text-xs text-text-muted">{candidates.length} titles</span></div>
+        <DiscoveryResults cards={candidateEntries.map(({ candidate, result }, index) => entityReferenceToThumbnailCard({
+          id: String(index), kind: selectedKindInfo?.entityKind ?? ENTITY_KIND.book, title: candidate.title ?? "Untitled", thumbnailUrl: candidate.posterUrl,
+        }, { subtitle: [result.year, result.subtitle].filter(Boolean).join(" · ") }))}
+          disabled={searching} onActivate={card => { const entry = candidateEntries[Number(card.entity.id)]; if (entry) activateCandidate(entry.candidate, card.entity.id); }} />
+        {#if canLoadMore}<div class="flex justify-center"><Button variant="secondary" disabled={searching} onclick={() => void runSearch(nextPluginSearchLimit(searchLimit))}>{searching ? "Loading more…" : "Load more"}</Button></div>{/if}
+      {:else if searching}<StatePlaceholder icon={PackageSearch} title={`Searching ${activeProvider.name}`} busy />
+      {:else if hasSearched}<StatePlaceholder icon={PackageSearch} title="No matching titles" description={preview ? undefined : "Try a different search or choose another source."} />
+      {:else if !preview}<StatePlaceholder icon={PackageSearch} title={`Find your next ${selectedKindInfo?.label.toLowerCase() ?? "title"}`} description="Search by title or use the extra details above to narrow your results." />{/if}
+    {/if}
   {/if}
 </div>
 

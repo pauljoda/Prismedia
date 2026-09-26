@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Backups;
 using Prismedia.Application.Jobs.Handlers;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
 
@@ -58,6 +59,7 @@ public sealed class JobScheduler(
             RecoverStuckSearchesAsync,
             ScheduleRecycleBinCleanupAsync,
             ScheduleGridThumbnailSweepAsync,
+            ScheduleBookAlignmentBackfillAsync,
         ];
         foreach (var step in steps) {
             cancellationToken.ThrowIfCancellationRequested();
@@ -89,11 +91,18 @@ public sealed class JobScheduler(
         var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
 
         var scanSettings = await settings.GetScanSettingsAsync(cancellationToken);
-        if (!scanSettings.AutoScanEnabled || scanSettings.IntervalMinutes <= 0) {
+        if (scanSettings.IntervalMinutes <= 0) {
             return;
         }
 
         var roots = await settings.ListLibraryRootsAsync(cancellationToken);
+        IReadOnlySet<Guid> externallyMountedRootIds = scanSettings.AutoScanEnabled
+            ? new HashSet<Guid>()
+            : await scope.ServiceProvider.GetRequiredService<IExternalLibraryMountStore>()
+                .ListMountedLibraryRootIdsAsync(cancellationToken);
+        if (!scanSettings.AutoScanEnabled && externallyMountedRootIds.Count == 0) {
+            return;
+        }
         var scanInterval = TimeSpan.FromMinutes(scanSettings.IntervalMinutes);
         var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
 
@@ -103,21 +112,26 @@ public sealed class JobScheduler(
         // marker (fresh install or first deploy of this cadence) initializes to now instead of
         // triggering an immediate library-wide sweep.
         var integrityInterval = TimeSpan.FromHours(Math.Max(1, scanSettings.IntegrityIntervalHours));
-        var lastSweepAt = await ReadLastIntegritySweepAsync(settingsPersistence, cancellationToken);
-        if (lastSweepAt is null) {
+        var lastSweepAt = scanSettings.AutoScanEnabled
+            ? await ReadLastIntegritySweepAsync(settingsPersistence, cancellationToken)
+            : null;
+        if (scanSettings.AutoScanEnabled && lastSweepAt is null) {
             await settingsPersistence.SaveSettingOverrideAsync(
                 AppSettings.Scan.LastIntegritySweepAtKey,
                 JsonSerializer.Serialize(now),
                 cancellationToken);
         }
-        var integrityDue = lastSweepAt is not null && now - lastSweepAt >= integrityInterval;
+        var integrityDue = scanSettings.AutoScanEnabled
+            && lastSweepAt is not null
+            && now - lastSweepAt >= integrityInterval;
 
         var queued = 0;
         var deepQueued = 0;
         var dueRootCount = 0;
 
         foreach (var root in roots) {
-            if (!root.Enabled) {
+            if (!root.Enabled ||
+                !scanSettings.AutoScanEnabled && !externallyMountedRootIds.Contains(root.Id)) {
                 continue;
             }
 
@@ -410,6 +424,54 @@ public sealed class JobScheduler(
         }
 
         _gridThumbnailSweepQueuedOnStartup = true;
+    }
+
+    /// <summary>True once this worker run has queued the audiobook alignment backfill.</summary>
+    private bool _bookAlignmentBackfillQueuedOnStartup;
+
+    /// <summary>
+    /// Once per worker run, re-probes audiobook tracks whose file facts (title and track-number tags,
+    /// untitled chapters) were never recorded, and recomputes every Book chapter map built by an older
+    /// matcher version. Both lists are empty after the first run following an upgrade, so later runs
+    /// only pay two small queries. Queued jobs deduplicate against pending work.
+    /// </summary>
+    internal async Task ScheduleBookAlignmentBackfillAsync(CancellationToken cancellationToken) {
+        if (_bookAlignmentBackfillQueuedOnStartup) {
+            return;
+        }
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        if (scope.ServiceProvider.GetService<Books.IBookChapterMapService>() is not { } chapterMap) {
+            _bookAlignmentBackfillQueuedOnStartup = true;
+            return;
+        }
+
+        var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
+        var tracks = await chapterMap.ListTracksAwaitingProbeFactsAsync(cancellationToken);
+        foreach (var track in tracks) {
+            if (!await queue.HasPendingAsync(JobType.ProbeAudio, track.TrackId.ToString(), cancellationToken)) {
+                await queue.EnqueueAsync(
+                    EnqueueJobRequest.ForEntity(JobType.ProbeAudio, EntityKind.AudioTrack, track.TrackId.ToString(), track.Title),
+                    cancellationToken);
+            }
+        }
+
+        var maps = await chapterMap.ListOutdatedMatcherMapsAsync(cancellationToken);
+        foreach (var map in maps) {
+            if (!await queue.HasPendingAsync(JobType.MapBookChapters, map.BookId.ToString(), cancellationToken)) {
+                await queue.EnqueueAsync(
+                    EnqueueJobRequest.ForEntity(JobType.MapBookChapters, EntityKind.Book, map.BookId.ToString(), map.Title),
+                    cancellationToken);
+            }
+        }
+
+        if (tracks.Count > 0 || maps.Count > 0) {
+            logger.LogInformation(
+                "Scheduled audiobook alignment backfill: {Tracks} track probe(s), {Maps} chapter map(s).",
+                tracks.Count,
+                maps.Count);
+        }
+        _bookAlignmentBackfillQueuedOnStartup = true;
     }
 
     internal async Task ScheduleRecycleBinCleanupAsync(CancellationToken cancellationToken) {

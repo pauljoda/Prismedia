@@ -10,4 +10,5 @@ export interface FileRoot {
   label: string;
   path: string;
   enabled: boolean;
+  isReadOnly?: boolean;
 }

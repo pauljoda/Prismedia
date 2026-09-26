@@ -3,6 +3,7 @@ using Prismedia.Application.Security;
 using Prismedia.Infrastructure;
 using Prismedia.Infrastructure.Database;
 using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Security;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddPrismediaApplication();
@@ -25,4 +26,5 @@ var host = builder.Build();
 // database is not yet accepting connections on first boot.
 await DatabaseRestoreRunner.WaitForPendingRestoreToClearAsync(host.Services, builder.Configuration);
 await PrismediaMigrationRunner.WaitForDatabaseReadyAsync(host.Services, builder.Configuration);
+await ProviderCredentialUpgradeRunner.UpgradeAsync(host.Services, builder.Configuration);
 host.Run();

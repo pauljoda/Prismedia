@@ -12,6 +12,24 @@ public sealed class EntityCapabilityServiceProgressTests {
     private static readonly Guid ChapterOneId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid ChapterTwoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid OtherBookId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private static readonly Guid AudioTrackId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+
+    [Fact]
+    public async Task BookRejectsListeningCheckpointFromAnotherTrack() {
+        var repository = new FakeEntityWriteRepository(new CapabilityProgress());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
+
+        var result = await service.ReportProgressAsync(
+            BookId,
+            new EntityProgressReport(
+                Modality: ConsumptionModality.Listening,
+                Listening: new ListeningPositionRequest(Guid.NewGuid(), null, 10)),
+            CancellationToken.None);
+
+        Assert.Equal(EntityProgressReportStatus.NotFound, result.Status);
+        Assert.Null(repository.SavedEntity);
+        Assert.Null(repository.Book.Progress?.CheckpointFor(ConsumptionModality.Listening));
+    }
 
     [Fact]
     public async Task BookProgressCanMoveForwardFromEarlierChapter() {
@@ -453,6 +471,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     private sealed class FakeEntityWriteRepository : IEntityWriteRepository {
         private readonly BookChapter _chapterOne = new(ChapterOneId, "Chapter 1", parentEntityId: BookId, sortOrder: 0);
         private readonly BookChapter _chapterTwo = new(ChapterTwoId, "Chapter 2", parentEntityId: BookId, sortOrder: 1);
+        private readonly AudioTrack _audioTrack = new(AudioTrackId, "Part 1", null, null);
 
         public FakeEntityWriteRepository(CapabilityProgress progress) {
             Book = new Book(
@@ -460,6 +479,7 @@ public sealed class EntityCapabilityServiceProgressTests {
                 "Book",
                 BookType.Novel,
                 capabilities: [progress]);
+            Book.AddChild(_audioTrack);
         }
 
         public Book Book { get; }
@@ -487,7 +507,8 @@ public sealed class EntityCapabilityServiceProgressTests {
             id == BookId ? Book :
             id == OtherBookId ? OtherBook :
             id == ChapterOneId ? _chapterOne :
-            id == ChapterTwoId ? _chapterTwo : null;
+            id == ChapterTwoId ? _chapterTwo :
+            id == AudioTrackId ? _audioTrack : null;
     }
 
     private sealed class SingleEntityWriteRepository(Entity entity) : IEntityWriteRepository {

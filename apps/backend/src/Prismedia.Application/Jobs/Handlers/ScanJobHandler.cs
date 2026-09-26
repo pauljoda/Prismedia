@@ -73,7 +73,7 @@ public abstract class ScanJobHandler(
                     // scanning the remaining roots, and fail the job at the end.
                     try {
                         using (timer.Phase("root-scan")) {
-                            await ScanRootWithSnapshotAsync(context, currentRoot, changesOnly: false, cancellationToken);
+                            await ScanRootWithSnapshotAsync(context, currentRoot, changesOnly: false, forceReconcile: false, cancellationToken);
                         }
                         using (timer.Phase("root-last-scanned")) {
                             await roots.UpdateRootLastScannedAsync(currentRoot.Id, cancellationToken);
@@ -111,7 +111,7 @@ public abstract class ScanJobHandler(
             scannedRoots = 1;
             runLibraryWideCleanup = payload.Deep;
             using (timer.Phase("root-scan")) {
-                await ScanRootWithSnapshotAsync(context, root, payload.ChangesOnly, cancellationToken);
+                await ScanRootWithSnapshotAsync(context, root, payload.ChangesOnly, payload.ForceReconcile, cancellationToken);
             }
             using (timer.Phase("root-last-scanned")) {
                 await roots.UpdateRootLastScannedAsync(root.Id, cancellationToken);
@@ -158,6 +158,7 @@ public abstract class ScanJobHandler(
         JobContext context,
         LibraryRootData root,
         bool changesOnly,
+        bool forceReconcile,
         CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();
         var mode = "full";
@@ -174,6 +175,8 @@ public abstract class ScanJobHandler(
                 scanScope = await EnterScanScopeAsync(root, cancellationToken);
             }
             await using var acquiredScanScope = scanScope;
+
+            if (await DelegateRootReconciliationAsync(context, root, cancellationToken)) return;
 
             if (snapshots is null) {
                 // No snapshot store wired (e.g. in unit tests): always run the full scan.
@@ -238,7 +241,7 @@ public abstract class ScanJobHandler(
             // structure, and assets this scan would produce are already persisted. The first scan (no
             // snapshot) and any add/remove/change fall through to the full scan, which always sees the
             // whole file set and therefore keeps folder-context classification correct.
-            if (previous.Count > 0 && !delta.HasChanges) {
+            if (previous.Count > 0 && !delta.HasChanges && !forceReconcile) {
                 mode = changesOnly ? "changes-noop" : "unchanged";
                 logger.LogInformation(
                     "{JobType}: no file changes in {Label} ({Count} files), skipping detailed scan",
@@ -256,7 +259,9 @@ public abstract class ScanJobHandler(
                 return;
             }
 
-            mode = previous.Count == 0
+            mode = forceReconcile
+                ? "forced-full"
+                : previous.Count == 0
                 ? "full-no-snapshot"
                 : changesOnly
                     ? "surgical-change-intake"
@@ -288,9 +293,15 @@ public abstract class ScanJobHandler(
 
             ScanRootOutcome detailedOutcome;
             using (timer.Phase("detailed-reconcile")) {
-                detailedOutcome = previous.Count == 0
+                detailedOutcome = previous.Count == 0 || forceReconcile
                     ? await ScanRootCoreAsync(context, root, cancellationToken)
-                    : await ScanRootDeltaAsync(context, root, current, delta, cancellationToken);
+                    : await ScanRootDeltaAsync(
+                        context,
+                        root,
+                        current,
+                        delta,
+                        authoritativeSnapshot: !changesOnly,
+                        cancellationToken);
             }
 
             // Files the scan could not persist are withheld from the snapshot so the next scan sees
@@ -491,6 +502,9 @@ public abstract class ScanJobHandler(
     /// <summary>Returns true if this root should be scanned by this handler's media type.</summary>
     protected abstract bool IsEligibleRoot(LibraryRootData root);
 
+    /// <summary>Allows an authoritative external owner to replace ordinary path discovery for this root.</summary>
+    protected virtual Task<bool> DelegateRootReconciliationAsync(JobContext context, LibraryRootData root, CancellationToken token) => Task.FromResult(false);
+
     /// <summary>
     /// The media categories this handler enumerates under a root. Drives the incremental snapshot, so
     /// it must list every category the handler's detailed scan discovers (for example comic archives
@@ -530,6 +544,7 @@ public abstract class ScanJobHandler(
         LibraryRootData root,
         IReadOnlyList<FileSignature> current,
         ScanDelta delta,
+        bool authoritativeSnapshot,
         CancellationToken cancellationToken) =>
         ScanRootCoreAsync(context, root, cancellationToken);
 

@@ -24,7 +24,7 @@ public sealed class FilesService(
         return new FileRootsResponse(roots
             .Where(root => !hideNsfw || !root.IsNsfw)
             .OrderBy(root => root.Label, StringComparer.OrdinalIgnoreCase)
-            .Select(root => new FileRoot(root.Id, root.Label, root.Path, root.Enabled))
+            .Select(root => new FileRoot(root.Id, root.Label, root.Path, root.Enabled, root.IsReadOnly))
             .ToArray());
     }
 
@@ -220,6 +220,8 @@ public sealed class FilesService(
         var target = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
         await EnsureVisiblePathAsync(target, hideNsfw, cancellationToken);
         var detail = await storage.GetDetailAsync(target, [], cancellationToken);
+        if (target.Root.IsReadOnly)
+            throw new FileOperationException(ApiProblemCodes.ReadOnlyLibrary, "Manage external library inclusion in its connected application. Prismedia retains these items and their history.");
         await persistence.UpsertExclusionAsync(
             target.Root.Id,
             target.RelativePath,
@@ -252,7 +254,7 @@ public sealed class FilesService(
         CancellationToken cancellationToken) {
         var root = await GetRootAsync(request.RootId, hideNsfw, cancellationToken);
         if (string.IsNullOrWhiteSpace(request.Path)) {
-            return new FileOperationResponse(await QueueScansAsync([root], cancellationToken));
+            return new FileOperationResponse(await QueueScansAsync([root], cancellationToken, forceReconcile: true));
         }
         var target = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
         return new FileOperationResponse(await QueueChangedScansAsync(
@@ -420,7 +422,8 @@ public sealed class FilesService(
 
     private async Task<int> QueueScansAsync(
         IEnumerable<FileLibraryRoot> roots,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        bool forceReconcile = false) {
         var uniqueRoots = roots
             .GroupBy(root => root.Id)
             .Select(group => group.First())
@@ -432,17 +435,17 @@ public sealed class FilesService(
 
         var queued = 0;
         foreach (var root in uniqueRoots) {
-            queued += await LibraryScanJobs.QueueScansForRootAsync(
-                jobs,
-                root.Id,
-                root.Label,
-                new LibraryScanSelection(
+            var selection = new LibraryScanSelection(
                 Videos: root.ScanVideos,
                 Images: root.ScanImages,
                 Audio: root.ScanAudio,
                 Books: root.ScanBooks,
-                Comics: root.ScanBooks),
-                cancellationToken);
+                Comics: root.ScanBooks);
+            queued += await (forceReconcile
+                ? LibraryScanJobs.QueueReconcileScansForRootAsync(
+                    jobs, root.Id, root.Label, selection, cancellationToken)
+                : LibraryScanJobs.QueueScansForRootAsync(
+                    jobs, root.Id, root.Label, selection, cancellationToken));
         }
 
         return queued;

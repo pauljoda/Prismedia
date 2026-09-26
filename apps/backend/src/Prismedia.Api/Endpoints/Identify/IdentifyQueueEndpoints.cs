@@ -1,4 +1,6 @@
+using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
+using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.System;
 
@@ -19,6 +21,20 @@ internal static class IdentifyQueueEndpoints {
             .WithName("ListIdentifyQueue")
             .WithSummary("Lists durable identify queue items.")
             .Produces<IReadOnlyList<IdentifyQueueItem>>();
+
+        group.MapGet("/unidentified", async (
+            string? kind,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            IUnidentifiedEntityCounter counter,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await counter.CountUnidentifiedAsync(
+                kind,
+                NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                cancellationToken)))
+            .WithName("CountUnidentifiedEntities")
+            .WithSummary("Counts items with media that still wait for identification, per kind.")
+            .Produces<IReadOnlyList<UnidentifiedKindCount>>();
 
         group.MapPost("/queue/entities/{entityId:guid}", async (
             Guid entityId,

@@ -10,6 +10,8 @@ namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Audio-track identity reconciliation owned by <see cref="AcquisitionHintApplier"/>.</summary>
 public sealed partial class AcquisitionHintApplier {
+    #region Actions - Audio Reconciliation
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<WantedAudioTrackReconciliation>> ReconcileExistingWantedAudioTracksAsync(
         Guid libraryRootId,
@@ -303,6 +305,9 @@ public sealed partial class AcquisitionHintApplier {
         || await db.UserEntityStates.AsNoTracking().AnyAsync(
             row => row.EntityId == entityId || row.ProgressCurrentEntityId == entityId,
             cancellationToken)
+        || await db.UserProgressCheckpoints.AsNoTracking().AnyAsync(
+            row => row.EntityId == entityId || row.PositionEntityId == entityId,
+            cancellationToken)
         || await db.EntityConsumptionEvents.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
         || await db.EntityStats.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
         || await db.EntityDates.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
@@ -326,4 +331,6 @@ public sealed partial class AcquisitionHintApplier {
         || await db.CollectionDetails.AsNoTracking().AnyAsync(row => row.CoverItemEntityId == entityId, cancellationToken)
         || await db.GalleryDetails.AsNoTracking().AnyAsync(row => row.CoverImageEntityId == entityId, cancellationToken)
         || await db.Entities.AsNoTracking().AnyAsync(row => row.ParentEntityId == entityId, cancellationToken);
+
+    #endregion
 }

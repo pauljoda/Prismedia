@@ -383,7 +383,7 @@ public sealed partial class LibraryScanPersistenceService {
         await UpsertDescriptionIfMissingAsync(entityId, metadata.Summary, now, cancellationToken);
         await AddCreditsAsync(entityId, metadata.Creators, CreditRole.Creator, now, markNsfw, cancellationToken);
         if (metadata.PageCount is { } pageCount) {
-            await EntityPageCountPersistence.SetAsync(_db, entityId, pageCount, cancellationToken);
+            await EntityPageCountPersistence.SetAsync(_db, entityId, pageCount, cancellationToken, SaveChangesWithLifecycleAsync);
         }
         if (markNsfw && !entity.IsNsfw) {
             entity.IsNsfw = true;

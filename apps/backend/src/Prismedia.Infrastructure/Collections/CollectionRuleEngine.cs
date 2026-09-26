@@ -79,6 +79,7 @@ public sealed class CollectionRuleEngine(
         sb.Append("WHERE e.kind_code = ");
         var kindParam = ctx.AddParam(kindCode, NpgsqlDbType.Text);
         sb.AppendLine(kindParam);
+        sb.AppendLine("AND NOT e.is_library_archived");
         var catalogPlan = EntityCatalogQueryPolicy.PlanFor(EntityCatalogSurface.Collection, kindCode);
         if (catalogPlan.RequiresTopLevel) {
             sb.AppendLine("AND e.parent_entity_id IS NULL");

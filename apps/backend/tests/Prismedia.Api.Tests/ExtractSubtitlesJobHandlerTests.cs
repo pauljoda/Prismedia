@@ -437,7 +437,7 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album,
-            int? trackNumber, CancellationToken cancellationToken) => throw new NotSupportedException();
+            string? title, int? trackNumber, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<EntityTechnicalData?> GetEntityTechnicalAsync(Guid entityId,
             CancellationToken cancellationToken) => throw new NotSupportedException();

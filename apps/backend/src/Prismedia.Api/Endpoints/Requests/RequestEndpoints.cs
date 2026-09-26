@@ -58,6 +58,7 @@ public static class RequestEndpoints {
             .WithName("ReviewRequest")
             .WithSummary("Gets the core plugin proposal immediately and starts progressive child and relationship identification.")
             .Produces<RequestReviewResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status502BadGateway)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -171,6 +172,43 @@ public static class RequestEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status404NotFound)
             .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
+        group.MapPost("/prepare-managed-movie", async (
+            ReviewedRequestCommitRequest request, ReviewedWantedMovieService service, CancellationToken token) => {
+                try { return Results.Ok(await service.PrepareAsync(request, token)); }
+                catch (RequestCommitValidationException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message)); }
+                catch (ExternalIdentityAmbiguityException error) { return ExternalIdentityConflict(error); }
+            })
+            .RequireAdmin()
+            .WithName("PrepareManagedMovie")
+            .WithSummary("Saves a reviewed wanted movie without native acquisition, before a separate external-manager request.")
+            .Produces<PreparedWantedMovieResponse>().Produces<ApiProblem>(400).Produces<ApiProblem>(409);
+
+        group.MapPost("/prepare-managed-book", async (
+            ReviewedRequestCommitRequest request, ReviewedWantedBookService service, CancellationToken token) => {
+                try { return Results.Ok(await service.PrepareAsync(request, token)); }
+                catch (RequestCommitValidationException error) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
+                }
+                catch (ExternalIdentityAmbiguityException error) { return ExternalIdentityConflict(error); }
+            })
+            .RequireAdmin()
+            .WithName("PrepareManagedBook")
+            .WithSummary("Saves one reviewed Book work before a rendition-specific connected-manager choice.")
+            .Produces<PreparedWantedBookResponse>().Produces<ApiProblem>(400).Produces<ApiProblem>(409);
+
+        group.MapPost("/prepare-managed-series", async (
+            ReviewedRequestCommitRequest request, ReviewedWantedSeriesService service, CancellationToken token) => {
+                try { return Results.Ok(await service.PrepareAsync(request, token)); }
+                catch (RequestCommitValidationException error) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
+                }
+                catch (ExternalIdentityAmbiguityException error) { return ExternalIdentityConflict(error); }
+            })
+            .RequireAdmin()
+            .WithName("PrepareManagedSeries")
+            .WithSummary("Saves a finite reviewed episode selection without native acquisition or monitoring, before a separate external-manager request.")
+            .Produces<PreparedWantedSeriesResponse>().Produces<ApiProblem>(400).Produces<ApiProblem>(409);
+
         group.MapPost("/commit-entity", async (
             RequestEntityCommitRequest request,
             bool? hideNsfw,
@@ -196,6 +234,30 @@ public static class RequestEndpoints {
             .Produces<RequestCommitResponse>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound)
             .Produces<ApiProblem>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/commit-book-renditions", async (
+            RequestBookRenditionsCommitRequest request,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            RequestCommitService commits,
+            CancellationToken cancellationToken) => {
+                try {
+                    var response = await commits.RequestBookRenditionsAsync(
+                        request,
+                        NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                        cancellationToken);
+                    return response is null
+                        ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The Book was not found."))
+                        : Results.Ok(response);
+                } catch (RequestCommitValidationException ex) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, ex.Message));
+                }
+            })
+            .WithName("CommitBookRenditionsRequest")
+            .WithSummary("Requests selected ebook and audiobook renditions of one Book with separate outcomes.")
+            .Produces<RequestCommitResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapPost("/commit-missing-children", async (
             MissingChildrenCommitRequest request,

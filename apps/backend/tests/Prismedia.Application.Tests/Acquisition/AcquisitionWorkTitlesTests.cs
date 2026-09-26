@@ -81,6 +81,39 @@ public sealed class AcquisitionWorkTitlesTests {
     }
 
     [Fact]
+    public void FormalBookNamesKeepTheRequestedRenditionAndAuthor() {
+        var input = new AcquisitionSearchInput(Guid.NewGuid(), "Original Title", "Ada Writer", EntityKind.Book,
+            BookRendition: BookRendition.Ebook) {
+            AlternativeWorkTitles = ["Original.Title", "Translated Title", "Translated.Title", "Another Title"]
+        };
+
+        var variants = AcquisitionWorkTitles.BookFormalFallbackQueryInputs(input);
+
+        Assert.Equal(["Translated Title", "Another Title"], variants.Select(variant => variant.Title));
+        Assert.All(variants, variant => {
+            Assert.Equal(input.Id, variant.Id);
+            Assert.Equal(input.Author, variant.Author);
+            Assert.Equal(input.BookRendition, variant.BookRendition);
+        });
+    }
+
+    [Fact]
+    public void FormalComicRunNamesKeepTheExactIssueSelection() {
+        var input = new AcquisitionSearchInput(Guid.NewGuid(), "Issue 12.5", null, EntityKind.ComicInstallment,
+            Series: "Original Run") {
+            InstallmentLabel = "12.5",
+            AlternativeWorkTitles = ["Translated Run"]
+        };
+
+        var variant = Assert.Single(AcquisitionWorkTitles.BookFormalFallbackQueryInputs(input));
+
+        Assert.Equal("Translated Run", variant.Series);
+        Assert.Equal(input.Title, variant.Title);
+        Assert.Equal(input.InstallmentLabel, variant.InstallmentLabel);
+        Assert.Empty(AcquisitionWorkTitles.BookFormalFallbackQueryInputs(input with { Series = null }));
+    }
+
+    [Fact]
     public void AlternativeNameNumbersDoNotLeakIntoEpisodeMappingOrLibraryNaming() {
         var plan = TvImportPlanBuilder.PlanUnits([new("Room.104 - 57 [1080p H.264].mkv", 1000)],
             "Primary Series", 2, null,

@@ -44,8 +44,6 @@ public sealed record OpdsBookEntry(
     string? Summary,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    BookType BookType,
-    BookFormat Format,
     Guid? SeriesId,
     string? SeriesTitle,
     IReadOnlyList<OpdsContributor> Authors,

@@ -6,6 +6,43 @@ using Prismedia.Infrastructure.Plugins;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class StructuralChildMatcherTests {
+    [Theory]
+    [InlineData("12", "12.5", false)]
+    [InlineData("12A", "12B", false)]
+    [InlineData("012.50", "12.5", true)]
+    public void ExactComicLabelsOverrideCoincidentalTitlesAndShelfPositions(string localLabel, string remoteLabel, bool expected) {
+        var local = Local(EntityKind.ComicInstallment.ToCode(), "Interlude", 12) with { InstallmentLabel = localLabel };
+        var provider = Proposal(EntityKind.ComicInstallment, "Interlude", (EntityPositionCodes.Chapter, 12));
+        provider = provider with { Patch = provider.Patch with {
+            PositionEntries = [new EntityPosition(EntityPositionCodes.Chapter, 12, remoteLabel)]
+        } };
+        Assert.Equal(expected, StructuralChildMatcher.IsSameLocalAndProviderChild(local, provider));
+    }
+
+    [Fact]
+    public void DifferentFractionalChaptersInProviderTreesAreNotDeduplicatedByIntegerSortOrder() {
+        var first = Proposal(EntityKind.ComicInstallment, "Chapter 12", (EntityPositionCodes.Sort, 12));
+        var second = Proposal(EntityKind.ComicInstallment, "Chapter 12.5", (EntityPositionCodes.Sort, 12));
+        Assert.False(StructuralChildMatcher.IsSameProposalChild(first, second));
+    }
+
+    [Fact]
+    public void AmbiguousSameNumberComicHoldingsRequireReview() {
+        var first = Local(EntityKind.ComicInstallment.ToCode(), "Chapter 12.5", 12);
+        var second = Local(EntityKind.ComicInstallment.ToCode(), "Chapter 12.5", 12);
+        var provider = Proposal(EntityKind.ComicInstallment, "Chapter 12.5", (EntityPositionCodes.Sort, 12));
+        Assert.Null(StructuralChildMatcher.FindLocalChild(provider, [first, second], new HashSet<Guid>(), false));
+    }
+
+    [Fact]
+    public void DifferentProviderReleaseIdentitiesAreNotCollapsedByMatchingChapterLabels() {
+        var first = Proposal(EntityKind.ComicInstallment, "Chapter 12.5", (EntityPositionCodes.Sort, 12),
+            new Dictionary<string, string> { ["fixture-release"] = "first" });
+        var second = Proposal(EntityKind.ComicInstallment, "Chapter 12.5", (EntityPositionCodes.Sort, 12),
+            new Dictionary<string, string> { ["fixture-release"] = "second" });
+        Assert.False(StructuralChildMatcher.IsSameProposalChild(first, second));
+    }
+
     [Fact]
     public void NormalEpisodeMatchStillUsesPositionWhenCountsAgree() {
         var local = Local(EntityKind.VideoEpisode.ToCode(), "Different Local Title", 1);

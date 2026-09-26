@@ -119,8 +119,8 @@
 {#if acq.visible}
   <ManualAcquisitionActions
     entityId={entity?.id ?? ""}
-    canReplace={Boolean(entity) && uploadableAcquisitionKind && hasOwnedContent && replaceableKind}
-    canUpload={Boolean(entity) && uploadableAcquisitionKind && (Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind))}
+    canReplace={!acq.monitorUnavailableReason && Boolean(entity) && uploadableAcquisitionKind && hasOwnedContent && replaceableKind}
+    canUpload={!acq.monitorUnavailableReason && Boolean(entity) && uploadableAcquisitionKind && (Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind))}
     onStarted={async (detail) => {
       acq.setAcquisition(detail);
       await acq.refresh();
@@ -181,6 +181,15 @@
       {/if}
 
       <aside class="acquisition-settings" aria-label="Acquisition settings">
+        {#if acq.monitorUnavailableReason}
+          <Card.Root size="sm">
+            <Card.Header>
+              <Card.Title role="heading" aria-level={2}>Managed acquisition</Card.Title>
+              <Card.Description>{acq.monitorUnavailableReason}</Card.Description>
+            </Card.Header>
+          </Card.Root>
+        {/if}
+
         {#if showEntityRequestControls && acq.showMonitor}
           <EntityMonitorControl
             {acq}

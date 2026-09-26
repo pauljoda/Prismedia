@@ -5,6 +5,8 @@
  * OpenAPI spec version: 1.0.0
  */
 import type {
+  AcquireCatalogOfferRequest,
+  AcquireExecutorItemRequest,
   AcquireVideoSubtitleRequest,
   AcquireVideoSubtitleResponse,
   AcquisitionBlocklistClearResponse,
@@ -25,15 +27,19 @@ import type {
   ApiProblem,
   ApplyIdentifyProposalRequest,
   ApplyIdentifyQueueItemRequest,
+  AttachExistingExternalLibraryMountRequest,
   AudioPlaybackDiagnosticRequest,
   BookAcquisitionProfileSaveRequest,
   BookAcquisitionProfileView,
+  BookAlignmentResponse,
   BookChapterMappingsResponse,
   BookContentsResponse,
+  BrowseConnectionRequest,
   BrowseLibraryPathParams,
   BrowserSessionResponse,
   BulkJobResponse,
   CancelJobsParams,
+  CancelManagedRequestInput,
   ChangeOwnPasswordRequest,
   ClearAcquisitionBlocklistParams,
   ClearJobFailuresParams,
@@ -48,14 +54,23 @@ import type {
   CollectionRulePreviewRequest,
   CollectionRulePreviewResponse,
   CollectionWriteRequest,
+  CommitBookRenditionsRequestParams,
   CommitEntityRequestParams,
+  CommitManagedComicRunInput,
+  CommitManagedComicRunResponse,
   CommitRequestParams,
+  CommitReviewedManagedRequestInput,
   CommitReviewedRequestParams,
+  ConnectionResponse,
   ConsumptionEventCreateRequest,
   ConsumptionStatisticsResponse,
   ConsumptionUpdateRequest,
+  CountUnidentifiedEntitiesParams,
+  CreateConnectionRequest,
+  CreateExternalLibraryMountRequest,
   CreateFileFolderParams,
   CreateFirstAdminRequest,
+  CreateManagedControlRequest,
   CustomFormatSaveRequest,
   CustomFormatView,
   DatabaseBackupDto,
@@ -63,8 +78,10 @@ import type {
   DatabaseRestoreRequest,
   DatabaseRestoreScheduledResponse,
   DatabaseRestoreStatusResponse,
+  DeleteConnectionParams,
   DeleteEntityParams,
   DeleteFileParams,
+  DiscoveryPageResponse,
   DownloadClientSaveRequest,
   DownloadClientSummary,
   DownloadClientTestRequest,
@@ -94,6 +111,8 @@ import type {
   EntityThumbnailBatchRequest,
   EntityThumbnailBatchResponse,
   ExcludeFileParams,
+  ExecutorInspectionResponse,
+  ExternalLibraryMount,
   FileArchivePreparation,
   FileArchiveRequest,
   FileChildrenResponse,
@@ -126,6 +145,7 @@ import type {
   GetOpdsTagBooksParams,
   GetOpdsTagsParams,
   GetOrganizePlanParams,
+  GetPluginIconParams,
   GetSettingValuesParams,
   GetUpdateCheckParams,
   GetVideoPlaybackHlsAssetParams,
@@ -144,6 +164,9 @@ import type {
   IndexerConfigSummary,
   IndexerTestRequest,
   IndexerTestResponse,
+  InspectExecutorRequest,
+  IntegrationTransferResponse,
+  JobActivityResponse,
   JobCancelResponse,
   JobCreateResponse,
   JobFailureClearResponse,
@@ -159,6 +182,7 @@ import type {
   LibraryRootSummary,
   LibraryRootUpdateRequest,
   ListAcquisitionHistoryParams,
+  ListAcquisitionRulePresetsParams,
   ListAudioLibrariesParams,
   ListAudioTracksParams,
   ListBookAuthorsParams,
@@ -175,6 +199,7 @@ import type {
   ListIdentifyProvidersParams,
   ListIdentifyQueueParams,
   ListImagesParams,
+  ListJobActivityParams,
   ListJobGraphsParams,
   ListJobsParams,
   ListMissingWantedParams,
@@ -182,15 +207,35 @@ import type {
   ListMusicArtistsParams,
   ListPeopleParams,
   ListReleaseCalendarParams,
+  ListRequestActivityParams,
   ListStudiosParams,
   ListTagsParams,
   ListVideoSeriesParams,
   ListVideosParams,
   LoginRequest,
   LoginResponse,
+  ManagedControlActionResponse,
+  ManagedControlPreview,
+  ManagedControlRevisionRequest,
+  ManagedDiscoveryQuery,
+  ManagedDiscoveryReviewRequest,
+  ManagedDiscoveryReviewResponse,
+  ManagedDiscoverySearchResponse,
+  ManagedItemInput,
+  ManagedItemSnapshot,
+  ManagedLibraryPage,
+  ManagedLibraryQuery,
+  ManagedReleasePreview,
+  ManagedRequestResponse,
+  ManagedTrackingPreview,
+  ManagedTrackingResponse,
+  ManagerOptions,
+  ManagerOptionsInput,
   ManualReplacementQueueRequest,
   ManualReplacementSearchRequest,
   ManualReplacementSearchResult,
+  MappedLibrarySnapshot,
+  MetadataFieldResponse,
   MissingChildrenCommitRequest,
   MissingChildrenCommitResponse,
   MonitorCreateRequest,
@@ -208,15 +253,24 @@ import type {
   PluginAuthUpdateRequest,
   PluginProvider,
   PrepareFileArchiveParams,
+  PrepareManagedDiscoveryRequest,
+  PreparedWantedBookResponse,
+  PreparedWantedMovieResponse,
+  PreparedWantedSeriesResponse,
   PreviewCollectionRulesParams,
+  PreviewManagedControlsParams,
   ProblemDetails,
+  ProviderLibraryConnection,
   RatingUpdateRequest,
   ReleaseCalendarEvent,
+  ReleaseManagedHoldingRequest,
   RemotePathMappingSaveRequest,
   RemotePathMappingView,
   RemoveFileExclusionParams,
   RenameFileParams,
   ReplaceBookChapterMappingsRequest,
+  RequestActivityPage,
+  RequestBookRenditionsCommitRequest,
   RequestCommitRequest,
   RequestCommitResponse,
   RequestEntityCommitRequest,
@@ -228,7 +282,12 @@ import type {
   RescanFileRootParams,
   ResolveIdentifyQueueCandidateParams,
   ReviewEntityRequestParams,
+  ReviewManagedComicRunInput,
+  ReviewManagedRequestInput,
   ReviewRequestParams,
+  ReviewedManagedComicRun,
+  ReviewedManagedRequest,
+  ReviewedManagedRequestCommitResponse,
   ReviewedRequestCommitRequest,
   SaveIdentifyQueueProposalRequest,
   SearchIdentifyQueueItemParams,
@@ -245,8 +304,12 @@ import type {
   StartBulkIdentifyParams,
   StashScraperListing,
   SubtitleProviderTestResponse,
+  TrackManagedHoldingRequest,
   TranscodeCacheStatusResponse,
+  UnidentifiedKindCount,
   UpdateCheckResponse,
+  UpdateConnectionRequest,
+  UpdateMetadataFieldLockRequest,
   UpdateMusicPlayerProgressRequest,
   UpdateMusicPlayerStateRequest,
   UpdateOpenSubtitlesConfigurationRequest,
@@ -1512,6 +1575,58 @@ export const listPlugins = async ( options?: RequestInit): Promise<listPluginsRe
 
 
 
+export type getPluginIconResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getPluginIconResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getPluginIconResponseSuccess = (getPluginIconResponse200) & {
+  headers: Headers;
+};
+export type getPluginIconResponseError = (getPluginIconResponse404) & {
+  headers: Headers;
+};
+
+export type getPluginIconResponse = (getPluginIconResponseSuccess | getPluginIconResponseError)
+
+export const getGetPluginIconUrl = (provider: string,
+    params?: GetPluginIconParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/plugins/${provider}/icon?${stringifiedParams}` : `/api/plugins/${provider}/icon`
+}
+
+/**
+ * @summary Returns a validated icon packaged with a plugin.
+ */
+export const getPluginIcon = async (provider: string,
+    params?: GetPluginIconParams, options?: RequestInit): Promise<getPluginIconResponse> => {
+
+  return orvalFetch<getPluginIconResponse>(getGetPluginIconUrl(provider,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type listAcquisitionProfilesResponse200 = {
   data: BookAcquisitionProfileView[]
   status: 200
@@ -2609,6 +2724,100 @@ export const deleteEntity = async (id: string,
 
 
 
+export type getEntityMetadataFieldsResponse200 = {
+  data: MetadataFieldResponse[]
+  status: 200
+}
+
+export type getEntityMetadataFieldsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getEntityMetadataFieldsResponseSuccess = (getEntityMetadataFieldsResponse200) & {
+  headers: Headers;
+};
+export type getEntityMetadataFieldsResponseError = (getEntityMetadataFieldsResponse404) & {
+  headers: Headers;
+};
+
+export type getEntityMetadataFieldsResponse = (getEntityMetadataFieldsResponseSuccess | getEntityMetadataFieldsResponseError)
+
+export const getGetEntityMetadataFieldsUrl = (id: string,) => {
+
+
+
+
+  return `/api/entities/${id}/metadata-fields`
+}
+
+export const getEntityMetadataFields = async (id: string, options?: RequestInit): Promise<getEntityMetadataFieldsResponse> => {
+
+  return orvalFetch<getEntityMetadataFieldsResponse>(getGetEntityMetadataFieldsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type setEntityMetadataFieldLockResponse200 = {
+  data: MetadataFieldResponse
+  status: 200
+}
+
+export type setEntityMetadataFieldLockResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type setEntityMetadataFieldLockResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type setEntityMetadataFieldLockResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type setEntityMetadataFieldLockResponseSuccess = (setEntityMetadataFieldLockResponse200) & {
+  headers: Headers;
+};
+export type setEntityMetadataFieldLockResponseError = (setEntityMetadataFieldLockResponse400 | setEntityMetadataFieldLockResponse404 | setEntityMetadataFieldLockResponse409) & {
+  headers: Headers;
+};
+
+export type setEntityMetadataFieldLockResponse = (setEntityMetadataFieldLockResponseSuccess | setEntityMetadataFieldLockResponseError)
+
+export const getSetEntityMetadataFieldLockUrl = (id: string,
+    field: string,) => {
+
+
+
+
+  return `/api/entities/${id}/metadata-fields/${field}`
+}
+
+export const setEntityMetadataFieldLock = async (id: string,
+    field: string,
+    updateMetadataFieldLockRequest: UpdateMetadataFieldLockRequest, options?: RequestInit): Promise<setEntityMetadataFieldLockResponse> => {
+
+  return orvalFetch<setEntityMetadataFieldLockResponse>(getSetEntityMetadataFieldLockUrl(id,field),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateMetadataFieldLockRequest,)
+  }
+);}
+
+
+
 export type getEntityThumbnailsResponse200 = {
   data: EntityThumbnailBatchResponse
   status: 200
@@ -3274,6 +3483,11 @@ export type updateEntityProgressResponse204 = {
   status: 204
 }
 
+export type updateEntityProgressResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type updateEntityProgressResponse404 = {
   data: ApiProblem
   status: 404
@@ -3282,7 +3496,7 @@ export type updateEntityProgressResponse404 = {
 export type updateEntityProgressResponseSuccess = (updateEntityProgressResponse200 | updateEntityProgressResponse204) & {
   headers: Headers;
 };
-export type updateEntityProgressResponseError = (updateEntityProgressResponse404) & {
+export type updateEntityProgressResponseError = (updateEntityProgressResponse400 | updateEntityProgressResponse404) & {
   headers: Headers;
 };
 
@@ -4496,7 +4710,7 @@ export const getBookChapterMappings = async (id: string, options?: RequestInit):
 
 
 export type replaceBookChapterMappingsResponse200 = {
-  data: BookChapterMappingsResponse
+  data: BookAlignmentResponse
   status: 200
 }
 
@@ -4528,7 +4742,7 @@ export const getReplaceBookChapterMappingsUrl = (id: string,) => {
 }
 
 /**
- * @summary Replace the Book's explicit audiobook-to-readable-chapter map.
+ * @summary Replace the Book's explicit audiobook-to-readable-chapter map and return the refreshed alignment.
  */
 export const replaceBookChapterMappings = async (id: string,
     replaceBookChapterMappingsRequest: ReplaceBookChapterMappingsRequest, options?: RequestInit): Promise<replaceBookChapterMappingsResponse> => {
@@ -4540,6 +4754,49 @@ export const replaceBookChapterMappings = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       replaceBookChapterMappingsRequest,)
+  }
+);}
+
+
+
+export type getBookAlignmentResponse200 = {
+  data: BookAlignmentResponse
+  status: 200
+}
+
+export type getBookAlignmentResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getBookAlignmentResponseSuccess = (getBookAlignmentResponse200) & {
+  headers: Headers;
+};
+export type getBookAlignmentResponseError = (getBookAlignmentResponse404) & {
+  headers: Headers;
+};
+
+export type getBookAlignmentResponse = (getBookAlignmentResponseSuccess | getBookAlignmentResponseError)
+
+export const getGetBookAlignmentUrl = (id: string,) => {
+
+
+
+
+  return `/api/books/${id}/alignment`
+}
+
+/**
+ * @summary Get the Book's reading/listening alignment and the current user's resume targets.
+ */
+export const getBookAlignment = async (id: string, options?: RequestInit): Promise<getBookAlignmentResponse> => {
+
+  return orvalFetch<getBookAlignmentResponse>(getGetBookAlignmentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 
@@ -6782,6 +7039,49 @@ export const cancelJobs = async (params?: CancelJobsParams, options?: RequestIni
 
 
 
+export type listJobActivityResponse200 = {
+  data: JobActivityResponse
+  status: 200
+}
+
+export type listJobActivityResponseSuccess = (listJobActivityResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listJobActivityResponse = (listJobActivityResponseSuccess)
+
+export const getListJobActivityUrl = (params?: ListJobActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/jobs/activity?${stringifiedParams}` : `/api/jobs/activity`
+}
+
+/**
+ * @summary Buckets recent background work per job type and hour for the operations dashboard.
+ */
+export const listJobActivity = async (params?: ListJobActivityParams, options?: RequestInit): Promise<listJobActivityResponse> => {
+
+  return orvalFetch<listJobActivityResponse>(getListJobActivityUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type listJobGraphsResponse200 = {
   data: JobGraphListResponse
   status: 200
@@ -8810,10 +9110,15 @@ export type removePluginResponse404 = {
   status: 404
 }
 
+export type removePluginResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type removePluginResponseSuccess = (removePluginResponse204) & {
   headers: Headers;
 };
-export type removePluginResponseError = (removePluginResponse404) & {
+export type removePluginResponseError = (removePluginResponse404 | removePluginResponse409) & {
   headers: Headers;
 };
 
@@ -8853,10 +9158,15 @@ export type updatePluginResponse404 = {
   status: 404
 }
 
+export type updatePluginResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type updatePluginResponseSuccess = (updatePluginResponse200) & {
   headers: Headers;
 };
-export type updatePluginResponseError = (updatePluginResponse404) & {
+export type updatePluginResponseError = (updatePluginResponse404 | updatePluginResponse409) & {
   headers: Headers;
 };
 
@@ -8926,6 +9236,1996 @@ export const updatePluginAuth = async (provider: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       pluginAuthUpdateRequest,)
+  }
+);}
+
+
+
+export type previewManagedReleaseResponse200 = {
+  data: ManagedReleasePreview
+  status: 200
+}
+
+export type previewManagedReleaseResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type previewManagedReleaseResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type previewManagedReleaseResponseSuccess = (previewManagedReleaseResponse200) & {
+  headers: Headers;
+};
+export type previewManagedReleaseResponseError = (previewManagedReleaseResponse400 | previewManagedReleaseResponse409) & {
+  headers: Headers;
+};
+
+export type previewManagedReleaseResponse = (previewManagedReleaseResponseSuccess | previewManagedReleaseResponseError)
+
+export const getPreviewManagedReleaseUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/release/preview`
+}
+
+export const previewManagedRelease = async (id: string,
+    holdingId: string, options?: RequestInit): Promise<previewManagedReleaseResponse> => {
+
+  return orvalFetch<previewManagedReleaseResponse>(getPreviewManagedReleaseUrl(id,holdingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type releaseManagedHoldingResponse202 = {
+  data: ManagedTrackingResponse
+  status: 202
+}
+
+export type releaseManagedHoldingResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type releaseManagedHoldingResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type releaseManagedHoldingResponseSuccess = (releaseManagedHoldingResponse202) & {
+  headers: Headers;
+};
+export type releaseManagedHoldingResponseError = (releaseManagedHoldingResponse400 | releaseManagedHoldingResponse409) & {
+  headers: Headers;
+};
+
+export type releaseManagedHoldingResponse = (releaseManagedHoldingResponseSuccess | releaseManagedHoldingResponseError)
+
+export const getReleaseManagedHoldingUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/release`
+}
+
+export const releaseManagedHolding = async (id: string,
+    holdingId: string,
+    releaseManagedHoldingRequest: ReleaseManagedHoldingRequest, options?: RequestInit): Promise<releaseManagedHoldingResponse> => {
+
+  return orvalFetch<releaseManagedHoldingResponse>(getReleaseManagedHoldingUrl(id,holdingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      releaseManagedHoldingRequest,)
+  }
+);}
+
+
+
+export type previewManagedControlsResponse200 = {
+  data: ManagedControlPreview
+  status: 200
+}
+
+export type previewManagedControlsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type previewManagedControlsResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type previewManagedControlsResponseSuccess = (previewManagedControlsResponse200) & {
+  headers: Headers;
+};
+export type previewManagedControlsResponseError = (previewManagedControlsResponse400 | previewManagedControlsResponse409) & {
+  headers: Headers;
+};
+
+export type previewManagedControlsResponse = (previewManagedControlsResponseSuccess | previewManagedControlsResponseError)
+
+export const getPreviewManagedControlsUrl = (id: string,
+    holdingId: string,
+    params?: PreviewManagedControlsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/connections/${id}/library/tracking/${holdingId}/controls/preview?${stringifiedParams}` : `/api/connections/${id}/library/tracking/${holdingId}/controls/preview`
+}
+
+export const previewManagedControls = async (id: string,
+    holdingId: string,
+    params?: PreviewManagedControlsParams, options?: RequestInit): Promise<previewManagedControlsResponse> => {
+
+  return orvalFetch<previewManagedControlsResponse>(getPreviewManagedControlsUrl(id,holdingId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listManagedControlsResponse200 = {
+  data: ManagedControlActionResponse[]
+  status: 200
+}
+
+export type listManagedControlsResponseSuccess = (listManagedControlsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listManagedControlsResponse = (listManagedControlsResponseSuccess)
+
+export const getListManagedControlsUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls`
+}
+
+export const listManagedControls = async (id: string,
+    holdingId: string, options?: RequestInit): Promise<listManagedControlsResponse> => {
+
+  return orvalFetch<listManagedControlsResponse>(getListManagedControlsUrl(id,holdingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createManagedControlResponse202 = {
+  data: ManagedControlActionResponse
+  status: 202
+}
+
+export type createManagedControlResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createManagedControlResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type createManagedControlResponseSuccess = (createManagedControlResponse202) & {
+  headers: Headers;
+};
+export type createManagedControlResponseError = (createManagedControlResponse400 | createManagedControlResponse409) & {
+  headers: Headers;
+};
+
+export type createManagedControlResponse = (createManagedControlResponseSuccess | createManagedControlResponseError)
+
+export const getCreateManagedControlUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls`
+}
+
+export const createManagedControl = async (id: string,
+    holdingId: string,
+    createManagedControlRequest: CreateManagedControlRequest, options?: RequestInit): Promise<createManagedControlResponse> => {
+
+  return orvalFetch<createManagedControlResponse>(getCreateManagedControlUrl(id,holdingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createManagedControlRequest,)
+  }
+);}
+
+
+
+export type refreshManagedControlResponse202 = {
+  data: void
+  status: 202
+}
+
+export type refreshManagedControlResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type refreshManagedControlResponseSuccess = (refreshManagedControlResponse202) & {
+  headers: Headers;
+};
+export type refreshManagedControlResponseError = (refreshManagedControlResponse400) & {
+  headers: Headers;
+};
+
+export type refreshManagedControlResponse = (refreshManagedControlResponseSuccess | refreshManagedControlResponseError)
+
+export const getRefreshManagedControlUrl = (id: string,
+    holdingId: string,
+    actionId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls/${actionId}/refresh`
+}
+
+export const refreshManagedControl = async (id: string,
+    holdingId: string,
+    actionId: string, options?: RequestInit): Promise<refreshManagedControlResponse> => {
+
+  return orvalFetch<refreshManagedControlResponse>(getRefreshManagedControlUrl(id,holdingId,actionId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type cancelManagedControlResponse200 = {
+  data: ManagedControlActionResponse
+  status: 200
+}
+
+export type cancelManagedControlResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type cancelManagedControlResponseSuccess = (cancelManagedControlResponse200) & {
+  headers: Headers;
+};
+export type cancelManagedControlResponseError = (cancelManagedControlResponse409) & {
+  headers: Headers;
+};
+
+export type cancelManagedControlResponse = (cancelManagedControlResponseSuccess | cancelManagedControlResponseError)
+
+export const getCancelManagedControlUrl = (id: string,
+    holdingId: string,
+    actionId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls/${actionId}/cancel`
+}
+
+export const cancelManagedControl = async (id: string,
+    holdingId: string,
+    actionId: string,
+    managedControlRevisionRequest: ManagedControlRevisionRequest, options?: RequestInit): Promise<cancelManagedControlResponse> => {
+
+  return orvalFetch<cancelManagedControlResponse>(getCancelManagedControlUrl(id,holdingId,actionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedControlRevisionRequest,)
+  }
+);}
+
+
+
+export type closeUnverifiedManagedControlResponse200 = {
+  data: ManagedControlActionResponse
+  status: 200
+}
+
+export type closeUnverifiedManagedControlResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type closeUnverifiedManagedControlResponseSuccess = (closeUnverifiedManagedControlResponse200) & {
+  headers: Headers;
+};
+export type closeUnverifiedManagedControlResponseError = (closeUnverifiedManagedControlResponse409) & {
+  headers: Headers;
+};
+
+export type closeUnverifiedManagedControlResponse = (closeUnverifiedManagedControlResponseSuccess | closeUnverifiedManagedControlResponseError)
+
+export const getCloseUnverifiedManagedControlUrl = (id: string,
+    holdingId: string,
+    actionId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls/${actionId}/close-unverified`
+}
+
+export const closeUnverifiedManagedControl = async (id: string,
+    holdingId: string,
+    actionId: string,
+    managedControlRevisionRequest: ManagedControlRevisionRequest, options?: RequestInit): Promise<closeUnverifiedManagedControlResponse> => {
+
+  return orvalFetch<closeUnverifiedManagedControlResponse>(getCloseUnverifiedManagedControlUrl(id,holdingId,actionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedControlRevisionRequest,)
+  }
+);}
+
+
+
+export type reviewManagedComicRunResponse200 = {
+  data: ReviewedManagedComicRun
+  status: 200
+}
+
+export type reviewManagedComicRunResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reviewManagedComicRunResponseSuccess = (reviewManagedComicRunResponse200) & {
+  headers: Headers;
+};
+export type reviewManagedComicRunResponseError = (reviewManagedComicRunResponse400) & {
+  headers: Headers;
+};
+
+export type reviewManagedComicRunResponse = (reviewManagedComicRunResponseSuccess | reviewManagedComicRunResponseError)
+
+export const getReviewManagedComicRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/comic-run/review`
+}
+
+export const reviewManagedComicRun = async (id: string,
+    reviewManagedComicRunInput: ReviewManagedComicRunInput, options?: RequestInit): Promise<reviewManagedComicRunResponse> => {
+
+  return orvalFetch<reviewManagedComicRunResponse>(getReviewManagedComicRunUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewManagedComicRunInput,)
+  }
+);}
+
+
+
+export type commitManagedComicRunResponse200 = {
+  data: CommitManagedComicRunResponse
+  status: 200
+}
+
+export type commitManagedComicRunResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type commitManagedComicRunResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type commitManagedComicRunResponseSuccess = (commitManagedComicRunResponse200) & {
+  headers: Headers;
+};
+export type commitManagedComicRunResponseError = (commitManagedComicRunResponse400 | commitManagedComicRunResponse409) & {
+  headers: Headers;
+};
+
+export type commitManagedComicRunResponse = (commitManagedComicRunResponseSuccess | commitManagedComicRunResponseError)
+
+export const getCommitManagedComicRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/comic-run/commit`
+}
+
+export const commitManagedComicRun = async (id: string,
+    commitManagedComicRunInput: CommitManagedComicRunInput, options?: RequestInit): Promise<commitManagedComicRunResponse> => {
+
+  return orvalFetch<commitManagedComicRunResponse>(getCommitManagedComicRunUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      commitManagedComicRunInput,)
+  }
+);}
+
+
+
+export type reviewManagedRequestResponse200 = {
+  data: ReviewedManagedRequest
+  status: 200
+}
+
+export type reviewManagedRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reviewManagedRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type reviewManagedRequestResponseSuccess = (reviewManagedRequestResponse200) & {
+  headers: Headers;
+};
+export type reviewManagedRequestResponseError = (reviewManagedRequestResponse400 | reviewManagedRequestResponse409) & {
+  headers: Headers;
+};
+
+export type reviewManagedRequestResponse = (reviewManagedRequestResponseSuccess | reviewManagedRequestResponseError)
+
+export const getReviewManagedRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/review`
+}
+
+export const reviewManagedRequest = async (id: string,
+    reviewManagedRequestInput: ReviewManagedRequestInput, options?: RequestInit): Promise<reviewManagedRequestResponse> => {
+
+  return orvalFetch<reviewManagedRequestResponse>(getReviewManagedRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewManagedRequestInput,)
+  }
+);}
+
+
+
+export type commitReviewedManagedRequestResponse202 = {
+  data: ReviewedManagedRequestCommitResponse
+  status: 202
+}
+
+export type commitReviewedManagedRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type commitReviewedManagedRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type commitReviewedManagedRequestResponseSuccess = (commitReviewedManagedRequestResponse202) & {
+  headers: Headers;
+};
+export type commitReviewedManagedRequestResponseError = (commitReviewedManagedRequestResponse400 | commitReviewedManagedRequestResponse409) & {
+  headers: Headers;
+};
+
+export type commitReviewedManagedRequestResponse = (commitReviewedManagedRequestResponseSuccess | commitReviewedManagedRequestResponseError)
+
+export const getCommitReviewedManagedRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/commit-reviewed`
+}
+
+export const commitReviewedManagedRequest = async (id: string,
+    commitReviewedManagedRequestInput: CommitReviewedManagedRequestInput, options?: RequestInit): Promise<commitReviewedManagedRequestResponse> => {
+
+  return orvalFetch<commitReviewedManagedRequestResponse>(getCommitReviewedManagedRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      commitReviewedManagedRequestInput,)
+  }
+);}
+
+
+
+export type listManagedRequestsResponse200 = {
+  data: ManagedRequestResponse[]
+  status: 200
+}
+
+export type listManagedRequestsResponseSuccess = (listManagedRequestsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listManagedRequestsResponse = (listManagedRequestsResponseSuccess)
+
+export const getListManagedRequestsUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests`
+}
+
+export const listManagedRequests = async (id: string, options?: RequestInit): Promise<listManagedRequestsResponse> => {
+
+  return orvalFetch<listManagedRequestsResponse>(getListManagedRequestsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type refreshManagedRequestResponse202 = {
+  data: void
+  status: 202
+}
+
+export type refreshManagedRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type refreshManagedRequestResponseSuccess = (refreshManagedRequestResponse202) & {
+  headers: Headers;
+};
+export type refreshManagedRequestResponseError = (refreshManagedRequestResponse400) & {
+  headers: Headers;
+};
+
+export type refreshManagedRequestResponse = (refreshManagedRequestResponseSuccess | refreshManagedRequestResponseError)
+
+export const getRefreshManagedRequestUrl = (id: string,
+    requestId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/${requestId}/refresh`
+}
+
+export const refreshManagedRequest = async (id: string,
+    requestId: string, options?: RequestInit): Promise<refreshManagedRequestResponse> => {
+
+  return orvalFetch<refreshManagedRequestResponse>(getRefreshManagedRequestUrl(id,requestId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type cancelManagedRequestResponse200 = {
+  data: ManagedRequestResponse
+  status: 200
+}
+
+export type cancelManagedRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type cancelManagedRequestResponseSuccess = (cancelManagedRequestResponse200) & {
+  headers: Headers;
+};
+export type cancelManagedRequestResponseError = (cancelManagedRequestResponse409) & {
+  headers: Headers;
+};
+
+export type cancelManagedRequestResponse = (cancelManagedRequestResponseSuccess | cancelManagedRequestResponseError)
+
+export const getCancelManagedRequestUrl = (id: string,
+    requestId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/${requestId}/cancel`
+}
+
+export const cancelManagedRequest = async (id: string,
+    requestId: string,
+    cancelManagedRequestInput: CancelManagedRequestInput, options?: RequestInit): Promise<cancelManagedRequestResponse> => {
+
+  return orvalFetch<cancelManagedRequestResponse>(getCancelManagedRequestUrl(id,requestId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      cancelManagedRequestInput,)
+  }
+);}
+
+
+
+export type searchManagedDiscoveryResponse200 = {
+  data: ManagedDiscoverySearchResponse
+  status: 200
+}
+
+export type searchManagedDiscoveryResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type searchManagedDiscoveryResponseSuccess = (searchManagedDiscoveryResponse200) & {
+  headers: Headers;
+};
+export type searchManagedDiscoveryResponseError = (searchManagedDiscoveryResponse400) & {
+  headers: Headers;
+};
+
+export type searchManagedDiscoveryResponse = (searchManagedDiscoveryResponseSuccess | searchManagedDiscoveryResponseError)
+
+export const getSearchManagedDiscoveryUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/discovery/search`
+}
+
+export const searchManagedDiscovery = async (id: string,
+    managedDiscoveryQuery: ManagedDiscoveryQuery, options?: RequestInit): Promise<searchManagedDiscoveryResponse> => {
+
+  return orvalFetch<searchManagedDiscoveryResponse>(getSearchManagedDiscoveryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedDiscoveryQuery,)
+  }
+);}
+
+
+
+export type reviewManagedDiscoveryResponse200 = {
+  data: ManagedDiscoveryReviewResponse
+  status: 200
+}
+
+export type reviewManagedDiscoveryResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reviewManagedDiscoveryResponseSuccess = (reviewManagedDiscoveryResponse200) & {
+  headers: Headers;
+};
+export type reviewManagedDiscoveryResponseError = (reviewManagedDiscoveryResponse400) & {
+  headers: Headers;
+};
+
+export type reviewManagedDiscoveryResponse = (reviewManagedDiscoveryResponseSuccess | reviewManagedDiscoveryResponseError)
+
+export const getReviewManagedDiscoveryUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/discovery/review`
+}
+
+export const reviewManagedDiscovery = async (id: string,
+    managedDiscoveryReviewRequest: ManagedDiscoveryReviewRequest, options?: RequestInit): Promise<reviewManagedDiscoveryResponse> => {
+
+  return orvalFetch<reviewManagedDiscoveryResponse>(getReviewManagedDiscoveryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedDiscoveryReviewRequest,)
+  }
+);}
+
+
+
+export type prepareManagedDiscoveryResponse200 = {
+  data: PreparedWantedMovieResponse
+  status: 200
+}
+
+export type prepareManagedDiscoveryResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type prepareManagedDiscoveryResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type prepareManagedDiscoveryResponseSuccess = (prepareManagedDiscoveryResponse200) & {
+  headers: Headers;
+};
+export type prepareManagedDiscoveryResponseError = (prepareManagedDiscoveryResponse400 | prepareManagedDiscoveryResponse409) & {
+  headers: Headers;
+};
+
+export type prepareManagedDiscoveryResponse = (prepareManagedDiscoveryResponseSuccess | prepareManagedDiscoveryResponseError)
+
+export const getPrepareManagedDiscoveryUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/discovery/prepare`
+}
+
+export const prepareManagedDiscovery = async (id: string,
+    prepareManagedDiscoveryRequest: PrepareManagedDiscoveryRequest, options?: RequestInit): Promise<prepareManagedDiscoveryResponse> => {
+
+  return orvalFetch<prepareManagedDiscoveryResponse>(getPrepareManagedDiscoveryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      prepareManagedDiscoveryRequest,)
+  }
+);}
+
+
+
+export type listRequestActivityResponse200 = {
+  data: RequestActivityPage
+  status: 200
+}
+
+export type listRequestActivityResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type listRequestActivityResponseSuccess = (listRequestActivityResponse200) & {
+  headers: Headers;
+};
+export type listRequestActivityResponseError = (listRequestActivityResponse400) & {
+  headers: Headers;
+};
+
+export type listRequestActivityResponse = (listRequestActivityResponseSuccess | listRequestActivityResponseError)
+
+export const getListRequestActivityUrl = (params: ListRequestActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/connections/activity?${stringifiedParams}` : `/api/connections/activity`
+}
+
+/**
+ * @summary Lists a bounded page of locally retained request and import activity.
+ */
+export const listRequestActivity = async (params: ListRequestActivityParams, options?: RequestInit): Promise<listRequestActivityResponse> => {
+
+  return orvalFetch<listRequestActivityResponse>(getListRequestActivityUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listConnectionsResponse200 = {
+  data: ConnectionResponse[]
+  status: 200
+}
+
+export type listConnectionsResponseSuccess = (listConnectionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listConnectionsResponse = (listConnectionsResponseSuccess)
+
+export const getListConnectionsUrl = () => {
+
+
+
+
+  return `/api/connections`
+}
+
+export const listConnections = async ( options?: RequestInit): Promise<listConnectionsResponse> => {
+
+  return orvalFetch<listConnectionsResponse>(getListConnectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createConnectionResponse201 = {
+  data: ConnectionResponse
+  status: 201
+}
+
+export type createConnectionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createConnectionResponseSuccess = (createConnectionResponse201) & {
+  headers: Headers;
+};
+export type createConnectionResponseError = (createConnectionResponse400) & {
+  headers: Headers;
+};
+
+export type createConnectionResponse = (createConnectionResponseSuccess | createConnectionResponseError)
+
+export const getCreateConnectionUrl = () => {
+
+
+
+
+  return `/api/connections`
+}
+
+export const createConnection = async (createConnectionRequest: CreateConnectionRequest, options?: RequestInit): Promise<createConnectionResponse> => {
+
+  return orvalFetch<createConnectionResponse>(getCreateConnectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createConnectionRequest,)
+  }
+);}
+
+
+
+export type getConnectionResponse200 = {
+  data: ConnectionResponse
+  status: 200
+}
+
+export type getConnectionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getConnectionResponseSuccess = (getConnectionResponse200) & {
+  headers: Headers;
+};
+export type getConnectionResponseError = (getConnectionResponse404) & {
+  headers: Headers;
+};
+
+export type getConnectionResponse = (getConnectionResponseSuccess | getConnectionResponseError)
+
+export const getGetConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}`
+}
+
+export const getConnection = async (id: string, options?: RequestInit): Promise<getConnectionResponse> => {
+
+  return orvalFetch<getConnectionResponse>(getGetConnectionUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateConnectionResponse200 = {
+  data: ConnectionResponse
+  status: 200
+}
+
+export type updateConnectionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type updateConnectionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type updateConnectionResponseSuccess = (updateConnectionResponse200) & {
+  headers: Headers;
+};
+export type updateConnectionResponseError = (updateConnectionResponse400 | updateConnectionResponse409) & {
+  headers: Headers;
+};
+
+export type updateConnectionResponse = (updateConnectionResponseSuccess | updateConnectionResponseError)
+
+export const getUpdateConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}`
+}
+
+export const updateConnection = async (id: string,
+    updateConnectionRequest: UpdateConnectionRequest, options?: RequestInit): Promise<updateConnectionResponse> => {
+
+  return orvalFetch<updateConnectionResponse>(getUpdateConnectionUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateConnectionRequest,)
+  }
+);}
+
+
+
+export type deleteConnectionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteConnectionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type deleteConnectionResponseSuccess = (deleteConnectionResponse204) & {
+  headers: Headers;
+};
+export type deleteConnectionResponseError = (deleteConnectionResponse409) & {
+  headers: Headers;
+};
+
+export type deleteConnectionResponse = (deleteConnectionResponseSuccess | deleteConnectionResponseError)
+
+export const getDeleteConnectionUrl = (id: string,
+    params: DeleteConnectionParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/connections/${id}?${stringifiedParams}` : `/api/connections/${id}`
+}
+
+export const deleteConnection = async (id: string,
+    params: DeleteConnectionParams, options?: RequestInit): Promise<deleteConnectionResponse> => {
+
+  return orvalFetch<deleteConnectionResponse>(getDeleteConnectionUrl(id,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type testConnectionResponse200 = {
+  data: ConnectionResponse
+  status: 200
+}
+
+export type testConnectionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type testConnectionResponseSuccess = (testConnectionResponse200) & {
+  headers: Headers;
+};
+export type testConnectionResponseError = (testConnectionResponse409) & {
+  headers: Headers;
+};
+
+export type testConnectionResponse = (testConnectionResponseSuccess | testConnectionResponseError)
+
+export const getTestConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/test`
+}
+
+export const testConnection = async (id: string, options?: RequestInit): Promise<testConnectionResponse> => {
+
+  return orvalFetch<testConnectionResponse>(getTestConnectionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type browseConnectionResponse200 = {
+  data: DiscoveryPageResponse
+  status: 200
+}
+
+export type browseConnectionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type browseConnectionResponseSuccess = (browseConnectionResponse200) & {
+  headers: Headers;
+};
+export type browseConnectionResponseError = (browseConnectionResponse400) & {
+  headers: Headers;
+};
+
+export type browseConnectionResponse = (browseConnectionResponseSuccess | browseConnectionResponseError)
+
+export const getBrowseConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/browse`
+}
+
+export const browseConnection = async (id: string,
+    browseConnectionRequest: BrowseConnectionRequest, options?: RequestInit): Promise<browseConnectionResponse> => {
+
+  return orvalFetch<browseConnectionResponse>(getBrowseConnectionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      browseConnectionRequest,)
+  }
+);}
+
+
+
+export type acquireCatalogOfferResponse202 = {
+  data: IntegrationTransferResponse
+  status: 202
+}
+
+export type acquireCatalogOfferResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type acquireCatalogOfferResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type acquireCatalogOfferResponseSuccess = (acquireCatalogOfferResponse202) & {
+  headers: Headers;
+};
+export type acquireCatalogOfferResponseError = (acquireCatalogOfferResponse400 | acquireCatalogOfferResponse409) & {
+  headers: Headers;
+};
+
+export type acquireCatalogOfferResponse = (acquireCatalogOfferResponseSuccess | acquireCatalogOfferResponseError)
+
+export const getAcquireCatalogOfferUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/acquire`
+}
+
+export const acquireCatalogOffer = async (id: string,
+    acquireCatalogOfferRequest: AcquireCatalogOfferRequest, options?: RequestInit): Promise<acquireCatalogOfferResponse> => {
+
+  return orvalFetch<acquireCatalogOfferResponse>(getAcquireCatalogOfferUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquireCatalogOfferRequest,)
+  }
+);}
+
+
+
+export type requestCatalogSourceResponse202 = {
+  data: IntegrationTransferResponse
+  status: 202
+}
+
+export type requestCatalogSourceResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type requestCatalogSourceResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type requestCatalogSourceResponseSuccess = (requestCatalogSourceResponse202) & {
+  headers: Headers;
+};
+export type requestCatalogSourceResponseError = (requestCatalogSourceResponse400 | requestCatalogSourceResponse409) & {
+  headers: Headers;
+};
+
+export type requestCatalogSourceResponse = (requestCatalogSourceResponseSuccess | requestCatalogSourceResponseError)
+
+export const getRequestCatalogSourceUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/catalog/requests`
+}
+
+export const requestCatalogSource = async (id: string,
+    acquireCatalogOfferRequest: AcquireCatalogOfferRequest, options?: RequestInit): Promise<requestCatalogSourceResponse> => {
+
+  return orvalFetch<requestCatalogSourceResponse>(getRequestCatalogSourceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquireCatalogOfferRequest,)
+  }
+);}
+
+
+
+export type inspectExecutorUrlResponse200 = {
+  data: ExecutorInspectionResponse
+  status: 200
+}
+
+export type inspectExecutorUrlResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type inspectExecutorUrlResponseSuccess = (inspectExecutorUrlResponse200) & {
+  headers: Headers;
+};
+export type inspectExecutorUrlResponseError = (inspectExecutorUrlResponse400) & {
+  headers: Headers;
+};
+
+export type inspectExecutorUrlResponse = (inspectExecutorUrlResponseSuccess | inspectExecutorUrlResponseError)
+
+export const getInspectExecutorUrlUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/inspect`
+}
+
+export const inspectExecutorUrl = async (id: string,
+    inspectExecutorRequest: InspectExecutorRequest, options?: RequestInit): Promise<inspectExecutorUrlResponse> => {
+
+  return orvalFetch<inspectExecutorUrlResponse>(getInspectExecutorUrlUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      inspectExecutorRequest,)
+  }
+);}
+
+
+
+export type acquireExecutorItemResponse202 = {
+  data: IntegrationTransferResponse
+  status: 202
+}
+
+export type acquireExecutorItemResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type acquireExecutorItemResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type acquireExecutorItemResponseSuccess = (acquireExecutorItemResponse202) & {
+  headers: Headers;
+};
+export type acquireExecutorItemResponseError = (acquireExecutorItemResponse400 | acquireExecutorItemResponse409) & {
+  headers: Headers;
+};
+
+export type acquireExecutorItemResponse = (acquireExecutorItemResponseSuccess | acquireExecutorItemResponseError)
+
+export const getAcquireExecutorItemUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/acquire-executor`
+}
+
+export const acquireExecutorItem = async (id: string,
+    acquireExecutorItemRequest: AcquireExecutorItemRequest, options?: RequestInit): Promise<acquireExecutorItemResponse> => {
+
+  return orvalFetch<acquireExecutorItemResponse>(getAcquireExecutorItemUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquireExecutorItemRequest,)
+  }
+);}
+
+
+
+export type searchConnectedLibraryResponse200 = {
+  data: ManagedLibraryPage
+  status: 200
+}
+
+export type searchConnectedLibraryResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type searchConnectedLibraryResponseSuccess = (searchConnectedLibraryResponse200) & {
+  headers: Headers;
+};
+export type searchConnectedLibraryResponseError = (searchConnectedLibraryResponse400) & {
+  headers: Headers;
+};
+
+export type searchConnectedLibraryResponse = (searchConnectedLibraryResponseSuccess | searchConnectedLibraryResponseError)
+
+export const getSearchConnectedLibraryUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/search`
+}
+
+export const searchConnectedLibrary = async (id: string,
+    managedLibraryQuery: ManagedLibraryQuery, options?: RequestInit): Promise<searchConnectedLibraryResponse> => {
+
+  return orvalFetch<searchConnectedLibraryResponse>(getSearchConnectedLibraryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedLibraryQuery,)
+  }
+);}
+
+
+
+export type getConnectedLibraryItemResponse200 = {
+  data: ManagedItemSnapshot
+  status: 200
+}
+
+export type getConnectedLibraryItemResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type getConnectedLibraryItemResponseSuccess = (getConnectedLibraryItemResponse200) & {
+  headers: Headers;
+};
+export type getConnectedLibraryItemResponseError = (getConnectedLibraryItemResponse400) & {
+  headers: Headers;
+};
+
+export type getConnectedLibraryItemResponse = (getConnectedLibraryItemResponseSuccess | getConnectedLibraryItemResponseError)
+
+export const getGetConnectedLibraryItemUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/item`
+}
+
+export const getConnectedLibraryItem = async (id: string,
+    managedItemInput: ManagedItemInput, options?: RequestInit): Promise<getConnectedLibraryItemResponse> => {
+
+  return orvalFetch<getConnectedLibraryItemResponse>(getGetConnectedLibraryItemUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedItemInput,)
+  }
+);}
+
+
+
+export type listProviderLibrariesResponse200 = {
+  data: ProviderLibraryConnection[]
+  status: 200
+}
+
+export type listProviderLibrariesResponseSuccess = (listProviderLibrariesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listProviderLibrariesResponse = (listProviderLibrariesResponseSuccess)
+
+export const getListProviderLibrariesUrl = () => {
+
+
+
+
+  return `/api/connections/libraries`
+}
+
+export const listProviderLibraries = async ( options?: RequestInit): Promise<listProviderLibrariesResponse> => {
+
+  return orvalFetch<listProviderLibrariesResponse>(getListProviderLibrariesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getManagerOptionsResponse200 = {
+  data: ManagerOptions
+  status: 200
+}
+
+export type getManagerOptionsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type getManagerOptionsResponseSuccess = (getManagerOptionsResponse200) & {
+  headers: Headers;
+};
+export type getManagerOptionsResponseError = (getManagerOptionsResponse400) & {
+  headers: Headers;
+};
+
+export type getManagerOptionsResponse = (getManagerOptionsResponseSuccess | getManagerOptionsResponseError)
+
+export const getGetManagerOptionsUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/options`
+}
+
+export const getManagerOptions = async (id: string,
+    managerOptionsInput: ManagerOptionsInput, options?: RequestInit): Promise<getManagerOptionsResponse> => {
+
+  return orvalFetch<getManagerOptionsResponse>(getGetManagerOptionsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managerOptionsInput,)
+  }
+);}
+
+
+
+export type listExternalLibraryMountsResponse200 = {
+  data: ExternalLibraryMount[]
+  status: 200
+}
+
+export type listExternalLibraryMountsResponseSuccess = (listExternalLibraryMountsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listExternalLibraryMountsResponse = (listExternalLibraryMountsResponseSuccess)
+
+export const getListExternalLibraryMountsUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/mounts`
+}
+
+export const listExternalLibraryMounts = async (id: string, options?: RequestInit): Promise<listExternalLibraryMountsResponse> => {
+
+  return orvalFetch<listExternalLibraryMountsResponse>(getListExternalLibraryMountsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createExternalLibraryMountResponse200 = {
+  data: ExternalLibraryMount
+  status: 200
+}
+
+export type createExternalLibraryMountResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createExternalLibraryMountResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type createExternalLibraryMountResponseSuccess = (createExternalLibraryMountResponse200) & {
+  headers: Headers;
+};
+export type createExternalLibraryMountResponseError = (createExternalLibraryMountResponse400 | createExternalLibraryMountResponse409) & {
+  headers: Headers;
+};
+
+export type createExternalLibraryMountResponse = (createExternalLibraryMountResponseSuccess | createExternalLibraryMountResponseError)
+
+export const getCreateExternalLibraryMountUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/mounts`
+}
+
+export const createExternalLibraryMount = async (id: string,
+    createExternalLibraryMountRequest: CreateExternalLibraryMountRequest, options?: RequestInit): Promise<createExternalLibraryMountResponse> => {
+
+  return orvalFetch<createExternalLibraryMountResponse>(getCreateExternalLibraryMountUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createExternalLibraryMountRequest,)
+  }
+);}
+
+
+
+export type attachExistingExternalLibraryMountResponse200 = {
+  data: ExternalLibraryMount
+  status: 200
+}
+
+export type attachExistingExternalLibraryMountResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type attachExistingExternalLibraryMountResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type attachExistingExternalLibraryMountResponseSuccess = (attachExistingExternalLibraryMountResponse200) & {
+  headers: Headers;
+};
+export type attachExistingExternalLibraryMountResponseError = (attachExistingExternalLibraryMountResponse400 | attachExistingExternalLibraryMountResponse409) & {
+  headers: Headers;
+};
+
+export type attachExistingExternalLibraryMountResponse = (attachExistingExternalLibraryMountResponseSuccess | attachExistingExternalLibraryMountResponseError)
+
+export const getAttachExistingExternalLibraryMountUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/mounts/attach`
+}
+
+export const attachExistingExternalLibraryMount = async (id: string,
+    attachExistingExternalLibraryMountRequest: AttachExistingExternalLibraryMountRequest, options?: RequestInit): Promise<attachExistingExternalLibraryMountResponse> => {
+
+  return orvalFetch<attachExistingExternalLibraryMountResponse>(getAttachExistingExternalLibraryMountUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      attachExistingExternalLibraryMountRequest,)
+  }
+);}
+
+
+
+export type inspectExternalLibraryAccessResponse200 = {
+  data: MappedLibrarySnapshot
+  status: 200
+}
+
+export type inspectExternalLibraryAccessResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type inspectExternalLibraryAccessResponseSuccess = (inspectExternalLibraryAccessResponse200) & {
+  headers: Headers;
+};
+export type inspectExternalLibraryAccessResponseError = (inspectExternalLibraryAccessResponse400) & {
+  headers: Headers;
+};
+
+export type inspectExternalLibraryAccessResponse = (inspectExternalLibraryAccessResponseSuccess | inspectExternalLibraryAccessResponseError)
+
+export const getInspectExternalLibraryAccessUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/local-access`
+}
+
+export const inspectExternalLibraryAccess = async (id: string,
+    managedItemInput: ManagedItemInput, options?: RequestInit): Promise<inspectExternalLibraryAccessResponse> => {
+
+  return orvalFetch<inspectExternalLibraryAccessResponse>(getInspectExternalLibraryAccessUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedItemInput,)
+  }
+);}
+
+
+
+export type previewManagedTrackingResponse200 = {
+  data: ManagedTrackingPreview
+  status: 200
+}
+
+export type previewManagedTrackingResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type previewManagedTrackingResponseSuccess = (previewManagedTrackingResponse200) & {
+  headers: Headers;
+};
+export type previewManagedTrackingResponseError = (previewManagedTrackingResponse400) & {
+  headers: Headers;
+};
+
+export type previewManagedTrackingResponse = (previewManagedTrackingResponseSuccess | previewManagedTrackingResponseError)
+
+export const getPreviewManagedTrackingUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking-preview`
+}
+
+export const previewManagedTracking = async (id: string,
+    managedItemInput: ManagedItemInput, options?: RequestInit): Promise<previewManagedTrackingResponse> => {
+
+  return orvalFetch<previewManagedTrackingResponse>(getPreviewManagedTrackingUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedItemInput,)
+  }
+);}
+
+
+
+export type listManagedTrackingResponse200 = {
+  data: ManagedTrackingResponse[]
+  status: 200
+}
+
+export type listManagedTrackingResponseSuccess = (listManagedTrackingResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listManagedTrackingResponse = (listManagedTrackingResponseSuccess)
+
+export const getListManagedTrackingUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking`
+}
+
+export const listManagedTracking = async (id: string, options?: RequestInit): Promise<listManagedTrackingResponse> => {
+
+  return orvalFetch<listManagedTrackingResponse>(getListManagedTrackingUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type trackManagedHoldingResponse202 = {
+  data: ManagedTrackingResponse
+  status: 202
+}
+
+export type trackManagedHoldingResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type trackManagedHoldingResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type trackManagedHoldingResponseSuccess = (trackManagedHoldingResponse202) & {
+  headers: Headers;
+};
+export type trackManagedHoldingResponseError = (trackManagedHoldingResponse400 | trackManagedHoldingResponse409) & {
+  headers: Headers;
+};
+
+export type trackManagedHoldingResponse = (trackManagedHoldingResponseSuccess | trackManagedHoldingResponseError)
+
+export const getTrackManagedHoldingUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking`
+}
+
+export const trackManagedHolding = async (id: string,
+    trackManagedHoldingRequest: TrackManagedHoldingRequest, options?: RequestInit): Promise<trackManagedHoldingResponse> => {
+
+  return orvalFetch<trackManagedHoldingResponse>(getTrackManagedHoldingUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      trackManagedHoldingRequest,)
+  }
+);}
+
+
+
+export type refreshManagedHoldingResponse202 = {
+  data: void
+  status: 202
+}
+
+export type refreshManagedHoldingResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type refreshManagedHoldingResponseSuccess = (refreshManagedHoldingResponse202) & {
+  headers: Headers;
+};
+export type refreshManagedHoldingResponseError = (refreshManagedHoldingResponse400) & {
+  headers: Headers;
+};
+
+export type refreshManagedHoldingResponse = (refreshManagedHoldingResponseSuccess | refreshManagedHoldingResponseError)
+
+export const getRefreshManagedHoldingUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/refresh`
+}
+
+export const refreshManagedHolding = async (id: string,
+    holdingId: string, options?: RequestInit): Promise<refreshManagedHoldingResponse> => {
+
+  return orvalFetch<refreshManagedHoldingResponse>(getRefreshManagedHoldingUrl(id,holdingId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listIntegrationTransfersResponse200 = {
+  data: IntegrationTransferResponse[]
+  status: 200
+}
+
+export type listIntegrationTransfersResponseSuccess = (listIntegrationTransfersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listIntegrationTransfersResponse = (listIntegrationTransfersResponseSuccess)
+
+export const getListIntegrationTransfersUrl = () => {
+
+
+
+
+  return `/api/integration-transfers`
+}
+
+export const listIntegrationTransfers = async ( options?: RequestInit): Promise<listIntegrationTransfersResponse> => {
+
+  return orvalFetch<listIntegrationTransfersResponse>(getListIntegrationTransfersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getIntegrationTransferResponse200 = {
+  data: IntegrationTransferResponse
+  status: 200
+}
+
+export type getIntegrationTransferResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getIntegrationTransferResponseSuccess = (getIntegrationTransferResponse200) & {
+  headers: Headers;
+};
+export type getIntegrationTransferResponseError = (getIntegrationTransferResponse404) & {
+  headers: Headers;
+};
+
+export type getIntegrationTransferResponse = (getIntegrationTransferResponseSuccess | getIntegrationTransferResponseError)
+
+export const getGetIntegrationTransferUrl = (id: string,) => {
+
+
+
+
+  return `/api/integration-transfers/${id}`
+}
+
+export const getIntegrationTransfer = async (id: string, options?: RequestInit): Promise<getIntegrationTransferResponse> => {
+
+  return orvalFetch<getIntegrationTransferResponse>(getGetIntegrationTransferUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type retryIntegrationTransferResponse202 = {
+  data: void
+  status: 202
+}
+
+export type retryIntegrationTransferResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type retryIntegrationTransferResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type retryIntegrationTransferResponseSuccess = (retryIntegrationTransferResponse202) & {
+  headers: Headers;
+};
+export type retryIntegrationTransferResponseError = (retryIntegrationTransferResponse400 | retryIntegrationTransferResponse404) & {
+  headers: Headers;
+};
+
+export type retryIntegrationTransferResponse = (retryIntegrationTransferResponseSuccess | retryIntegrationTransferResponseError)
+
+export const getRetryIntegrationTransferUrl = (id: string,) => {
+
+
+
+
+  return `/api/integration-transfers/${id}/retry`
+}
+
+export const retryIntegrationTransfer = async (id: string, options?: RequestInit): Promise<retryIntegrationTransferResponse> => {
+
+  return orvalFetch<retryIntegrationTransferResponse>(getRetryIntegrationTransferUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type cancelIntegrationTransferResponse200 = {
+  data: IntegrationTransferResponse
+  status: 200
+}
+
+export type cancelIntegrationTransferResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type cancelIntegrationTransferResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type cancelIntegrationTransferResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type cancelIntegrationTransferResponseSuccess = (cancelIntegrationTransferResponse200) & {
+  headers: Headers;
+};
+export type cancelIntegrationTransferResponseError = (cancelIntegrationTransferResponse400 | cancelIntegrationTransferResponse404 | cancelIntegrationTransferResponse409) & {
+  headers: Headers;
+};
+
+export type cancelIntegrationTransferResponse = (cancelIntegrationTransferResponseSuccess | cancelIntegrationTransferResponseError)
+
+export const getCancelIntegrationTransferUrl = (id: string,) => {
+
+
+
+
+  return `/api/integration-transfers/${id}/cancel`
+}
+
+export const cancelIntegrationTransfer = async (id: string, options?: RequestInit): Promise<cancelIntegrationTransferResponse> => {
+
+  return orvalFetch<cancelIntegrationTransferResponse>(getCancelIntegrationTransferUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 
@@ -9121,6 +11421,49 @@ export const getListIdentifyQueueUrl = (params?: ListIdentifyQueueParams,) => {
 export const listIdentifyQueue = async (params?: ListIdentifyQueueParams, options?: RequestInit): Promise<listIdentifyQueueResponse> => {
 
   return orvalFetch<listIdentifyQueueResponse>(getListIdentifyQueueUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type countUnidentifiedEntitiesResponse200 = {
+  data: UnidentifiedKindCount[]
+  status: 200
+}
+
+export type countUnidentifiedEntitiesResponseSuccess = (countUnidentifiedEntitiesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type countUnidentifiedEntitiesResponse = (countUnidentifiedEntitiesResponseSuccess)
+
+export const getCountUnidentifiedEntitiesUrl = (params?: CountUnidentifiedEntitiesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/identify/unidentified?${stringifiedParams}` : `/api/identify/unidentified`
+}
+
+/**
+ * @summary Counts items with media that still wait for identification, per kind.
+ */
+export const countUnidentifiedEntities = async (params?: CountUnidentifiedEntitiesParams, options?: RequestInit): Promise<countUnidentifiedEntitiesResponse> => {
+
+  return orvalFetch<countUnidentifiedEntitiesResponse>(getCountUnidentifiedEntitiesUrl(params),
   {
     ...options,
     method: 'GET'
@@ -9781,10 +12124,15 @@ export type reviewRequestResponse404 = {
   status: 404
 }
 
+export type reviewRequestResponse502 = {
+  data: ApiProblem
+  status: 502
+}
+
 export type reviewRequestResponseSuccess = (reviewRequestResponse200) & {
   headers: Headers;
 };
-export type reviewRequestResponseError = (reviewRequestResponse400 | reviewRequestResponse404) & {
+export type reviewRequestResponseError = (reviewRequestResponse400 | reviewRequestResponse404 | reviewRequestResponse502) & {
   headers: Headers;
 };
 
@@ -10047,6 +12395,153 @@ export const commitReviewedRequest = async (reviewedRequestCommitRequest: Review
 
 
 
+export type prepareManagedMovieResponse200 = {
+  data: PreparedWantedMovieResponse
+  status: 200
+}
+
+export type prepareManagedMovieResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type prepareManagedMovieResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type prepareManagedMovieResponseSuccess = (prepareManagedMovieResponse200) & {
+  headers: Headers;
+};
+export type prepareManagedMovieResponseError = (prepareManagedMovieResponse400 | prepareManagedMovieResponse409) & {
+  headers: Headers;
+};
+
+export type prepareManagedMovieResponse = (prepareManagedMovieResponseSuccess | prepareManagedMovieResponseError)
+
+export const getPrepareManagedMovieUrl = () => {
+
+
+
+
+  return `/api/requests/prepare-managed-movie`
+}
+
+/**
+ * @summary Saves a reviewed wanted movie without native acquisition, before a separate external-manager request.
+ */
+export const prepareManagedMovie = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest, options?: RequestInit): Promise<prepareManagedMovieResponse> => {
+
+  return orvalFetch<prepareManagedMovieResponse>(getPrepareManagedMovieUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewedRequestCommitRequest,)
+  }
+);}
+
+
+
+export type prepareManagedBookResponse200 = {
+  data: PreparedWantedBookResponse
+  status: 200
+}
+
+export type prepareManagedBookResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type prepareManagedBookResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type prepareManagedBookResponseSuccess = (prepareManagedBookResponse200) & {
+  headers: Headers;
+};
+export type prepareManagedBookResponseError = (prepareManagedBookResponse400 | prepareManagedBookResponse409) & {
+  headers: Headers;
+};
+
+export type prepareManagedBookResponse = (prepareManagedBookResponseSuccess | prepareManagedBookResponseError)
+
+export const getPrepareManagedBookUrl = () => {
+
+
+
+
+  return `/api/requests/prepare-managed-book`
+}
+
+/**
+ * @summary Saves one reviewed Book work before a rendition-specific connected-manager choice.
+ */
+export const prepareManagedBook = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest, options?: RequestInit): Promise<prepareManagedBookResponse> => {
+
+  return orvalFetch<prepareManagedBookResponse>(getPrepareManagedBookUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewedRequestCommitRequest,)
+  }
+);}
+
+
+
+export type prepareManagedSeriesResponse200 = {
+  data: PreparedWantedSeriesResponse
+  status: 200
+}
+
+export type prepareManagedSeriesResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type prepareManagedSeriesResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type prepareManagedSeriesResponseSuccess = (prepareManagedSeriesResponse200) & {
+  headers: Headers;
+};
+export type prepareManagedSeriesResponseError = (prepareManagedSeriesResponse400 | prepareManagedSeriesResponse409) & {
+  headers: Headers;
+};
+
+export type prepareManagedSeriesResponse = (prepareManagedSeriesResponseSuccess | prepareManagedSeriesResponseError)
+
+export const getPrepareManagedSeriesUrl = () => {
+
+
+
+
+  return `/api/requests/prepare-managed-series`
+}
+
+/**
+ * @summary Saves a finite reviewed episode selection without native acquisition or monitoring, before a separate external-manager request.
+ */
+export const prepareManagedSeries = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest, options?: RequestInit): Promise<prepareManagedSeriesResponse> => {
+
+  return orvalFetch<prepareManagedSeriesResponse>(getPrepareManagedSeriesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewedRequestCommitRequest,)
+  }
+);}
+
+
+
 export type commitEntityRequestResponse200 = {
   data: RequestCommitResponse
   status: 200
@@ -10099,6 +12594,63 @@ export const commitEntityRequest = async (requestEntityCommitRequest: RequestEnt
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       requestEntityCommitRequest,)
+  }
+);}
+
+
+
+export type commitBookRenditionsRequestResponse200 = {
+  data: RequestCommitResponse
+  status: 200
+}
+
+export type commitBookRenditionsRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type commitBookRenditionsRequestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type commitBookRenditionsRequestResponseSuccess = (commitBookRenditionsRequestResponse200) & {
+  headers: Headers;
+};
+export type commitBookRenditionsRequestResponseError = (commitBookRenditionsRequestResponse400 | commitBookRenditionsRequestResponse404) & {
+  headers: Headers;
+};
+
+export type commitBookRenditionsRequestResponse = (commitBookRenditionsRequestResponseSuccess | commitBookRenditionsRequestResponseError)
+
+export const getCommitBookRenditionsRequestUrl = (params?: CommitBookRenditionsRequestParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/commit-book-renditions?${stringifiedParams}` : `/api/requests/commit-book-renditions`
+}
+
+/**
+ * @summary Requests selected ebook and audiobook renditions of one Book with separate outcomes.
+ */
+export const commitBookRenditionsRequest = async (requestBookRenditionsCommitRequest: RequestBookRenditionsCommitRequest,
+    params?: CommitBookRenditionsRequestParams, options?: RequestInit): Promise<commitBookRenditionsRequestResponse> => {
+
+  return orvalFetch<commitBookRenditionsRequestResponse>(getCommitBookRenditionsRequestUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestBookRenditionsCommitRequest,)
   }
 );}
 
@@ -10506,10 +13058,15 @@ export type createAcquisitionResponse400 = {
   status: 400
 }
 
+export type createAcquisitionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type createAcquisitionResponseSuccess = (createAcquisitionResponse200) & {
   headers: Headers;
 };
-export type createAcquisitionResponseError = (createAcquisitionResponse400) & {
+export type createAcquisitionResponseError = (createAcquisitionResponse400 | createAcquisitionResponse409) & {
   headers: Headers;
 };
 
@@ -11280,10 +13837,15 @@ export type cancelAcquisitionResponse404 = {
   status: 404
 }
 
+export type cancelAcquisitionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type cancelAcquisitionResponseSuccess = (cancelAcquisitionResponse200) & {
   headers: Headers;
 };
-export type cancelAcquisitionResponseError = (cancelAcquisitionResponse404) & {
+export type cancelAcquisitionResponseError = (cancelAcquisitionResponse404 | cancelAcquisitionResponse409) & {
   headers: Headers;
 };
 
@@ -11298,7 +13860,7 @@ export const getCancelAcquisitionUrl = (id: string,) => {
 }
 
 /**
- * @summary Cancels an acquisition, removing the torrent from the download client.
+ * @summary Cancels an acquisition and removes its transfer when retained import recovery permits cancellation.
  */
 export const cancelAcquisition = async (id: string, options?: RequestInit): Promise<cancelAcquisitionResponse> => {
 
@@ -11747,27 +14309,41 @@ export type listAcquisitionRulePresetsResponse200 = {
   status: 200
 }
 
+export type listAcquisitionRulePresetsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listAcquisitionRulePresetsResponseSuccess = (listAcquisitionRulePresetsResponse200) & {
   headers: Headers;
 };
-;
+export type listAcquisitionRulePresetsResponseError = (listAcquisitionRulePresetsResponse400) & {
+  headers: Headers;
+};
 
-export type listAcquisitionRulePresetsResponse = (listAcquisitionRulePresetsResponseSuccess)
+export type listAcquisitionRulePresetsResponse = (listAcquisitionRulePresetsResponseSuccess | listAcquisitionRulePresetsResponseError)
 
-export const getListAcquisitionRulePresetsUrl = () => {
+export const getListAcquisitionRulePresetsUrl = (params?: ListAcquisitionRulePresetsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/acquisitions/rule-presets`
+  return stringifiedParams.length > 0 ? `/api/acquisitions/rule-presets?${stringifiedParams}` : `/api/acquisitions/rule-presets`
 }
 
 /**
- * @summary Lists editable starter rules for common audio language and format preferences.
+ * @summary Lists editable starter rules for common language, format, and audiobook preferences, optionally only those that fit the profile governing one kind.
  */
-export const listAcquisitionRulePresets = async ( options?: RequestInit): Promise<listAcquisitionRulePresetsResponse> => {
+export const listAcquisitionRulePresets = async (params?: ListAcquisitionRulePresetsParams, options?: RequestInit): Promise<listAcquisitionRulePresetsResponse> => {
 
-  return orvalFetch<listAcquisitionRulePresetsResponse>(getListAcquisitionRulePresetsUrl(),
+  return orvalFetch<listAcquisitionRulePresetsResponse>(getListAcquisitionRulePresetsUrl(params),
   {
     ...options,
     method: 'GET'

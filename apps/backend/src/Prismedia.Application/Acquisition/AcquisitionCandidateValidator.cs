@@ -11,6 +11,9 @@ public static class AcquisitionRuleContext {
         UpgradeOwnedQuality? owned, ProperDownloadPolicy properPolicy, IReadOnlyList<DownloadProtocol> protocols) {
         rules = rules with {
             TargetTitle = input.WorkTitle,
+            TargetSeriesTitle = input.Kind is EntityKind.ComicVolume or EntityKind.ComicInstallment ? input.Series : null,
+            TargetInstallmentNumber = input.Kind == EntityKind.ComicInstallment
+                ? ComicInstallmentNumber.Parse(input.InstallmentLabel) ?? BookReleaseTokens.ParseInstallment(input.Title) : null,
             TargetAlternativeTitles = input.AlternativeWorkTitles,
             TargetEpisodeTitle = input.EpisodeNumber is null ? null : input.Title,
             TargetTrackTitle = input.Kind == EntityKind.AudioTrack ? input.Title : null,
@@ -24,7 +27,8 @@ public static class AcquisitionRuleContext {
         return owned is null ? rules : rules with {
             IsUpgradeSearch = true, OwnedQuality = owned.BookRank ?? default, OwnedMediaQuality = owned.MediaQualityCode,
             OwnedMediaRevision = owned.MediaRevision, OwnedFormatScore = owned.FormatScore, OwnedHasSubtitles = owned.HasSubtitles,
-            OwnedVideoResolutionTier = owned.VideoResolutionTier, OwnedVideoSourceShared = owned.VideoSourceShared
+            OwnedVideoResolutionTier = owned.VideoResolutionTier, OwnedVideoSourceShared = owned.VideoSourceShared,
+            OwnedAudiobookShape = owned.AudiobookShape
         };
     }
 }

@@ -2,7 +2,6 @@ using System.Text.Json;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Processes;
-using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -13,22 +12,17 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
     /// <summary>Manifest runtime code owned by this runner.</summary>
     public const string Code = "dotnet-process";
 
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
-        PropertyNameCaseInsensitive = true,
-        WriteIndented = false,
-        // Codec enums (e.g. proposal TargetKind) round-trip as their stable string code on the
-        // plugin wire, matching the HTTP contract a plugin author sees.
-        Converters = { new CodecJsonConverterFactory() }
-    };
-
-    private static readonly TimeSpan DefaultIdentifyTimeout = TimeSpan.FromSeconds(60);
-    private readonly ProcessExecutor _processes;
-    private readonly PluginCatalogOptions _options;
+    private static readonly TimeSpan DefaultIdentifyTimeout = PluginProcessTransport.MaximumInvocationDuration;
+    private readonly PluginProcessTransport _transport;
     private readonly TimeSpan _identifyTimeout;
 
-    public DotnetPluginProcessRunner(ProcessExecutor processes, PluginCatalogOptions options, TimeSpan? identifyTimeout = null) {
-        _processes = processes;
-        _options = options;
+    /// <summary>Creates a standalone runner for manifests without an execution policy; policy-bearing manifests require an admitted transport.</summary>
+    public DotnetPluginProcessRunner(ProcessExecutor processes, PluginCatalogOptions options, TimeSpan? identifyTimeout = null)
+        : this(new PluginProcessTransport(processes, options), identifyTimeout) { }
+
+    /// <summary>Uses the same admitted process boundary as integration calls, including the shared provider budget.</summary>
+    public DotnetPluginProcessRunner(PluginProcessTransport transport, TimeSpan? identifyTimeout = null) {
+        _transport = transport;
         _identifyTimeout = identifyTimeout ?? DefaultIdentifyTimeout;
     }
 
@@ -42,22 +36,10 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
         PluginDescriptor descriptor,
         IdentifyPluginRequest request,
         CancellationToken cancellationToken) {
-        var requestDirectory = Path.Combine(_options.CacheRoot, "plugins", "requests");
-        Directory.CreateDirectory(requestDirectory);
-        var requestPath = Path.Combine(requestDirectory, $"{Guid.NewGuid():N}.json");
-        await File.WriteAllTextAsync(
-            requestPath,
-            JsonSerializer.Serialize(request, JsonOptions),
-            cancellationToken);
-
         try {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(_identifyTimeout);
-            var result = await _processes.RunAsync(
-                "dotnet",
-                [descriptor.EntryPath, requestPath],
-                environment: null,
-                timeout.Token);
+            var result = await _transport.RunAsync(descriptor, request, timeout.Token);
 
             if (result.ExitCode != 0) {
                 return new IdentifyPluginResponse(
@@ -65,19 +47,22 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
                     null,
                     string.IsNullOrWhiteSpace(result.StandardError)
                         ? $"Plugin exited with code {result.ExitCode}."
-                        : result.StandardError.Trim());
+                        : PluginProcessTransport.RedactError(result.StandardError.Trim(), request.Auth.Values));
             }
 
-            var wire = JsonSerializer.Deserialize<PluginWireResponse>(result.StandardOutput, JsonOptions);
+            var wire = JsonSerializer.Deserialize<PluginWireResponse>(result.StandardOutput, PluginProcessTransport.JsonOptions);
+            if (wire is not null) wire = wire with { Error = PluginProcessTransport.RedactError(wire.Error, request.Auth.Values) };
             return wire is not null
                 ? ConvertWireResponse(wire, descriptor.Manifest.Name, request.Entity.Kind)
                 : new IdentifyPluginResponse(false, null, "Plugin returned an empty response.");
         } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
             return new IdentifyPluginResponse(false, null, $"Plugin timed out after {_identifyTimeout.TotalSeconds:0} seconds.");
-        } catch (JsonException ex) {
-            return new IdentifyPluginResponse(false, null, $"Plugin returned invalid JSON: {ex.Message}");
-        } finally {
-            TryDelete(requestPath);
+        } catch (ProcessOutputLimitException) {
+            return IdentifyPluginResponse.Failure("Plugin output exceeded its size limit.");
+        } catch (InvalidDataException) {
+            return IdentifyPluginResponse.Failure("Plugin request exceeded its size limit.");
+        } catch (JsonException) {
+            return IdentifyPluginResponse.Failure("Plugin returned invalid JSON or exceeded the nesting limit.");
         }
     }
 
@@ -150,11 +135,4 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
             candidate.Confidence,
             candidate.MatchReason);
 
-    private static void TryDelete(string path) {
-        try {
-            File.Delete(path);
-        } catch (IOException) {
-        } catch (UnauthorizedAccessException) {
-        }
-    }
 }

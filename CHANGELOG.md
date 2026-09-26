@@ -6,7 +6,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Docs
+
+- Documented connecting Suwayomi OPDS catalogs to browse and import already downloaded CBZ chapters, including authentication and reading-progress settings.
+
+- Documented the executor protocol for durable jobs, sealed output manifests, retained artifacts, and independently retryable import acknowledgements.
+
 ### Added
+
+- Plugins can provide metadata, discovery, acquisition, download, and external-library capabilities independently. Connections support multiple instances of a plugin with separate credentials, health checks, and packaged provider logos, and open in focused editors that explain their supported features and separate API connectivity from linked library folders. Enabled connections test automatically after saving, a failed test keeps the saved configuration, and Request and connection pages offer only the search, request, library, and import actions a connection supports for each media type.
+
+- Saved metadata-plugin and OpenSubtitles credentials are encrypted with persistent application keys. Each Connection passes a plugin only the credentials its current version declares; retired encrypted fields stay recoverable and cannot block a run when their old values are unreadable.
+
+- Request combines media discovery and connected collections behind one source picker, with visual library cards, a separate Activity view, and breadcrumbs and browser history that restore the source context. Reviews load metadata and provider choices together, recognize existing requests and linked library items with a direct link to their page and progress, and reject issue labels or alternative titles that were not part of the reviewed provider proposal. Requests submit in one step and open the normal entity page; imports choose their destination after a title is selected.
+
+- Radarr and Sonarr can search for new titles from Request, and reviewed movie and selected-episode requests hand acquisition to the manager. Followed series can add more selected episodes while keeping their existing library links, and the request button counts only the newly selected episodes. Sonarr reviews recognize episodes a connection already manages and show only the saved episode scope once it is submitted. Selected episodes stay linked when Sonarr also holds other episodes of the series, while shared files and changed identities get a separate review.
+
+- Linked Radarr and Sonarr titles offer monitoring, profile, and search controls scoped to what the manager holds, and show the manager's own reason when it refuses a change or search. Connected request and linked-library statuses use the same wording on every page.
+
+- A connected manager that accepts a request or holds a linked title owns that acquisition scope before any background work starts. Prismedia's own searches, retries, replacements, and monitoring do not compete with it and explain which connected application owns the title, including equivalent titles and selected episode scopes. Temporary connection failures resume automatically, uncertain manager responses are kept and retried with the same accepted request, identity and ownership conflicts wait for review, and rejected requests, actions, and handoffs can be reviewed again.
+
+- Titles confirmed removed from Radarr or Sonarr leave normal library lists once no playable files remain, keeping their metadata and watch history; connection failures never count as removal. Ownership can then be handed back to Prismedia explicitly after fresh removal and activity checks.
+
+- Provider folders appear in Settings → Libraries and can attach to existing Prismedia libraries. Setup separates the provider's paths from folders the Prismedia server can read, with guidance for shared storage across hosts and read-only mounts. External files stay in place and read-only: the manager keeps control of the originals, Prismedia does not offer to delete them, native download destinations and saved profile defaults exclude read-only external libraries, and completed-download cleanup keeps any payload that still backs a linked library source, including through nested directory links.
+
+- Enabled external libraries scan after linking and at regular intervals, and tracking checks for changes every minute. Visibility, playback, watch history, and manager controls carry across renames and upgrades. Missing files, and series or other containers left empty, keep their catalog identity and history even while a connection is offline, and returning files keep their original identities. Open external pages refresh availability and request progress without reloading unchanged artwork or playback.
+
+- Connected titles open in full detail pages with source artwork and descriptions, automatic file-access checks, guided folder setup, and an In Prismedia tab listing linked items and file availability, with settings, action history, and stopping management in focused dialogs. Library detail pages add an External library tab with the source, read-in-place file access, and provider progress in place of native acquisition controls, plus a link back to the connected title for administrators.
+
+- A reviewed or existing Book can request the ebook, the audiobook, or both from a connected Book manager in one submission, each with its own destination library and profile. Each format keeps its own status, ownership, and retry: a partial failure names the format that needs a retry while the successful request stays attached to the same Book, and local request actions for a format disappear as soon as a manager accepts it.
+
+- LazyLibrarian holdings appear as separate ebook and audiobook renditions of one work, each with its own mapped library, read-only file checks, ownership, monitoring and search controls, and independent release, even when the other rendition lives in a native library. Book pages show both renditions' availability together in Acquisition with separate actions for a missing one, and final files from either attach to the same Prismedia Book. An audiobook request completes only when every audio part in the mapped folder is accounted for; parts the manager did not report pause it for review.
+
+- When a connected ebook and audiobook scan into separate local Books, a reviewed link can merge simple, untouched records under the already linked Book and keep the first accepted ownership. Records with other activity or files, or a second rendition whose scanned Book differs from the first, stop for separate review. Book sources that exist only in a connected library lead to provider-folder mapping.
+
+- Books with both an ebook and an audiobook keep separate reading and listening positions, so each format resumes exactly where it was left. The server aligns switches between reading and listening chapter by chapter and labels estimated positions. When the saved chapter has no match in the other format, Prismedia explains why and offers an explicit start at the first paired chapter instead of jumping elsewhere.
+
+- Kapowarr connections expose existing comic runs with each issue's monitoring state, exact Comic Vine identity, and files. Reviewed matches link scanned issues to their source files, keeping library identity and reading history when files move or change, and missing issues stay visible. Linked issues can change monitoring or queue an exact issue search; task outcomes stay unverified when Kapowarr cannot prove completion.
+
+- Kapowarr can add a reviewed Comic Vine run from Request to a mapped comic library with monitoring and automatic search off, and a missing issue can be reviewed and requested from the connected run. Requested issues keep their exact number in Activity and become readable only after a verified comic archive arrives; a changed issue label or missing run pauses the request for review.
+
+- Internet Archive comic connections can browse and search explicitly public-domain-labeled items, review original CBZ files, and import a selected issue with source and license details retained.
+
+- Book and comic metadata records where each field came from, keeps exact installment labels, and protects manual edits, including deliberate clears. Library rescans preserve protected titles and cleared descriptions against embedded book metadata and sidecars, and metadata providers that return no value leave existing descriptions, classifications, tags, and credits in place. Identity changes go through review: reviews show creator credits and studio names with accept and reject controls even when a plugin proposes no separate people or studios, and an Open Library review can unlink a superseded edition without affecting shared ISBNs or other providers, so later lookups no longer restore it.
+
+- Metron supplies comic metadata. Radarr movie reviews can include cast, characters, crew, and linked People with headshots, and existing linked movies and series fill missing credits automatically from exact manager or configured metadata identities while manual credit edits and clears stay protected.
+
+- OPDS and compatible catalogs, including Wikimedia Commons, can browse and import books, comics, and still images. Imports distinguish downloads from loans, purchases, and samples, keep source attribution, and use the selected publication title when the file has no embedded title.
+
+- URL executor connections can import publications, still images, and ordered galleries through durable jobs, exact output manifests, and retryable acknowledgements. An Archiver simulator and a standalone acceptance checker validate the interface, verified downloads, and restart recovery while the separate app is rebuilt.
+
+- Catalog and URL executor imports recover through cancellation, retries, and interrupted placement. An interrupted import resumes from an already placed or local file after verifying its exact bytes, even when staging is missing or the source is offline, and keeps the correct transfer or import failure and retry progress. Acknowledgements stay retryable when remote retention renewal fails, and completed staging is cleaned up only after these safeguards.
+
+- Soulseek searches through slskd support EPUB/PDF books, CBZ/ZIP comics, and ordered audiobook files, with each publication format selectable separately. Book and comic searches wait for slskd to finish a queued or late peer window, and slash-separated peer paths keep author and work boundaries so valid matches are not rejected.
+
+- Audiobook searches prefer releases with exact chapter structure: a single M4B ranks first, then one file per chapter, then releases whose layout is unknown, then part splits, and finally one long MP3. Releases that offer only audio Prismedia cannot import, such as FLAC, Opus, or AAX, are skipped instead of failing after download, and an automatic qBittorrent download whose file list holds no importable audio moves on to another release before its audio transfers. A download that mixes formats imports one coherent set (M4B before MP3), and multi-disc downloads keep disc then track order instead of interleaving same-named tracks. An audiobook imported as part files or one long MP3 is kept and, when its profile upgrades automatically, stays eligible for a chaptered upgrade; the replacement must show better chapter structure in its files before it replaces the owned audiobook.
 
 - Monitored movies and TV units can look for better matches while keeping unattended automatic import holds available for review. Recovery compares episode coverage and profile quality, backs off from hours to weekly searches, and only cleans up superseded downloads after a replacement finishes importing. Unresolved foreign-season extras remain available for review.
 
@@ -18,7 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Replace or upload individual TV episodes, including older files imported through season packs. Replacement searches use current episode numbering and monitor preferences; files shared by multiple episodes require coverage-aware review.
 
-- Acquisition profiles now offer an ordered audio-language picker and editable starter rules for common languages, codecs, HDR, source formats, and lossless audio. Basic and Advanced edit the same reusable custom formats, with scores set per profile.
+- Acquisition profiles now offer an ordered audio-language picker and editable starter rules for common languages, codecs, HDR, source formats, lossless audio, and M4B or chapterized audiobooks. Each profile type offers only the starter rules that apply to it, so Book profiles no longer list video codecs. Basic and Advanced edit the same reusable custom formats, with scores set per profile.
 
 - Movie and TV acquisition can search verified original, translated, and romanized titles from the selected metadata provider. Those names share strict identity checks and quality ranking through download validation, import, and coverage recovery.
 
@@ -33,13 +87,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Comic installments now use the same definition-owned manual upload and replacement contract as other concrete media files, while prose Books accept only their own readable or audio formats.
 - Serialized comics now have separate series, optional volume, and installment entity contracts, preserving the distinction between an independently released chapter or issue and a prose book's internal chapter markers.
 - Entity details now advertise ordered-sequence participation and directly playable audio through generated capabilities, giving every client one shared contract for sequence interactions and audio playback without media-kind checks.
-- Books that have both readable and audiobook renditions now include a Chapter Mapping tab. Mark the readable chapter where the first audiobook file begins to fill the map sequentially, override individual files when needed, and save the alignment for web and native clients.
+- Books that have both readable and audiobook renditions now include a Chapter Mapping tab. Pair chapters by hand, or fill in order from a chosen readable chapter and review every proposed pair before using it; saved pairs remember whether they were picked or filled in order, and the alignment is shared with web and native clients.
 - Audiobook-to-ebook chapter matching is now computed once during library scans and stored with the book, instead of being recalculated by every client on every visit. The Chapter Mapping tab shows the stored map instantly, distinguishes automatic matches from your explicit choices, and refills the automatic layer whenever files, tracks, or your overrides change.
 - Book pages open in one round of requests: the readable chapter list (EPUB contents or chapter summaries with page counts) is persisted at scan time and served from the database, chapter page counts no longer require fetching every page of every chapter, and moving your reading position no longer refetches the contents at all.
 - Administrators can now grant content-request access to individual household members. Permitted members can discover and request media from both the web and native apps using their accessible libraries, while request activity, plugin management, and acquisition settings remain restricted to administrators.
 - TV downloads held for manual import now open an expected-episode review: Prismedia prefills unambiguous matches, lets each episode choose a downloaded video, supports one video satisfying several episodes, and keeps the complete payload in a collapsed audit list. Potentially dangerous companion files are blocked from selection while verified media remains mappable behind an explicit safety confirmation. A held release can also be rejected to remove its download data, blocklist it, and immediately search again.
 
 ### Changed
+
+- Connected-manager requests for movies, series, Books, and comic issues go through one review-and-commit flow: every request names its work once, asks for the scopes it needs (each Book format keeps its own mapped library and outcome), and the older per-kind manager request routes are gone.
+
+- Reading and listening are linked only when Prismedia can line them up exactly: the audiobook has real chapter boundaries (embedded chapters, or one file per chapter) and at least one chapter is paired by you, by a reviewed in-order fill, or by an exact title match. Linked books keep switching between formats and one shared progress. Every other book, including single-file audiobooks without chapter markers and audiobooks split into parts, tracks reading and listening separately: the Book page and library thumbnails show two progress meters with the reason, listening never moves the reading position, and nothing switches between the formats.
+
+- Request Activity loads a paged server feed that separates problems, active work, followed library titles, and recent history in compact rows, with full source credits on demand. History stays visible while a source is offline, and completed manager requests no longer repeat as separate tracked items. Unreadable downloaded books and comics are reported as invalid media rather than connection or destination failures, without exposing private paths. Links to imported items follow the current content visibility mode, including nested comic and book pages, and Activity explains when a retained import is unavailable or hidden.
+
+- Installed plugins appear as cards that show each media family a plugin serves, what it does there, and the connections it backs, with update, credential, and removal actions on the card. A coverage strip shows which families have a plugin and narrows the cards to one family. Plugins show a status only when something needs attention, such as missing keys or a connection that is down.
+
+- Jobs groups background work into one lane per job type with its last 24 hours of activity and retained totals, so repeated runs no longer fill the page. Starting work, cancelling workflows, and reviewing or clearing failures stay on the page, and idle job types fold into a short list.
+
+- The Dashboard's featured progress bar uses the colour of the item's media family, and Books tracked separately show reading and listening progress as two bars.
+
+- Identify opens on its queue, showing each item's cover, provider, media type, and match strength instead of internal codes, followed by one card per media family with how many items are still unidentified for each kind and the providers that can identify them. Choosing a kind opens its identify grid.
+
+- Watched Libraries show each library as a card with switches for the media it scans, NSFW, and automatic identification, a Scan button for that library alone, and a confirmation before removing it.
+
+- Add to Collection can create a new collection from the typed name and add the selection to it in one step.
+
+- Identify's kind grids keep a floating "Identify N with <provider>" button in view, so starting identification for the selected items is one clear action.
+
+- Studios use the same 16:9 frame and size as episodes: larger on detail pages and in reviews, smaller on the Dashboard.
+
+- Request and connected-source administration can open as focused pages inside the iOS app, using its native navigation and background while staying current with the web interface.
+
+- Book chapter alignment shows total automatic and manual coverage for readable and audio chapters and clearly marks chapters without a match. Saving rejects targets that are no longer in the Book's readable contents and keeps the existing choices.
+
+- Book and comic searches try verified alternate work names when the main name finds no usable release, and automatic comic issue matches verify the series name before accepting an exact issue number.
+
+- Comic issue labels stay exact, including fractional, negative, and suffixed issues. Imports fall back to the source's issue number when the archive has no ComicInfo number, release matching uses the current library label even when the installment title has no number, and automatic exact-issue requests reject unnumbered packs. Reviews without exact issue positions keep their previous revision, while changes to fractional or special labels still need a fresh review.
 
 - Episode searches and automatic grabs reject releases whose distinctive title confidently identifies another episode in the known series catalog, even when the advertised season and episode number match. Unnamed, translated, ambiguous, and multi-episode releases retain their existing checks.
 
@@ -122,6 +206,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Accepting an Identify proposal keeps the review and its progress on screen until the next page opens, instead of briefly showing the search view or a loader.
+
+- Automatic audiobook chapter matching no longer guesses: it never pairs chapters by position, by file name, by the placeholder of an untitled chapter, or by titles whose chapter numbers differ, and repeated or out-of-order titles stay unpaired. Existing automatic pairs are recomputed once under these rules. Audiobook track order no longer flips between file-name order and track-number tags.
+- Audio longer than an hour, such as a single-file audiobook, now resumes at its saved position and shows its full length in the player instead of being cut off at the minute-and-second reading of its hour-and-minute label. Opening or reloading a page with a paused player no longer overwrites a newer listening position saved on another device.
+- Acquisition searches now say when an indexer was skipped by its hourly query limit instead of reporting it as a failed connection.
+
+- Soulseek searches keep the peer results slskd collected when its response window ends in a timed-out state instead of reporting a failed search, and queueing retries a transient peer-wait timeout once after confirming slskd did not already queue the files.
+
+- Tab rows in Identify and shared page sections now scroll sideways without their own vertical movement on mobile.
+
+- Explicit root rescans from Files refresh catalog details for unchanged files, such as corrected comic issue numbers, and keep the selected folder while its contents refresh.
+
+- Adaptive video playback uses the HLS player in Chromium even when the browser advertises incomplete native support; Safari keeps native HLS playback.
+
+- Plugin updates wait while connected transfers or active or uncertain manager changes are unfinished, keeping the installed adapter in place. Accepted manager requests that are only waiting for files keep their ownership and no longer block an update. After an update, enabled connections are rechecked automatically and only failed checks need attention; plugins still used by active Connections or mapped libraries cannot be removed.
+
+- Native plugins share one persistent concurrency and start-rate budget per plugin across all Connections, interactive requests, and background work. Native metadata plugins run with bounded output, a restricted inherited environment, and private temporary credential files, and reported failures redact credentials.
+
+- Identify explains missing metadata-provider setup and keeps the item's review when you visit Plugins, with a clear route back. Discovery and metadata review report failed provider lookups as provider errors instead of empty results or titles that could not be found.
+
+- Alert actions stay vertically inside compact error banners, keeping connected-library retry controls within the rounded border.
+
+- Book naming templates must preserve the publication extension, and rendered filenames are checked before import placement. Acquisition actions blocked by retained import recovery now return an actionable conflict instead of a server error.
+
+- OPDS catalogs now include dedicated comic installments and their series, with CBZ downloads that respect library access and NSFW series visibility.
 
 - Applying a reviewed Identify match no longer fails with a "400 Bad Request" when Prismedia is reached over a plain `http://` address on your network, such as `http://192.168.1.10:8008`. Identify apply, its live progress readout, and opening the comic reader all work on those addresses again; previously they only worked over HTTPS or from `localhost`.
 

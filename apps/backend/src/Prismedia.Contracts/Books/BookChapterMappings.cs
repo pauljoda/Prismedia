@@ -6,8 +6,10 @@ namespace Prismedia.Contracts.Books;
 /// <param name="ReadableChapterKey">Stable location key from the readable book contents.</param>
 /// <param name="AudioTrackId">Identifier of the audiobook track Entity.</param>
 /// <param name="Origin">
-/// Mapping provenance code (<c>manual</c> or <c>auto</c>). Ignored on save requests, where every
-/// submitted pair is manual by definition.
+/// Mapping provenance code (<c>manual</c>, <c>ordered</c>, or <c>auto</c>). On save requests each row
+/// states how the person confirmed it: <c>manual</c> (picked by hand, the default when omitted) or
+/// <c>ordered</c> (filled in playback order and reviewed). Automatic rows are server-owned and are
+/// rejected on save.
 /// </param>
 /// <param name="AudioMarkerId">
 /// Optional marker identifying one chapter window inside <paramref name="AudioTrackId"/>. Null

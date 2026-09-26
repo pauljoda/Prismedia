@@ -6,4 +6,5 @@ namespace Prismedia.Contracts.Entities;
 /// <param name="IsOrganized">Organized/reviewed flag when projected.</param>
 /// <param name="IsWanted">Wanted-placeholder flag (request-created entity with no file yet) when projected.</param>
 [CapabilityKind("flags")]
-public sealed record FlagsCapability(bool? IsFavorite, bool? IsNsfw, bool? IsOrganized, bool? IsWanted = null) : EntityCapability;
+public sealed record FlagsCapability(bool? IsFavorite, bool? IsNsfw, bool? IsOrganized, bool? IsWanted = null,
+    bool IsLibraryArchived = false) : EntityCapability;

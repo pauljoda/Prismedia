@@ -1,3 +1,5 @@
+using Prismedia.Application.Integrations;
+using Prismedia.Infrastructure.Integrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -87,7 +89,78 @@ public static class DependencyInjection {
         RegisterPersistence(services, connectionString);
         services.AddSingleton(new ManagedGeneratedSourceRoot(dataDir));
         RegisterMediaProcessing(services, mediaToolOptions, dataDir, cacheDir);
+        services.AddSingleton(new PrismediaBuildInfo(ResolveCurrentVersion(configuration, pathBase)));
         RegisterPluginsAndIdentify(services, configuration, pathBase, cacheDir);
+        services.AddSingleton(new ConnectionSecretProtector(dataDir));
+        services.AddSingleton(new ProviderCredentialProtector(dataDir));
+        services.AddScoped<ProviderCredentialStore>();
+        services.AddSingleton<PluginProcessTransport>();
+        services.AddSingleton<IPluginInvocationGate, PostgresPluginInvocationGate>();
+        services.AddScoped<IIntegrationConnectionStore, EfIntegrationConnectionStore>();
+        services.AddScoped<IntegrationPluginGateway>();
+        services.AddScoped<IIntegrationPluginGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationDiscoveryGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationSourceAcquisitionGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationManagerGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationLibraryGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationManagerControlGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationManagerReleaseGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationManagerCreationGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<ManagedLibraryService>();
+        services.AddScoped<ProviderLibraryService>();
+        services.AddScoped<ManagedDiscoveryService>();
+        services.AddScoped<IManagedTrackingStore, EfManagedTrackingStore>();
+        services.AddScoped<IFulfillmentReservationStore, EfFulfillmentReservationStore>();
+        services.AddScoped<IExternalFulfillmentOwnershipReader, EfExternalFulfillmentOwnershipReader>();
+        services.AddScoped<IReviewedFulfillmentOwnershipReader, EfReviewedFulfillmentOwnershipReader>();
+        services.AddScoped<ManagedTrackingService>();
+        services.AddScoped<IManagedControlStore, EfManagedControlStore>();
+        services.AddScoped<ManagedControlService>();
+        services.AddScoped<ManagedControlProcessor>();
+        services.AddScoped<IManagedReleaseStore, EfManagedReleaseStore>();
+        services.AddScoped<ManagedReleaseService>();
+        services.AddScoped<IManagedRequestStore, EfManagedRequestStore>();
+        services.AddScoped<IManagedComicIssueWriter, EfManagedComicIssueWriter>();
+        services.AddScoped<IReviewedManagedRequestCommitScope, EfReviewedManagedRequestCommitScope>();
+        services.AddScoped<ManagedRequestService>();
+        services.AddScoped<ReviewedManagedRequestService>();
+        services.AddScoped<ReviewedManagedComicRunService>();
+        services.AddScoped<ManagedRequestProcessor>();
+        services.AddSingleton(new ExternalLibraryStorageOptions(dataDir, cacheDir));
+        services.AddScoped<IExternalLibraryMountStore, EfExternalLibraryMountStore>();
+        services.AddScoped<ExternalLibraryService>();
+        services.AddSingleton<IDiscoveryTokenProtector>(new DiscoveryTokenProtector(dataDir));
+        services.AddSingleton<IExecutorSelectionProtector>(new ExecutorSelectionProtector(dataDir));
+        services.AddScoped<IntegrationConnectionAccess>();
+        services.AddScoped<ExternalPeopleEnrichmentPlanResolver>();
+        services.AddScoped<IExternalPeopleEnrichmentPlanResolver>(provider =>
+            provider.GetRequiredService<ExternalPeopleEnrichmentPlanResolver>());
+        services.AddScoped<IExternalPeopleEnrichmentScheduler, ExternalPeopleEnrichmentScheduler>();
+        services.AddScoped<IExternalPeopleEnrichmentRunner, ExternalPeopleEnrichmentRunner>();
+        services.AddScoped<CatalogDiscoveryService>();
+        services.AddScoped<CatalogAcquisitionService>();
+        services.AddScoped<SourceAcquisitionService>();
+        services.AddScoped<ExecutorAcquisitionService>();
+        services.AddScoped<IntegrationTransferService>();
+        services.AddScoped<IIntegrationTransferScheduler, IntegrationTransferScheduler>();
+        services.AddScoped<IIntegrationTransferStore, EfIntegrationTransferStore>();
+        services.AddScoped<IRequestActivityReader, EfRequestActivityReader>();
+        services.AddScoped<IIntegrationArtifactStagingMaintenance, EfIntegrationArtifactStagingMaintenance>();
+        services.AddScoped<IEntityAcquisitionAttributionReader, EfEntityAcquisitionAttributionReader>();
+        services.AddScoped<IEntityExternalLibraryProvenanceReader, EfEntityExternalLibraryProvenanceReader>();
+        services.AddSingleton(new TransferPlanProtector(dataDir));
+        services.AddScoped<IIntegrationMediaVerifier, IntegrationMediaVerifier>();
+        services.AddScoped<IIntegrationImportPlacement, IntegrationImportPlacement>();
+        services.AddScoped<IIntegrationGalleryPlacement, IntegrationGalleryPlacement>();
+        services.AddScoped<IImportedPublicationTitleResolver, ImportedPublicationTitleResolver>();
+        services.AddScoped<ConnectionService>();
+        services.AddScoped<IntegrationManifestReader>();
+        services.AddSingleton(new IntegrationArtifactStorageOptions(Path.Combine(dataDir, "integrations", "artifacts")));
+        services.AddHttpClient<IIntegrationArtifactTransfer, HttpIntegrationArtifactTransfer>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler {
+                AllowAutoRedirect = false, UseCookies = false, ConnectTimeout = TimeSpan.FromSeconds(15)
+            }).RemoveAllLoggers();
         RegisterLibraryScanning(services, dataDir);
         RegisterEntities(services, cacheDir);
         RegisterFilesAndOrganization(services);
@@ -166,7 +239,7 @@ public static class DependencyInjection {
             ResolveCurrentVersion(configuration, pathBase),
             ResolvePluginIndexUrl(configuration),
             ResolveStashScraperIndexUrl(configuration)));
-        services.AddSingleton<DotnetPluginProcessRunner>();
+        services.AddSingleton(provider => new DotnetPluginProcessRunner(provider.GetRequiredService<PluginProcessTransport>()));
         services.AddSingleton<IIdentifyRunner>(provider =>
             provider.GetRequiredService<DotnetPluginProcessRunner>());
         services.AddSingleton<IIdentifyRunner>(provider => new StashCompatRunner(
@@ -175,6 +248,7 @@ public static class DependencyInjection {
         services.AddSingleton<IdentifyRunnerSelector>();
         services.AddSingleton<PluginIndexCache>();
         services.AddScoped(provider => new PluginCatalogService(
+            provider.GetRequiredService<ProviderCredentialStore>(),
             provider.GetRequiredService<PrismediaDbContext>(),
             provider.GetRequiredService<PluginCatalogOptions>(),
             indexCache: provider.GetRequiredService<PluginIndexCache>()));
@@ -196,6 +270,9 @@ public static class DependencyInjection {
             settings: provider.GetRequiredService<Prismedia.Application.Settings.SettingsService>()));
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
+        services.AddScoped<IExternalPeopleCreditsApplier>(provider =>
+            provider.GetRequiredService<EntityMetadataApplyService>());
+        services.AddScoped<IMetadataFieldService, EfMetadataFieldService>();
         services.AddScoped<IEntityPositionEnricher>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IEntityManagementService, EntityManagementService>();
@@ -298,6 +375,7 @@ public static class DependencyInjection {
         services.AddScoped<EfEntityCatalogQuery>();
         services.AddScoped<EfEntityReadService>();
         services.AddScoped<IEntityReadService>(provider => provider.GetRequiredService<EfEntityReadService>());
+        services.AddScoped<IUnidentifiedEntityCounter>(provider => provider.GetRequiredService<EfEntityReadService>());
         services.AddScoped<IEntityAvailabilityReconciler, EfEntityAvailabilityReconciler>();
         services.AddScoped<IEntityRollupReconciler, EfEntityRollupReconciler>();
         services.AddScoped<IEntityAssetRowSweeper, EfEntityAssetRowSweeper>();
@@ -315,6 +393,7 @@ public static class DependencyInjection {
         services.AddScoped<IBookContentsService, EpubBookContentsService>();
         services.AddScoped<IBookChapterMappingService, EfBookChapterMappingService>();
         services.AddScoped<IBookChapterMapService, EfBookChapterMapService>();
+        services.AddScoped<IWorkAlignmentReader, EfWorkAlignmentReader>();
         services.AddScoped<IGridThumbnailService>(provider =>
             new GridThumbnailService(
                 provider.GetRequiredService<PrismediaDbContext>(),
@@ -334,6 +413,8 @@ public static class DependencyInjection {
         services.AddScoped<IFilesPersistence, EfFilesPersistence>();
         services.AddScoped<IEntitySourcePathOwnerReader, EfEntitySourcePathOwnerReader>();
         services.AddSingleton<IManagedFileStorage, LocalManagedFileStorage>();
+        services.AddSingleton<PostgresLibraryFileMutationGuard>();
+        services.AddSingleton<ILibraryFileMutationGuard>(provider => provider.GetRequiredService<PostgresLibraryFileMutationGuard>());
         services.AddSingleton<IFileArchivePreparationService, FileArchivePreparationService>();
     }
 
@@ -419,7 +500,9 @@ public static class DependencyInjection {
             TimeSpan.FromDays(1)));
         services.AddSingleton<IWorkerHeartbeatStore>(new FileWorkerHeartbeatStore(dataDir));
         services.AddScoped<IDatabaseBackupService, DatabaseBackupService>();
-        services.AddScoped<IJobQueueService, JobQueueService>();
+        services.AddScoped<JobQueueService>();
+        services.AddScoped<IJobQueueService>(provider => provider.GetRequiredService<JobQueueService>());
+        services.AddScoped<IJobActivityReader>(provider => provider.GetRequiredService<JobQueueService>());
         services.AddScoped<IJobGraphService, JobGraphService>();
         services.AddSingleton<SettingsSnapshotCache>();
         services.AddScoped<EfSettingsPersistence>();
@@ -505,7 +588,9 @@ public static class DependencyInjection {
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<NewznabIndexerClient>());
         services.AddSingleton<SlskdSearchConcurrencyGate>();
         services.AddScoped(provider => new SlskdIndexerClient(
-            new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
+            // A slskd response can outlive its peer search window while the daemon collects results.
+            // Keep the transport deadline beyond the adapter's completion poll so it can read TimedOut responses.
+            new HttpClient { Timeout = TimeSpan.FromSeconds(90) },
             provider.GetRequiredService<SlskdSearchConcurrencyGate>()));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<SlskdIndexerClient>());
         services.AddScoped<IIndexerSearchClientFactory, IndexerSearchClientFactory>();

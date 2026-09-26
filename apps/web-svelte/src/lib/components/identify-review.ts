@@ -51,6 +51,20 @@ export const reviewDiffFieldKeys = reviewFieldKeys.filter(
   (field) => !(reviewDetailedFieldKeys as readonly string[]).includes(field),
 );
 
+/** Keeps direct credits and studio names reviewable when a provider has no matching relationship cards. */
+export function reviewBaseFieldKeys(proposal: EntityMetadataProposal): (typeof reviewFieldKeys)[number][] {
+  const relationships = relationshipProposals(proposal);
+  const represented = (kind: string, name: string) => relationships.some((relationship) =>
+    relationship.targetKind === kind &&
+    (relationship.patch.title ?? "").trim().localeCompare(name.trim(), undefined, { sensitivity: "accent" }) === 0,
+  );
+  const hasDirectCredits = proposal.patch.credits.some((credit) => !represented(ENTITY_KIND.person, credit.name));
+  const hasDirectStudio = Boolean(proposal.patch.studio?.trim()) && !represented(ENTITY_KIND.studio, proposal.patch.studio!);
+  return reviewFieldKeys.filter((field) => reviewDiffFieldKeys.includes(field) ||
+    field === METADATA_PATCH_FIELD.credits && hasDirectCredits ||
+    field === METADATA_PATCH_FIELD.studio && hasDirectStudio);
+}
+
 export const reviewFieldLabels: Record<string, string> = {
   title: "Title",
   description: "Description",
@@ -83,6 +97,17 @@ const entityDateTypeLabels: Record<string, string> = {
   [ENTITY_DATE_TYPE.careerStart]: "Career start",
   [ENTITY_DATE_TYPE.careerEnd]: "Career end",
 };
+
+/** Provider stat and date keys are open vocabulary; camelCase and dashes read as words. */
+export function readableProviderKey(key: string): string {
+  const words = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Readable name for a date: typed dates use their labels, provider keys read as words. */
+export function reviewDateTypeLabel(type: string): string {
+  return entityDateTypeLabels[type] ?? readableProviderKey(type);
+}
 
 export interface IdentifyReviewSelectionState {
   selectedFieldsByProposal: Record<string, Record<string, boolean>>;
@@ -377,7 +402,10 @@ export function proposalFieldValue(result: EntityMetadataProposal, field: string
   const patch = result.patch;
   if (field === METADATA_PATCH_FIELD.title) return patch.title ?? "";
   if (field === METADATA_PATCH_FIELD.description) return patch.description ?? "";
-  if (field === METADATA_PATCH_FIELD.externalIds) return entries(patch.externalIds).join(", ");
+  if (field === METADATA_PATCH_FIELD.externalIds) return [
+    ...entries(patch.externalIds),
+    ...(patch.retiredExternalIds ?? []).map(identity => `Unlink ${identity.namespace}: ${identity.value}`),
+  ].join("; ");
   if (field === METADATA_PATCH_FIELD.urls) return patch.urls.join(", ");
   if (field === METADATA_PATCH_FIELD.tags) return patch.tags.join(", ");
   if (field === METADATA_PATCH_FIELD.studio) return patch.studio ?? "";
@@ -391,7 +419,10 @@ export function proposalFieldValue(result: EntityMetadataProposal, field: string
     return [...typed, ...entries(patch.dates)].join(", ");
   }
   if (field === METADATA_PATCH_FIELD.stats) return entries(patch.stats).join(", ");
-  if (field === METADATA_PATCH_FIELD.positions) return reviewPositionValue(patch.positions, result.targetKind);
+  if (field === METADATA_PATCH_FIELD.positions) return reviewPositionValue({
+    ...patch.positions,
+    ...Object.fromEntries((patch.positionEntries ?? []).map((entry) => [entry.code, entry.label?.trim() || entry.value])),
+  }, result.targetKind);
   if (field === METADATA_PATCH_FIELD.classification) return patch.classification ?? "";
   if (field === METADATA_PATCH_FIELD.images) return groupReviewImages(result).map((group) => `${group.kind} (${group.images.length})`).join(", ");
   return "";
@@ -429,7 +460,7 @@ export function currentFieldValueForReview(
   if (field === METADATA_PATCH_FIELD.positions) {
     const positions = getCapability(capabilities, CAPABILITY_KIND.position);
     return reviewPositionValue(
-      Object.fromEntries((positions?.items ?? []).map((item) => [item.code, item.value])),
+      Object.fromEntries((positions?.items ?? []).map((item) => [item.code, item.label?.trim() || item.value])),
       detail.kind ?? entity.kind,
     );
   }
@@ -587,6 +618,7 @@ function patchForSelectedFields(
     title: fields.title ? patch.title : null,
     description: fields.description ? patch.description : null,
     externalIds: fields.externalIds ? patch.externalIds : {},
+    retiredExternalIds: fields.externalIds ? (patch.retiredExternalIds ?? []) : [],
     urls: fields.urls ? patch.urls : [],
     tags: fields.tags ? tags : [],
     studio: fields.studio ? studio : null,
@@ -595,6 +627,7 @@ function patchForSelectedFields(
     dateEntries: fields.dates ? (patch.dateEntries ?? []) : [],
     stats: fields.stats ? patch.stats : {},
     positions: fields.positions ? patch.positions : {},
+    positionEntries: fields.positions ? (patch.positionEntries ?? []) : [],
     classification: fields.classification ? patch.classification : null,
     flags: patch.flags ?? null,
   };

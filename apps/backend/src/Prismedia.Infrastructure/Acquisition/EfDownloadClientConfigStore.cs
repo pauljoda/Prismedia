@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.System;
+using Prismedia.Infrastructure.Files;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -69,6 +71,10 @@ public sealed class EfDownloadClientConfigStore(PrismediaDbContext db) : IDownlo
     }
 
     public async Task<DownloadClientSummary> SaveAsync(DownloadClientSaveCommand command, CancellationToken cancellationToken) {
+        await using var transaction = await LibraryRootConfigurationLease.AcquireAsync(db, cancellationToken);
+        if (await ExternalLibraryBoundaryPaths.OverlapsAsync(db, command.DownloadDirectory, cancellationToken))
+            throw new AcquisitionConfigurationException(ApiProblemCodes.DownloadClientInvalid, "Choose a download directory outside externally managed libraries.");
+
         var now = DateTimeOffset.UtcNow;
         var row = command.Id is { } id
             ? await db.DownloadClientConfigs.FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken)
@@ -99,6 +105,7 @@ public sealed class EfDownloadClientConfigStore(PrismediaDbContext db) : IDownlo
 
         await db.SaveChangesAsync(cancellationToken);
 
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return ToSummary(ToDetail(row, await CredentialAsync(row.Id, cancellationToken)));
     }
 

@@ -17,6 +17,8 @@ describe("ProposalContextBar", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Andor" })).toBeInTheDocument();
+    expect(screen.getByText("Video Series")).toBeInTheDocument();
+    expect(screen.queryByText("video-series")).not.toBeInTheDocument();
     expect(screen.getByText("Current title")).toBeInTheDocument();
     expect(screen.getByText("92%")).toBeInTheDocument();
     expect(screen.getByText("cinema-metadata")).toBeInTheDocument();

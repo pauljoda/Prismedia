@@ -1,0 +1,475 @@
+using Prismedia.Application.Entities;
+using Prismedia.Application.Integrations;
+using Prismedia.Application.Plugins;
+using Prismedia.Application.Requests;
+using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Integrations;
+using Prismedia.Contracts.Requests;
+using Prismedia.Domain.Entities;
+
+namespace Prismedia.Application.Tests.Requests;
+
+public sealed partial class RequestCommitServiceTests {
+    [Fact]
+    public async Task PreparingReviewedSeriesSavesOnlySelectedEpisodesAcrossRegularAndSpecialSeasons() {
+        var request = ManagedSeriesReview();
+        var writer = new FakeWantedEntityWriter();
+        var suppression = new FakeSuppressionStore();
+        var router = new SeriesRouter();
+        var service = new ReviewedWantedSeriesService(writer, suppression, router, new MovieLease());
+
+        var first = await service.PrepareAsync(request, default);
+        writer.ExistingWanted.UnionWith(["series-7", "season-0", "season-1", "episode-special", "episode-pilot"]);
+        var replay = await service.PrepareAsync(request, default);
+
+        Assert.Equal(first.SeriesEntityId, replay.SeriesEntityId);
+        Assert.Equal(first.Title, replay.Title);
+        Assert.True(first.Episodes.SequenceEqual(replay.Episodes));
+        Assert.Equal(FakeWantedEntityWriter.EntityIdFor("series-7"), first.SeriesEntityId);
+        Assert.Collection(
+            first.Episodes,
+            special => {
+                Assert.Equal(0, special.SeasonNumber);
+                Assert.Equal(1, special.EpisodeNumber);
+                Assert.Equal(100, special.AbsoluteNumber);
+                Assert.Equal(FakeWantedEntityWriter.EntityIdFor("season-0"), special.SeasonEntityId);
+            },
+            pilot => {
+                Assert.Equal(1, pilot.SeasonNumber);
+                Assert.Equal(1, pilot.EpisodeNumber);
+                Assert.Null(pilot.AbsoluteNumber);
+                Assert.Equal(FakeWantedEntityWriter.EntityIdFor("season-1"), pilot.SeasonEntityId);
+            });
+        Assert.All(first.Episodes, episode => Assert.False(episode.HasFile));
+        Assert.Equal(10, writer.ProviderIdentityBindings.Count);
+        Assert.Equal(10, writer.DeferredArtworkApplied.Count);
+        Assert.All(writer.DeferredArtworkApplied, call =>
+            Assert.DoesNotContain(call.Proposal.Children, child => !child.TargetKind.IsRelationship()));
+        Assert.Equal(6, router.Calls.Count);
+        Assert.Contains("tmdb:series-7", suppression.Cleared);
+        Assert.Contains("tvdb:episode-special", suppression.Cleared);
+        Assert.Contains("tvdb:episode-pilot", suppression.Cleared);
+    }
+
+    [Fact]
+    public async Task PreparingReviewedSeriesPreservesOwnedEpisodeMetadataAndReportsPartialOwnership() {
+        var request = ManagedSeriesReview();
+        var writer = new FakeWantedEntityWriter();
+        writer.ExistingWithFile.Add("episode-pilot");
+
+        var result = await new ReviewedWantedSeriesService(
+            writer,
+            new FakeSuppressionStore(),
+            new SeriesRouter(),
+            new MovieLease()).PrepareAsync(request, default);
+
+        Assert.False(result.Episodes[0].HasFile);
+        Assert.True(result.Episodes[1].HasFile);
+        Assert.DoesNotContain(
+            writer.DeferredArtworkApplied,
+            call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("episode-pilot"));
+        Assert.Contains(
+            writer.DeferredArtworkApplied,
+            call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("episode-special"));
+    }
+
+    [Fact]
+    public async Task InvalidFiniteSeriesCoordinatesAreRejectedBeforeAnyWantedWrite() {
+        var request = ManagedSeriesReview(duplicateCoordinates: true);
+        var writer = new FakeWantedEntityWriter();
+
+        var error = await Assert.ThrowsAsync<RequestCommitValidationException>(() =>
+            new ReviewedWantedSeriesService(
+                writer,
+                new FakeSuppressionStore(),
+                new SeriesRouter(),
+                new MovieLease()).PrepareAsync(request, default));
+
+        Assert.Contains("unique season and episode", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(writer.EnsuredChildren);
+    }
+
+    [Fact]
+    public async Task MissingExactEpisodeRouteIsRejectedBeforeAnyWantedWrite() {
+        var request = ManagedSeriesReview();
+        var writer = new FakeWantedEntityWriter();
+
+        await Assert.ThrowsAsync<RequestCommitValidationException>(() =>
+            new ReviewedWantedSeriesService(
+                writer,
+                new FakeSuppressionStore(),
+                new SeriesRouter { MissingIdentity = new ExternalIdentity("tvdb", "episode-pilot") },
+                new MovieLease()).PrepareAsync(request, default));
+
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(writer.EnsuredChildren);
+        Assert.Empty(writer.ProviderIdentityBindings);
+    }
+
+    [Fact]
+    public async Task ReviewingFiniteSeriesForManagerDerivesExactEpisodeScopeWithoutWriting() {
+        var request = ManagedSeriesReview();
+        var writer = new FakeWantedEntityWriter();
+        var service = new ReviewedWantedSeriesService(
+            writer,
+            new FakeSuppressionStore(),
+            new SeriesRouter(),
+            new MovieLease());
+
+        var plan = await service.ReviewForManagerAsync(request, managerOrigin: false, default);
+
+        Assert.Equal("Fixture Series", plan.Title);
+        Assert.Equal(EntityKind.VideoSeries, plan.Work.EntityKind);
+        Assert.Equal("series-7", plan.Work.ExternalIds[ExternalIdProviders.Tmdb]);
+        Assert.Collection(
+            plan.Work.Targets!,
+            special => {
+                Assert.Equal("episode-special", special.ExternalIds[ExternalIdProviders.Tvdb]);
+                Assert.Equal(0, special.SeasonNumber);
+                Assert.Equal(1, special.EpisodeNumber);
+                Assert.Equal(100, special.AbsoluteNumber);
+            },
+            pilot => {
+                Assert.Equal("episode-pilot", pilot.ExternalIds[ExternalIdProviders.Tvdb]);
+                Assert.Equal(1, pilot.SeasonNumber);
+                Assert.Equal(1, pilot.EpisodeNumber);
+                Assert.Null(pilot.AbsoluteNumber);
+            });
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(writer.EnsuredChildren);
+    }
+
+    [Fact]
+    public async Task PreparingReviewedMovieSavesSelectedMetadataWithoutStartingAcquisitionOrMonitoring() {
+        var request = ManagedMovieReview();
+        var writer = new FakeWantedEntityWriter(); var suppression = new FakeSuppressionStore(); var router = new MovieRouter();
+        var service = new ReviewedWantedMovieService(writer, suppression, router, new MovieLease());
+        var first = await service.PrepareAsync(request, default);
+        writer.ExistingWanted.Add(request.RootExternalIdentity.Value);
+        var replay = await service.PrepareAsync(request, default);
+        Assert.Equal(first.EntityId, replay.EntityId); Assert.False(first.HasFile);
+        Assert.All(writer.Ensured, call => { Assert.Equal(EntityKind.Movie, call.Kind); Assert.False(call.MatchTitleKindWide); });
+        Assert.Equal(2, writer.DeferredArtworkApplied.Count);
+        Assert.All(writer.ProviderIdentityBindings, binding => Assert.Equal(request.PluginId, binding.Route.PluginId));
+        Assert.Contains($"{request.RootExternalIdentity.Namespace}:{request.RootExternalIdentity.Value}", suppression.Cleared);
+        Assert.Equal(2, router.Calls);
+    }
+
+    [Fact]
+    public async Task PreparingReviewedBookKeepsOneWorkIdentityAndCreatesNoAcquisition() {
+        var request = ManagedBookReview();
+        var writer = new FakeWantedEntityWriter();
+        var suppression = new FakeSuppressionStore();
+        var service = new ReviewedWantedBookService(writer, suppression, new BookRouter(), new MovieLease());
+
+        var first = await service.PrepareAsync(request, default);
+        var replay = await service.PrepareAsync(request, default);
+
+        Assert.Equal(first.EntityId, replay.EntityId);
+        Assert.False(first.HasFile);
+        Assert.All(writer.Ensured, call => {
+            Assert.Equal(EntityKind.Book, call.Kind);
+            Assert.Equal(ExternalIdProviders.OpenLibraryWork, call.IdentityNamespace);
+            Assert.Equal("OL43053199W", call.ItemId);
+        });
+        Assert.Equal(2, writer.DeferredArtworkApplied.Count);
+        Assert.Contains("openlibrarywork:OL43053199W", suppression.Cleared);
+    }
+
+    [Fact]
+    public void ConnectedBookReviewUsesTheExactReviewedWorkWithoutWriting() {
+        var (workId, title) = ReviewedWantedBookService.ReviewWork(ManagedBookReview());
+        Assert.Equal("OL43053199W", workId);
+        Assert.Equal("A Tale of Two Cities", title);
+    }
+
+    [Fact]
+    public void ConnectedRequestScopesFollowTheKindsRenditionRules() {
+        var book = ManagedFulfillmentPolicy.For(EntityKind.Book);
+        var movie = ManagedFulfillmentPolicy.For(EntityKind.Movie);
+        var root = Guid.NewGuid();
+        var ebook = new ManagedRequestScopeChoice(BookRendition.Ebook, root);
+        var audio = new ManagedRequestScopeChoice(BookRendition.Audiobook, Guid.NewGuid());
+
+        ReviewedManagedRequestService.RequireScopes(book, [ebook, audio], requireLibrary: true);
+        ReviewedManagedRequestService.RequireScopes(book, [audio], requireLibrary: false);
+        ReviewedManagedRequestService.RequireScopes(movie, [new(LibraryRootId: root)], requireLibrary: true);
+        ReviewedManagedRequestService.RequireScopes(movie, [new()], requireLibrary: false);
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(book, [ebook, ebook], requireLibrary: false));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(book, [new(LibraryRootId: root)], requireLibrary: false));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(movie, [ebook], requireLibrary: false));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(movie, [new(), new()], requireLibrary: false));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(book, [ebook with { LibraryRootId = Guid.Empty }], requireLibrary: true));
+    }
+
+    [Fact]
+    public void ConnectedRequestCommitNamesExactlyOneSourceAndEveryLibrary() {
+        var book = ManagedBookReview();
+        var root = Guid.NewGuid();
+        IReadOnlyList<ManagedRequestScopeChoice> scopes = [new(BookRendition.Ebook, root)];
+
+        ReviewedManagedRequestService.ValidateCommitInput(new(Guid.NewGuid(), 1, scopes, null, true, true, Request: book));
+        ReviewedManagedRequestService.ValidateCommitInput(new(Guid.NewGuid(), 1, scopes, null, true, true, EntityId: Guid.NewGuid()));
+        Assert.Throws<RequestCommitValidationException>(() => ReviewedManagedRequestService.ValidateCommitInput(
+            new(Guid.NewGuid(), 1, scopes, null, true, true, EntityId: Guid.NewGuid(), Request: book)));
+        Assert.Throws<ArgumentException>(() => ReviewedManagedRequestService.ValidateCommitInput(
+            new(Guid.NewGuid(), 1, [new(BookRendition.Ebook)], null, true, true, Request: book)));
+        Assert.Throws<ArgumentException>(() => ReviewedManagedRequestService.ValidateCommitInput(
+            new(Guid.Empty, 1, scopes, null, true, true, Request: book)));
+    }
+
+    [Fact]
+    public async Task BookPreparationRejectsMissingWorkIdentityBeforeWriting() {
+        var request = ManagedBookReview();
+        var writer = new FakeWantedEntityWriter();
+        var proposal = request.Proposal! with {
+            Patch = request.Proposal!.Patch! with { ExternalIds = new Dictionary<string, string>() }
+        };
+
+        await Assert.ThrowsAsync<RequestCommitValidationException>(() =>
+            new ReviewedWantedBookService(writer, new FakeSuppressionStore(), new BookRouter(), new MovieLease())
+                .PrepareAsync(request with { Proposal = proposal }, default));
+        Assert.Empty(writer.Ensured);
+    }
+
+    [Fact]
+    public async Task PreparingAnOwnedMovieReturnsItsExistingIdentityWithoutReplacingMetadata() {
+        var request = ManagedMovieReview(); var writer = new FakeWantedEntityWriter(); writer.ExistingWithFile.Add("19");
+        var result = await new ReviewedWantedMovieService(writer, new FakeSuppressionStore(), new MovieRouter(), new MovieLease()).PrepareAsync(request, default);
+        Assert.True(result.HasFile); Assert.Empty(writer.DeferredArtworkApplied); Assert.Empty(writer.ProviderIdentityBindings);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task InvalidOrExpandedMoviePreparationHasNoWrites(int scenario) {
+        var request = ManagedMovieReview(); var writer = new FakeWantedEntityWriter();
+        request = scenario switch {
+            0 => request with { SelectedProposalIds = [] },
+            1 => request with { Kind = RequestMediaKind.Series },
+            2 => request with { Proposal = request.Proposal! with { Patch = request.Proposal.Patch with { Title = "Unreviewed replacement" } } },
+            3 => request with { RootExternalIdentity = new ExternalIdentity(ExternalIdProviders.Imdb, "tt0017136") },
+            4 => request with { Proposal = request.Proposal! with { Patch = request.Proposal.Patch with { PositionEntries = [new(EntityPositionCodes.Episode, 1, "1.5")] } } },
+            _ => request with { Proposal = request.Proposal! with { Patch = request.Proposal.Patch with { AlternativeTitles = ["Unreviewed alias"] } } }
+        };
+        await Assert.ThrowsAsync<RequestCommitValidationException>(() => new ReviewedWantedMovieService(writer, new FakeSuppressionStore(), new MovieRouter(), new MovieLease()).PrepareAsync(request, default));
+        Assert.Empty(writer.Ensured); Assert.Empty(writer.DeferredArtworkApplied);
+    }
+
+    [Fact]
+    public async Task DisabledExactMetadataRouteCannotPrepareAPlaceholder() {
+        var writer = new FakeWantedEntityWriter();
+        await Assert.ThrowsAsync<RequestCommitValidationException>(() => new ReviewedWantedMovieService(writer, new FakeSuppressionStore(), new MovieRouter { Enabled = false }, new MovieLease()).PrepareAsync(ManagedMovieReview(), default));
+        Assert.Empty(writer.Ensured);
+    }
+
+    [Fact]
+    public async Task ReviewingManagerOriginMovieDoesNotRequireMetadataPluginRouteOrWrite() {
+        var request = ManagedMovieReview();
+        var writer = new FakeWantedEntityWriter();
+        var service = new ReviewedWantedMovieService(
+            writer,
+            new FakeSuppressionStore(),
+            new MovieRouter { Enabled = false },
+            new MovieLease());
+
+        var plan = await service.ReviewForManagerAsync(request, managerOrigin: true, default);
+
+        Assert.Equal("Metropolis", plan.Title);
+        Assert.Equal("19", plan.Work.ExternalIds[ExternalIdProviders.Tmdb]);
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(writer.DeferredArtworkApplied);
+    }
+
+    [Fact]
+    public void ReviewedManagerReplayFingerprintCoversMetadataSelectionAndProviderIntent() {
+        var connectionId = Guid.NewGuid();
+        var request = ManagedMovieReview();
+        var input = new CommitReviewedManagedRequestInput(
+            Guid.NewGuid(),
+            7,
+            [new(LibraryRootId: Guid.NewGuid())],
+            "profile-one",
+            Monitored: true,
+            Search: true,
+            Request: request);
+
+        var fingerprint = ReviewedManagedRequestIdentity.Fingerprint(connectionId, input);
+
+        Assert.Equal(fingerprint, ReviewedManagedRequestIdentity.Fingerprint(connectionId, input));
+        Assert.Equal(fingerprint, ReviewedManagedRequestIdentity.Fingerprint(
+            connectionId,
+            input with { ExpectedConnectionRevision = input.ExpectedConnectionRevision + 1 }));
+        Assert.NotEqual(fingerprint, ReviewedManagedRequestIdentity.Fingerprint(
+            connectionId,
+            input with { ProfileId = "profile-two" }));
+        Assert.NotEqual(fingerprint, ReviewedManagedRequestIdentity.Fingerprint(
+            connectionId,
+            input with {
+                Request = request with {
+                    Proposal = request.Proposal! with {
+                        Patch = request.Proposal.Patch with { Title = "Different selected title" }
+                    }
+                }
+            }));
+    }
+
+    [Fact]
+    public void ReviewedManagerCommitRejectsMissingRequestBeforeFingerprinting() {
+        var input = new CommitReviewedManagedRequestInput(
+            Guid.NewGuid(), 7, [new(LibraryRootId: Guid.NewGuid())], "profile-one", true, true);
+
+        Assert.Throws<RequestCommitValidationException>(() =>
+            ReviewedManagedRequestService.ValidateCommitInput(input));
+    }
+
+    [Fact]
+    public void ReviewedManagerCommitRejectsMissingProposalSelectionBeforeFingerprinting() {
+        var input = new CommitReviewedManagedRequestInput(
+            Guid.NewGuid(), 7, [new(LibraryRootId: Guid.NewGuid())], "profile-one", true, true,
+            Request: ManagedMovieReview() with { SelectedProposalIds = null! });
+
+        Assert.Throws<RequestCommitValidationException>(() =>
+            ReviewedManagedRequestService.ValidateCommitInput(input));
+    }
+
+    private static ReviewedRequestCommitRequest ManagedMovieReview() {
+        var identity = new ExternalIdentity(ExternalIdProviders.Tmdb, "19");
+        var proposal = Node("movie:19", "fixture-movies", EntityKind.Movie, "Metropolis", identity);
+        var review = Review(proposal.Provider, RequestMediaKind.Movie, identity, proposal, [Target(proposal, RequestMediaKind.Movie, identity)]);
+        return new(RequestMediaKind.Movie, proposal.Provider, identity, review.Revision, [proposal.ProposalId],
+            Review: review, Proposal: proposal, SelectedFields: [MetadataPatchField.Title.ToCode(), MetadataPatchField.ExternalIds.ToCode()]);
+    }
+
+    private static ReviewedRequestCommitRequest ManagedBookReview() {
+        var identity = new ExternalIdentity(ExternalIdProviders.OpenLibraryWork, "OL43053199W");
+        var proposal = Node("book:OL43053199W", "fixture-books", EntityKind.Book, "A Tale of Two Cities", identity);
+        var review = Review(proposal.Provider, RequestMediaKind.Book, identity, proposal,
+            [Target(proposal, RequestMediaKind.Book, identity)]);
+        return new(RequestMediaKind.Book, proposal.Provider, identity, review.Revision, [proposal.ProposalId],
+            Review: review, Proposal: proposal,
+            SelectedFields: [MetadataPatchField.Title.ToCode(), MetadataPatchField.ExternalIds.ToCode()]);
+    }
+
+    private static ReviewedRequestCommitRequest ManagedSeriesReview(bool duplicateCoordinates = false) {
+        const string pluginId = "fixture-series";
+        var seriesIdentity = new ExternalIdentity("tmdb", "series-7");
+        var specialsIdentity = new ExternalIdentity("tvdb", "season-0");
+        var firstSeasonIdentity = new ExternalIdentity("tvdb", "season-1");
+        var specialIdentity = new ExternalIdentity("tvdb", "episode-special");
+        var pilotIdentity = new ExternalIdentity("tvdb", "episode-pilot");
+        var special = Node(
+            "episode:special",
+            pluginId,
+            EntityKind.VideoEpisode,
+            "Special",
+            specialIdentity,
+            new Dictionary<string, int> {
+                [EntityPositionCodes.Season] = 0,
+                [EntityPositionCodes.Episode] = 1,
+                [EntityPositionCodes.AbsoluteEpisode] = 100
+            });
+        var pilot = Node(
+            "episode:pilot",
+            pluginId,
+            EntityKind.VideoEpisode,
+            "Pilot",
+            pilotIdentity,
+            new Dictionary<string, int> {
+                [EntityPositionCodes.Season] = duplicateCoordinates ? 0 : 1,
+                [EntityPositionCodes.Episode] = 1
+            });
+        var specials = Node(
+            "season:0",
+            pluginId,
+            EntityKind.VideoSeason,
+            "Specials",
+            specialsIdentity,
+            new Dictionary<string, int> { [EntityPositionCodes.Season] = 0 },
+            special);
+        var firstSeason = Node(
+            "season:1",
+            pluginId,
+            EntityKind.VideoSeason,
+            "Season 1",
+            firstSeasonIdentity,
+            new Dictionary<string, int> { [EntityPositionCodes.Season] = duplicateCoordinates ? 0 : 1 },
+            pilot);
+        var series = Node(
+            "series:7",
+            pluginId,
+            EntityKind.VideoSeries,
+            "Fixture Series",
+            seriesIdentity,
+            specials,
+            firstSeason);
+        var review = Review(
+            pluginId,
+            RequestMediaKind.Series,
+            seriesIdentity,
+            series,
+            [
+                Target(series, RequestMediaKind.Series, seriesIdentity),
+                Target(specials, RequestMediaKind.Season, specialsIdentity, position: 0),
+                Target(special, RequestMediaKind.Episode, specialIdentity, position: 1),
+                Target(firstSeason, RequestMediaKind.Season, firstSeasonIdentity, position: duplicateCoordinates ? 0 : 1),
+                Target(pilot, RequestMediaKind.Episode, pilotIdentity, position: 1)
+            ]);
+        return new ReviewedRequestCommitRequest(
+            RequestMediaKind.Series,
+            pluginId,
+            seriesIdentity,
+            review.Revision,
+            [special.ProposalId, pilot.ProposalId],
+            Review: review,
+            Proposal: series,
+            SelectedFields: [MetadataPatchField.Title.ToCode(), MetadataPatchField.ExternalIds.ToCode()],
+            SelectedImages: new Dictionary<string, string?>());
+    }
+
+    private sealed class SeriesRouter : IPluginIdentityRouter {
+        internal ExternalIdentity? MissingIdentity { get; init; }
+        internal List<(string Kind, IReadOnlyList<ExternalIdentity> Identities)> Calls { get; } = [];
+
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(
+            string kind,
+            IdentifyAction action,
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken token) {
+            Assert.Equal(IdentifyAction.LookupId, action);
+            Calls.Add((kind, identities));
+            return Task.FromResult<IReadOnlyList<PluginIdentityRoute>>(identities
+                .Where(identity => identity != MissingIdentity)
+                .Select(identity => new PluginIdentityRoute("fixture-series", identity))
+                .ToArray());
+        }
+    }
+    private sealed class MovieRouter : IPluginIdentityRouter {
+        internal bool Enabled = true; internal int Calls;
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(string kind, IdentifyAction action, IReadOnlyList<ExternalIdentity> identities, CancellationToken token) {
+            Calls++; Assert.Equal(EntityKind.Movie.ToCode(), kind); Assert.Equal(IdentifyAction.LookupId, action);
+            return Task.FromResult<IReadOnlyList<PluginIdentityRoute>>(Enabled ? [new("fixture-movies", identities.Single())] : []);
+        }
+    }
+    private sealed class BookRouter : IPluginIdentityRouter {
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(string kind, IdentifyAction action,
+            IReadOnlyList<ExternalIdentity> identities, CancellationToken token) {
+            Assert.Equal(EntityKind.Book.ToCode(), kind);
+            Assert.Equal(IdentifyAction.LookupId, action);
+            return Task.FromResult<IReadOnlyList<PluginIdentityRoute>>([new("fixture-books", identities.Single())]);
+        }
+    }
+    private sealed class MovieLease : IEntityLifecycleMutationLease {
+        public async Task<bool> ExecuteAsync(Guid entityId, Func<CancellationToken, Task> mutation, CancellationToken token) { await mutation(token); return true; }
+    }
+}

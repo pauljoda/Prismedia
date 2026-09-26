@@ -5,6 +5,7 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
 using Prismedia.Infrastructure.Entities.Thumbnails;
+using Prismedia.Infrastructure.Media.Books;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -189,6 +190,15 @@ public sealed partial class EfEntityReadService {
             : await _db.EntityTechnical.AsNoTracking()
                 .Where(technical => progressCurrentIds.Contains(technical.EntityId))
                 .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
+        // A Book that keeps reading and listening Separate draws two meters, each from its own exact
+        // checkpoint. This is progress rather than a meta chip, and compact shelves need it too, so it
+        // rides in the base projection instead of a contributor; Books without checkpoints cost one query.
+        var bookCode = EntityKind.Book.ToCode();
+        var separateProgressByBook = await SeparateBookProgressReader.LoadAsync(
+            _db,
+            currentUserId,
+            rows.Where(row => row.KindCode == bookCode).Select(row => row.Id).ToArray(),
+            cancellationToken);
 
         // Compact availability facts for this page: physical source-media truth plus acquisition state
         // projected through every structural subtree. The singular direct status remains for the existing
@@ -249,6 +259,7 @@ public sealed partial class EfEntityReadService {
             var progressDurationSeconds = progressState is null
                 ? null
                 : technicalByProgressEntity.GetValueOrDefault(progressState.EntityId)?.DurationSeconds;
+            var separateProgress = separateProgressByBook.GetValueOrDefault(row.Id);
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
@@ -317,6 +328,10 @@ public sealed partial class EfEntityReadService {
                 row.IsNsfw,
                 row.IsOrganized) {
                 CoverThumb2xUrl = coverThumb2xUrl,
+                DurationSeconds = thumbnailTechnical?.DurationSeconds is { } durationSeconds
+                    && double.IsFinite(durationSeconds) && durationSeconds > 0
+                        ? durationSeconds
+                        : null,
                 ParentKind = row.ParentEntityId is { } parentId
                     && parentKindByEntity.TryGetValue(parentId, out var parentKindCode)
                     && parentKindCode.TryDecodeAs<EntityKind>(out var parentKind)
@@ -340,11 +355,15 @@ public sealed partial class EfEntityReadService {
                     ? playbackState.ResumeSeconds
                     : null,
                 Genres = tagsByEntity.GetValueOrDefault(row.Id),
-                Progress = ResolveThumbnailProgress(
-                    playbackState,
-                    playbackDurationSeconds,
-                    progressState,
-                    progressDurationSeconds)
+                Progress = separateProgress is not null
+                    ? separateProgress.ReadingPercent is > 0 ? separateProgress.ReadingPercent : null
+                    : ResolveThumbnailProgress(
+                        playbackState,
+                        playbackDurationSeconds,
+                        progressState,
+                        progressDurationSeconds),
+                ProgressSeparate = separateProgress is not null,
+                ListeningProgress = separateProgress?.ListeningPercent
             };
         }).ToArray();
 

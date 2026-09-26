@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
@@ -132,6 +133,24 @@ public sealed partial class LibraryScanPersistenceService {
             file = await _db.EntityFiles.FirstOrDefaultAsync(row =>
                 row.EntityId == entityId && row.Role == role, cancellationToken);
         }
+        if (file is null && role == EntityFileRole.Source) {
+            file = _db.EntityFiles.Local.FirstOrDefault(row =>
+                row.EntityId == entityId
+                && row.Role == EntityFileRole.UnavailableSource
+                && FileSystemPathComparison.Equals(row.Path, path));
+            if (file is null) {
+                var unavailableCandidates = await _db.EntityFiles
+                    .Where(row => row.EntityId == entityId
+                        && row.Role == EntityFileRole.UnavailableSource
+                        && row.Path.Length == path.Length)
+                    .ToArrayAsync(cancellationToken);
+                file = unavailableCandidates.SingleOrDefault(row =>
+                    FileSystemPathComparison.Equals(row.Path, path));
+            }
+            if (file is not null) {
+                file.Role = EntityFileRole.Source;
+            }
+        }
         if (file is null) {
             _db.EntityFiles.Add(new EntityFileRow {
                 Id = Guid.NewGuid(),
@@ -153,9 +172,23 @@ public sealed partial class LibraryScanPersistenceService {
         // as owned merely because its structural folder was discovered.
         if (role == EntityFileRole.Source) {
             entity ??= await _db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
-            if (entity is not null && entity.IsWanted) {
-                entity.IsWanted = false;
-                entity.UpdatedAt = now;
+            if (entity is not null) {
+                if (entity.IsWanted) {
+                    entity.IsWanted = false;
+                    entity.UpdatedAt = now;
+                }
+                // A verified returning source restores its retained metadata and containing titles.
+                var restored = new HashSet<Guid>();
+                for (var current = entity; current is not null && restored.Add(current.Id);) {
+                    if (current.IsLibraryArchived) {
+                        current.IsLibraryArchived = false;
+                        current.UpdatedAt = now;
+                    }
+                    current = current.ParentEntityId is { } parentId
+                        ? _db.Entities.Local.FirstOrDefault(row => row.Id == parentId)
+                            ?? await _db.Entities.FirstOrDefaultAsync(row => row.Id == parentId, cancellationToken)
+                        : null;
+                }
             }
         }
     }
@@ -388,6 +421,10 @@ public sealed partial class LibraryScanPersistenceService {
         if (idsToRemove.Count == 0) return 0;
 
         var protectedIds = await GetPendingReplacementProtectedEntitiesAsync(cancellationToken);
+        protectedIds.UnionWith(await ExternalLibraryEntityRetention.ListProtectedCandidateIdsAsync(
+            _db,
+            idsToRemove,
+            cancellationToken));
         idsToRemove = idsToRemove.Where(id => !protectedIds.Contains(id)).ToList();
         if (idsToRemove.Count == 0) return 0;
 

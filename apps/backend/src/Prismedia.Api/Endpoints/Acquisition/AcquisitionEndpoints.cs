@@ -106,6 +106,7 @@ public static class AcquisitionEndpoints {
             .WithName("CreateAcquisition")
             .WithSummary("Creates an acquisition and starts a background indexer search; poll the acquisition for scored candidates.")
             .Produces<AcquisitionSummary>()
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapGet("/", (
@@ -370,8 +371,9 @@ public static class AcquisitionEndpoints {
                     : Results.Ok(detail);
             })
             .WithName("CancelAcquisition")
-            .WithSummary("Cancels an acquisition, removing the torrent from the download client.")
+            .WithSummary("Cancels an acquisition and removes its transfer when retained import recovery permits cancellation.")
             .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapDelete("/{id:guid}", async (
@@ -526,10 +528,14 @@ public static class AcquisitionEndpoints {
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
-        group.MapGet("/rule-presets", () => AcquisitionRulePresets.List())
+        group.MapGet("/rule-presets", (string? kind = null) =>
+                TryResolveKind(kind, out var profileKind, out var error)
+                    ? Results.Ok(AcquisitionRulePresets.List(profileKind))
+                    : error)
             .WithName("ListAcquisitionRulePresets")
-            .WithSummary("Lists editable starter rules for common audio language and format preferences.")
-            .Produces<IReadOnlyList<AcquisitionRulePresetView>>();
+            .WithSummary("Lists editable starter rules for common language, format, and audiobook preferences, optionally only those that fit the profile governing one kind.")
+            .Produces<IReadOnlyList<AcquisitionRulePresetView>>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapGet("/custom-formats", (
             ICustomFormatStore customFormats,
@@ -621,7 +627,7 @@ public static class AcquisitionEndpoints {
             CancellationToken cancellationToken) =>
             string.IsNullOrWhiteSpace(request.RemotePath) || string.IsNullOrWhiteSpace(request.LocalPath)
                 ? Results.BadRequest(new ApiProblem(ApiProblemCodes.DownloadClientInvalid, "Both the remote and the local path are required."))
-                : Results.Ok(await mappings.SaveAsync(request, cancellationToken)))
+                : await SaveRemotePathMappingAsync(request, mappings, cancellationToken))
             .WithName("SaveRemotePathMapping")
             .WithSummary("Creates or updates a remote path mapping for a download client.")
             .Produces<RemotePathMappingView>()
@@ -838,7 +844,7 @@ public static class AcquisitionEndpoints {
     }
 
     /// <summary>
-    /// Resolves an optional media-kind query value for the Wanted lists: a blank/absent value means "all
+    /// Resolves an optional media-kind query value for kind-filtered lists: a blank/absent value means "all
     /// kinds" (out null, success), a recognized code resolves to its <see cref="EntityKind"/>, and any other
     /// value fails with a 400 so a typo does not silently list everything.
     /// </summary>
@@ -867,6 +873,12 @@ public static class AcquisitionEndpoints {
         } catch (AcquisitionConfigurationException ex) {
             return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
         }
+    }
+
+    private static async Task<IResult> SaveRemotePathMappingAsync(RemotePathMappingSaveRequest request,
+        IRemotePathMappingStore mappings, CancellationToken cancellationToken) {
+        try { return Results.Ok(await mappings.SaveAsync(request, cancellationToken)); }
+        catch (AcquisitionConfigurationException error) { return Results.BadRequest(new ApiProblem(error.Code, error.Message)); }
     }
 
     private static async Task<IResult> SaveDownloadClientAsync(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EntityCard, EntityThumbnail } from "$lib/api/generated/model";
-import { ENTITY_STAT_CODE } from "$lib/api/generated/codes";
+import { CAPABILITY_KIND, ENTITY_STAT_CODE, PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
 import {
   bookEntityProgressDisplay,
   orderedBookChildren,

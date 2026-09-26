@@ -122,6 +122,9 @@ public abstract class Entity {
     /// </summary>
     public bool? IsWanted { get; private set; }
 
+    /// <summary>Metadata and history remain addressable, but this entity is omitted from ordinary library catalogs.</summary>
+    public bool IsLibraryArchived { get; private set; }
+
     /// <summary>Applies a sparse flag update. Null arguments leave the corresponding flag unchanged.</summary>
     public void PatchFlags(bool? isFavorite, bool? isNsfw, bool? isOrganized) {
         if (isFavorite.HasValue) IsFavorite = isFavorite;
@@ -185,12 +188,14 @@ public abstract class Entity {
         IEnumerable<EntityExternalId>? externalIds,
         IEnumerable<EntityFile>? files,
         bool? isWanted = null,
-        EntityProviderIdentity? providerIdentity = null) {
+        EntityProviderIdentity? providerIdentity = null,
+        bool isLibraryArchived = false) {
         RatingValue = ratingValue;
         IsFavorite = isFavorite;
         IsNsfw = isNsfw;
         IsOrganized = isOrganized;
         IsWanted = isWanted;
+        IsLibraryArchived = isLibraryArchived;
         _urls.Clear();
         if (urls is not null) _urls.AddRange(urls);
         _externalIds.Clear();

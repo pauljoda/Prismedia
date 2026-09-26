@@ -74,15 +74,16 @@ describe("audiobook playback positions", () => {
         kind: "audio-track",
         label: "Audio Tracks",
         entities: [
-          thumbnail("aggregate", "The Whole Book", 0, "47:32:34", false),
-          thumbnail("part-2", "Part 2", 2, "2:00"),
-          thumbnail("part-1", "Part 1", 1, "1:30"),
+          thumbnail("aggregate", "The Whole Book", 0, 171154, "47:32", false),
+          thumbnail("part-2", "Part 2", 2, 120, "02:00"),
+          // Past an hour the display label drops seconds, so "15:31" is 15h31m, never 15m31s.
+          thumbnail("part-1", "Part 1", 1, 55880, "15:31"),
         ],
       }],
     });
 
     expect(tracks.map((track) => track.id)).toEqual(["part-1", "part-2"]);
-    expect(tracks.map((track) => track.duration)).toEqual([90, 120]);
+    expect(tracks.map((track) => track.duration)).toEqual([55880, 120]);
     expect(tracks.every((track) => track.libraryId === "book-1")).toBe(true);
   });
 });
@@ -91,7 +92,8 @@ function thumbnail(
   id: string,
   title: string,
   sortOrder: number,
-  duration: string,
+  durationSeconds: number,
+  durationLabel: string,
   hasSourceMedia = true,
 ): EntityThumbnail {
   return {
@@ -111,6 +113,7 @@ function thumbnail(
     hasSourceMedia,
     rating: null,
     accessCount: 0,
-    meta: [{ icon: "duration", label: duration }],
+    durationSeconds,
+    meta: [{ icon: "duration", label: durationLabel }],
   };
 }

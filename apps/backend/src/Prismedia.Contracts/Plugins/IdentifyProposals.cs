@@ -60,13 +60,31 @@ public sealed record EntityMetadataPatch(
     public IReadOnlyList<EntityMetadataDatePatch> DateEntries { get; init; } = [];
 
     /// <summary>
+    /// Positions with exact display designations such as issue 12.5 or 12A. Value is an integer
+    /// ordering hint, not issue identity. Entries override the matching legacy Positions key.
+    /// An omitted label preserves existing evidence; a selected manual empty label clears it.
+    /// </summary>
+    public IReadOnlyList<Prismedia.Contracts.Entities.EntityPosition> PositionEntries { get; init; } = [];
+
+    /// <summary>
     /// Formal alternative names for this exact provider work, such as its original, translated, or
     /// romanized title. Franchise names, season labels, and unqualified scene synonyms do not belong
     /// here. Null preserves existing evidence during partial metadata updates; an empty list clears it.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? AlternativeTitles { get; init; }
+
+    /// <summary>
+    /// Exact provider-owned identities superseded by this proposal. The host removes only an
+    /// existing namespace/value pair that matches one of these entries; unrelated identities in
+    /// the same Entity remain untouched. Retirements are applied only when external IDs are among
+    /// the fields accepted from the reviewed proposal.
+    /// </summary>
+    public IReadOnlyList<ExternalIdentityRetirement> RetiredExternalIds { get; init; } = [];
 }
+
+/// <summary>An exact external identity that a reviewed provider proposal supersedes.</summary>
+public sealed record ExternalIdentityRetirement(string Namespace, string Value);
 
 /// <summary>A typed metadata date whose meaning is stable across providers.</summary>
 public sealed record EntityMetadataDatePatch(EntityDateType Type, string Value);

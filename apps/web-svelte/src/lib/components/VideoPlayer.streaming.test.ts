@@ -35,10 +35,51 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("VideoPlayer streaming recovery", () => {
+  it("keeps Chromium HLS on hls.js when its native MIME probe is optimistic", async () => {
+    const vendor = vi.spyOn(window.navigator, "vendor", "get").mockReturnValue("Google Inc.");
+    const userAgent = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 AppleWebKit/537.36 Chrome/147.0.0.0 Safari/537.36",
+    );
+
+    render(VideoPlayer, {
+      props: {
+        src: "/api/playback/videos/video-1/hls/master.m3u8",
+        defaultPlaybackMode: "hls",
+      },
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector("media-player")).not.toHaveAttribute("prefernativehls");
+    });
+    vendor.mockRestore();
+    userAgent.mockRestore();
+  });
+
+  it("preserves native HLS on Apple WebKit for stream-copied HEVC playback", async () => {
+    const vendor = vi.spyOn(window.navigator, "vendor", "get").mockReturnValue("Apple Computer, Inc.");
+    const userAgent = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15",
+    );
+
+    render(VideoPlayer, {
+      props: {
+        src: "/api/playback/videos/video-1/hls/master.m3u8",
+        defaultPlaybackMode: "hls",
+      },
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector("media-player")).toHaveAttribute("prefernativehls", "true");
+    });
+    vendor.mockRestore();
+    userAgent.mockRestore();
+  });
+
   it("pre-warms only direct media metadata", async () => {
     const direct = render(VideoPlayer, {
       props: {

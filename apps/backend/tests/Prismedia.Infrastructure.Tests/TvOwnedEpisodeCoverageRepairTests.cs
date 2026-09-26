@@ -11,7 +11,9 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class TvOwnedEpisodeCoverageRepairTests : IDisposable {
-    private readonly string root = Directory.CreateTempSubdirectory("prismedia-owned-coverage-").FullName;
+    // macOS temporary directories can have a linked ancestor; owned-source fixtures must be canonical.
+    private readonly string root = CompletedPayloadFileSystem.CanonicalPath(
+        Directory.CreateTempSubdirectory("prismedia-owned-coverage-").FullName);
     public void Dispose() => Directory.Delete(root, true);
 
     [Theory]

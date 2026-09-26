@@ -3,7 +3,8 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Contracts.Playback;
 
 /// <summary>
-/// Converts one concrete playback item into its owning Entity's canonical progress cursor.
+/// Legacy conversion of one playback item into its owning Entity's progress cursor. Ignored since
+/// 3.8.0: the server now places the cursor from the reported listening position.
 /// </summary>
 /// <param name="ItemId">Concrete item presented by the shared player.</param>
 /// <param name="CurrentEntityId">Entity stored as the canonical cursor owner.</param>
@@ -15,6 +16,7 @@ namespace Prismedia.Contracts.Playback;
 /// <param name="ResourceLocation">Optional portable resource location advanced within the item.</param>
 /// <param name="SourceStartSeconds">Optional start of this mapping inside a shared physical audio item.</param>
 /// <param name="SourceEndSeconds">Optional end of this mapping inside a shared physical audio item.</param>
+/// <param name="AudioMarkerId">Optional embedded chapter marker that identifies this physical window.</param>
 public sealed record PlaybackProgressMapping(
     Guid ItemId,
     Guid CurrentEntityId,
@@ -25,7 +27,8 @@ public sealed record PlaybackProgressMapping(
     ReaderMode? Mode,
     string? ResourceLocation = null,
     double? SourceStartSeconds = null,
-    double? SourceEndSeconds = null);
+    double? SourceEndSeconds = null,
+    Guid? AudioMarkerId = null);
 
 /// <summary>
 /// Compact, exact queue item consumed by every shared audio-player client. This is a
@@ -92,11 +95,15 @@ public sealed record AudioPlaybackItem(
 /// <param name="PlaybackOwnerTitle">Display title for <paramref name="PlaybackOwnerEntityId"/>.</param>
 /// <param name="PlaybackOwnerEntityKind">Typed kind of the playback owner; never inferred from the id.</param>
 /// <param name="ProgressMappings">
-/// Optional item-to-owner mappings used by the shared player to advance canonical Entity progress.
-/// Missing mappings leave the owner's existing progress cursor untouched.
+/// Ignored since 3.8.0 and kept for one release so saved player state from older clients still
+/// round-trips. Use <paramref name="ProgressModality"/> instead.
 /// </param>
 /// <param name="PreservesQueueOrder">Whether the queue capability requires semantic source order.</param>
 /// <param name="SupportsPlaybackRate">Whether the queue capability permits variable-rate playback.</param>
+/// <param name="ProgressModality">
+/// Consumption modality the shared player reports for <paramref name="PlaybackOwnerEntityId"/>. When
+/// set, every heartbeat posts the exact track position and the server places the owner's cursor.
+/// </param>
 public sealed record MusicPlayerContext(
     Guid? AlbumId,
     string? AlbumTitle,
@@ -109,7 +116,8 @@ public sealed record MusicPlayerContext(
     EntityKind? PlaybackOwnerEntityKind = null,
     IReadOnlyList<PlaybackProgressMapping>? ProgressMappings = null,
     bool PreservesQueueOrder = false,
-    bool SupportsPlaybackRate = false);
+    bool SupportsPlaybackRate = false,
+    ConsumptionModality? ProgressModality = null);
 
 /// <summary>
 /// Persisted browser-scoped music player state returned to the web client.

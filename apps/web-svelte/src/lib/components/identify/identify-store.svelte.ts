@@ -98,6 +98,17 @@ export interface IdentifyQueueItem {
   updatedAt?: string | null;
 }
 
+/**
+ * The review as it was on screen when Accept was pressed. The route keeps rendering it while the
+ * queue item passes through applying and done, or leaves the polled queue, until the page that
+ * follows the apply is in place.
+ */
+export interface IdentifyApplyingReview {
+  entity: EntityCard;
+  proposal: EntityMetadataProposal;
+  detail?: EntityDetailCard | null;
+}
+
 export interface IdentifyKindInfo {
   kind: string;
   label: string;
@@ -127,6 +138,8 @@ export class IdentifyStore {
   error = $state<string | null>(null);
   message = $state<string | null>(null);
   applying = $state(false);
+  /** The review whose apply is in flight, held for the route until the next page is in place. */
+  applyingReview = $state<IdentifyApplyingReview | null>(null);
   applyProgress = $state<IdentifyApplyProgress | null>(null);
   bulkStarting = $state(false);
   bulkAccepting = $state(false);
@@ -188,6 +201,11 @@ export class IdentifyStore {
   reviewableCount = $derived(this.queue.filter((item) =>
     (item.state === IDENTIFY_QUEUE_STATE.proposal && Boolean(item.proposal)) ||
     (item.state === IDENTIFY_QUEUE_STATE.search && item.candidates.length > 0)).length);
+
+  /** Entity id of the review being applied, or null. Poll-driven navigation leaves that review alone. */
+  get applyingEntityId(): string | null {
+    return this.applyingReview?.entity.id ?? null;
+  }
 
   /** Whether the entity's queue item is waiting on or running a requested search. */
   isItemBusy(entityId: string): boolean {
@@ -419,7 +437,12 @@ export class IdentifyStore {
     const progressId = createOperationId();
     const progressStartedAt = nowMs();
     let afterApply: (() => void | Promise<void>) | null = null;
+    let applied = false;
     this.applying = true;
+    // Hold the review as shown: the queue item passes through applying and done, or leaves the
+    // polled queue, before the next page is in place, and none of that may swap the review out.
+    const shown = this.queue.find((item) => item.entityId === entity.id);
+    this.applyingReview = { entity, proposal: shown?.proposal ?? proposal, detail: shown?.detail ?? null };
     this.applyProgress = initialApplyProgress(progressId, entity, proposal, selectedFields);
     this.error = null;
     this.#stopApplyProgressPolling?.();
@@ -429,16 +452,16 @@ export class IdentifyStore {
       const item = requested.state === IDENTIFY_QUEUE_STATE.applying
         ? await this.#waitForApplyCompletion(entity.id)
         : requested;
-      this.#removeActiveQueueItem(item.entityId);
+      applied = true;
       if (options.navigateNext) {
         const next = this.nextQueueItem(item.entityId);
         if (next) {
-          afterApply = () => this.reviewQueueItem(next);
+          afterApply = () => goto(`/identify/${next.entityId}`);
         }
       }
 
       if (!afterApply && this.returnEntityId) {
-        const href = await resolveEntityHrefById(this.returnEntityId);
+        const href = await resolveEntityHrefById(this.returnEntityId, { hideNsfw: this.#getHideNsfw() });
         if (href) {
           afterApply = () => goto(href);
         }
@@ -446,7 +469,10 @@ export class IdentifyStore {
 
       if (!afterApply) {
         this.message = `${proposal.patch.title ?? entity.title} identified`;
-        afterApply = () => this.navigateToDashboard();
+        afterApply = () => {
+          this.navigateTo({ kind: "dashboard" });
+          return goto("/identify");
+        };
       }
     } catch (err) {
       this.error = readError(err);
@@ -454,10 +480,10 @@ export class IdentifyStore {
       await waitForMinimumApplyProgress(progressStartedAt);
       this.#stopApplyProgressPolling?.();
       this.#stopApplyProgressPolling = null;
-      this.applying = false;
-      this.applyProgress = null;
     }
 
+    // The review stays on screen, with its progress, until the next page is in place; the applied
+    // item leaves the queue only afterwards, so the route never falls back to search or a loader.
     if (!this.error && afterApply) {
       try {
         await afterApply();
@@ -468,6 +494,10 @@ export class IdentifyStore {
         this.navigateToDashboard();
       }
     }
+    if (applied) this.#removeActiveQueueItem(entity.id);
+    this.applying = false;
+    this.applyProgress = null;
+    this.applyingReview = null;
   }
 
   async rejectQueueItem(entityId: string, options: IdentifyRejectOptions = {}) {
@@ -485,7 +515,7 @@ export class IdentifyStore {
       }
 
       if (!afterReject && this.returnEntityId) {
-        const href = await resolveEntityHrefById(this.returnEntityId);
+        const href = await resolveEntityHrefById(this.returnEntityId, { hideNsfw: this.#getHideNsfw() });
         if (href) {
           afterReject = () => goto(href);
         }
@@ -955,6 +985,8 @@ export class IdentifyStore {
       ? this.view.entity.id
       : null;
     if (!entityId) return;
+    // The applied item leaves the polled queue before its review moves on; applyProposal owns that exit.
+    if (entityId === this.applyingEntityId) return;
     if (this.queue.some((item) => item.entityId === entityId)) return;
     this.navigateToDashboard();
   }

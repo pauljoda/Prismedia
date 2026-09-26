@@ -33,12 +33,23 @@ public sealed class ScanComicJobHandler(
     IScanMetadataPersistence? scanMetadata = null,
     ILibraryFileChangeIntake? changeIntake = null,
     IComicFolderNormalizer? folderNormalizer = null,
-    IAcquisitionHintApplier? acquisitionHints = null)
+    IAcquisitionHintApplier? acquisitionHints = null,
+    IImportedPublicationTitleResolver? importedTitles = null)
     : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
     private static readonly Regex FirstInteger = new(@"\d+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <inheritdoc />
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanBooks;
+
+    /// <inheritdoc />
+    protected override async Task<bool> DelegateRootReconciliationAsync(JobContext context, LibraryRootData root, CancellationToken token) {
+        var holdings = await comics.ListManagedComicHoldingsForRootAsync(root.Id, token);
+        if (holdings.Count == 0) return false;
+        foreach (var id in holdings) await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ManagedLibraryReconcile,
+            TargetEntityKind: JobTargetKinds.ManagedHolding, TargetEntityId: id.ToString(), TargetLabel: root.Label,
+            ResourceKey: JobResourceKeys.LibraryScan), token);
+        return true;
+    }
 
     /// <inheritdoc />
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.ComicArchive];
@@ -173,13 +184,16 @@ public sealed class ScanComicJobHandler(
             var metadata = comicInfoReader is null
                 ? null
                 : await comicInfoReader.ReadAsync(archivePath, cancellationToken);
+            var acceptedPublication = importedTitles is null ? null
+                : await importedTitles.ResolveComicAsync(root.Id, archivePath, cancellationToken);
             items.Add(ComicArchiveItem.From(
                 root.Path,
                 archivePath,
                 source.ClassificationPath,
                 members,
                 metadata,
-                source.Provenance));
+                source.Provenance,
+                acceptedPublication));
         }
 
         var validArchivePaths = items
@@ -548,12 +562,13 @@ public sealed class ScanComicJobHandler(
             string classificationPath,
             IReadOnlyList<string> pageMembers,
             ComicInfoMetadata? metadata,
-            ComicSourceProvenance? sourceProvenance) {
+            ComicSourceProvenance? sourceProvenance,
+            ImportedComicPublication? acceptedPublication = null) {
             var relativePath = Path.GetRelativePath(rootPath, classificationPath);
             var segments = relativePath.Split(
                 [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
                 StringSplitOptions.RemoveEmptyEntries);
-            var fallbackTitle = Path.GetFileNameWithoutExtension(classificationPath);
+            var fallbackTitle = acceptedPublication?.Title ?? Path.GetFileNameWithoutExtension(classificationPath);
             var installmentTitle = FirstNonEmpty(metadata?.Title, fallbackTitle)!;
             var seriesFolderPath = segments.Length > 1
                 ? Path.Combine(rootPath, segments[0])
@@ -581,7 +596,7 @@ public sealed class ScanComicJobHandler(
             var volumeTitle = metadata?.Volume is >= 0
                 ? $"Volume {metadata.Volume.Value}"
                 : volumeFolderTitle;
-            var positionLabel = FirstNonEmpty(metadata?.Number);
+            var positionLabel = FirstNonEmpty(metadata?.Number, acceptedPublication?.IssueLabel);
 
             return new ComicArchiveItem(
                 archivePath,

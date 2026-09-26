@@ -32,7 +32,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         var descriptor = await catalog.FindProviderAsync(
             "musicbrainz",
@@ -65,7 +65,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         Assert.Empty(await catalog.ListProvidersAsync(CancellationToken.None));
     }
@@ -96,7 +96,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         var provider = Assert.Single(await catalog.ListProvidersAsync(CancellationToken.None));
         var support = Assert.Single(provider.Supports);
@@ -152,7 +152,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         var provider = Assert.Single(await catalog.ListProvidersAsync(CancellationToken.None));
         var support = Assert.Single(provider.Supports);
@@ -207,7 +207,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         Assert.Empty(await catalog.ListProvidersAsync(CancellationToken.None));
     }
@@ -243,7 +243,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         Assert.Empty(await catalog.ListProvidersAsync(CancellationToken.None));
     }
@@ -262,7 +262,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
         }
         """;
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db),
             db,
             new PluginCatalogOptions([], _tempRoot, "1.0.0", "https://plugins.example.test/index.json"),
             new HttpClient(new StaticIndexHandler(index)));
@@ -272,6 +272,35 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
 
         Assert.Equal(["remote-legacy"], support.IdentityNamespaces);
         Assert.Equal("title", Assert.Single(support.Search!.Fields).Key);
+    }
+
+    [Fact]
+    public async Task CatalogFetchesAndCachesOnlyTheBoundedRemoteIconAsset() {
+        const string index = """
+        [{
+          "id": "books", "name": "Books", "version": "2.0.0", "date": "2026-09-18",
+          "path": "plugins/books/books.zip", "icon": "plugins/books/assets/icon.svg",
+          "sha256": "abc", "runtime": "dotnet-process", "manifestVersion": 2,
+          "apiTags": ["prismedia"],
+          "compat": { "pluginApiMin": "2.0.0", "prismediaMin": "1.0.0" },
+          "supports": [{ "entityKind": "book", "actions": ["lookup-id"], "identityNamespaces": ["books"] }]
+        }]
+        """;
+        const string svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1 1\"><path d=\"M0 0h1v1z\"/></svg>";
+        var handler = new CatalogIconHandler(index, svg);
+        await using var db = CreateContext();
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db,
+            new PluginCatalogOptions([], _tempRoot, "1.0.0", "https://plugins.example.test/index.json"),
+            new HttpClient(handler));
+
+        var first = await catalog.GetIconAsync("books", "2.0.0", CancellationToken.None);
+        var second = await catalog.GetIconAsync("books", "2.0.0", CancellationToken.None);
+
+        Assert.NotNull(first);
+        Assert.Equal("image/svg+xml", first.ContentType);
+        Assert.Equal(first.ETag, second!.ETag);
+        Assert.Equal(1, handler.IconRequests);
+        Assert.DoesNotContain(handler.Paths, path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -412,5 +441,21 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
                 Content = new StringContent(body)
             });
+    }
+
+    private sealed class CatalogIconHandler(string index, string icon) : HttpMessageHandler {
+        internal int IconRequests { get; private set; }
+        internal List<string> Paths { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) {
+            var path = request.RequestUri!.AbsolutePath;
+            Paths.Add(path);
+            if (path.EndsWith("/plugins/books/assets/icon.svg", StringComparison.Ordinal)) IconRequests++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent(path.EndsWith("/index.json", StringComparison.Ordinal) ? index : icon)
+            });
+        }
     }
 }

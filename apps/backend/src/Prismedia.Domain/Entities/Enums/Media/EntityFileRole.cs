@@ -8,6 +8,10 @@ public enum EntityFileRole {
     [Code("source")]
     Source,
 
+    /// <summary>Retained identity of a connected source whose bytes are no longer verified as available.</summary>
+    [Code("unavailable-source")]
+    UnavailableSource,
+
     /// <summary>Small generated thumbnail image.</summary>
     [Code("thumbnail")]
     Thumbnail,

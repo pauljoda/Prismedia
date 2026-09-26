@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { ExternalLibraryOrigin } from './externalLibraryOrigin';
 
 export interface LibraryRoot {
   id: string;
@@ -25,4 +26,6 @@ export interface LibraryRoot {
   createdByUserId?: string | null;
   /** @nullable */
   accessUserIds?: string[] | null;
+  isReadOnly?: boolean;
+  externalOrigin?: null | ExternalLibraryOrigin;
 }

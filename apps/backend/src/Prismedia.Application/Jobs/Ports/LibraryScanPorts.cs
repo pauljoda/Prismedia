@@ -60,7 +60,14 @@ public sealed record ImportedEntityReadyScope(
 
 /// <summary>Video scan persistence operations for discovered files and stale cleanup.</summary>
 public interface IVideoScanPersistence {
-    Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
+    /// <summary>Existing connected holdings whose mapped root must be reconciled through stable external identity rather than path discovery.</summary>
+    Task<IReadOnlyList<Guid>> ListManagedHoldingsForRootAsync(Guid rootId, CancellationToken token) =>
+        Task.FromResult<IReadOnlyList<Guid>>([]);
+    Task<int> RemoveStalePlayableVideosByRootAsync(
+        Guid rootId,
+        IReadOnlySet<string> validPaths,
+        CancellationToken cancellationToken,
+        bool authoritativeSnapshot = true);
     Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
     Task<int> RemoveOrphanSeriesAndSeasonsAsync(CancellationToken cancellationToken);
 
@@ -84,6 +91,18 @@ public interface IVideoScanPersistence {
     /// Returns every existing owner whose byte-derived state was invalidated.
     /// </summary>
     Task<IReadOnlyList<Guid>> RebindPlayableVideoSourceAsync(
+        string previousPath,
+        string replacementPath,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
+
+    /// <summary>Rebinds an exclusively owned comic installment source while invalidating bytes-derived reader assets.</summary>
+    Task<IReadOnlyList<Guid>> RebindConnectedComicSourceAsync(
+        string previousPath,
+        string replacementPath,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
+
+    /// <summary>Rebinds an exact Book or AudioTrack source and invalidates its byte-derived assets.</summary>
+    Task<IReadOnlyList<Guid>> RebindConnectedBookSourceAsync(
         string previousPath,
         string replacementPath,
         CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
@@ -169,6 +188,10 @@ public interface IImageGalleryScanPersistence {
     Task<IReadOnlyList<Guid>> UpsertImagesBatchAsync(
         IReadOnlyList<ImageUpsertItem> items, CancellationToken cancellationToken);
 
+    /// <summary>Folders whose explicit gallery grouping must survive single-image scanner collapse.</summary>
+    Task<IReadOnlySet<string>> GetPreservedGalleryPathsAsync(Guid rootId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
+
     Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleGalleriesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
@@ -212,6 +235,14 @@ public interface IAudioScanPersistence {
     /// </summary>
     Task<IReadOnlyList<Guid>> UpsertAudioTracksBatchAsync(
         IReadOnlyList<AudioTrackUpsertItem> items, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Persists a Book's audiobook playback order as its tracks' sort order, from the one audiobook
+    /// track-order rule over every playable track's source path and recorded track-number tag.
+    /// </summary>
+    /// <param name="bookId">Identifier of the Book that owns the tracks.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    Task ApplyAudiobookTrackOrderAsync(Guid bookId, CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
     /// Lists existing audio tracks under a library root without re-running discovery/upsert. Used by
@@ -329,6 +360,10 @@ public sealed record ComicSourceProvenance(string OriginFolderPath, string Origi
 /// are structural catalog entities and never masquerade as readable source files.
 /// </summary>
 public interface IComicScanPersistence {
+    /// <summary>Connected comic holdings whose mapped root is reconciled by its manager before path discovery.</summary>
+    Task<IReadOnlyList<Guid>> ListManagedComicHoldingsForRootAsync(Guid rootId, CancellationToken token) =>
+        Task.FromResult<IReadOnlyList<Guid>>([]);
+
     /// <summary>Upserts one comic title/run, using a real grouping folder when one exists.</summary>
     Task<Guid> UpsertComicSeriesAsync(
         string? folderPath,
@@ -475,7 +510,18 @@ public interface IMediaProcessingStatePersistence {
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("Managed subtitle reconciliation is not implemented.");
 
-    Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, int? trackNumber, CancellationToken cancellationToken);
+    /// <summary>
+    /// Records a probed audio file's embedded tags. Title and track number are stored exactly as the
+    /// file states them (including their absence) with the time they were recorded; a track owned by a
+    /// Book then has its Book's playback order reapplied.
+    /// </summary>
+    Task UpsertAudioTrackTagsAsync(
+        Guid entityId,
+        string? artist,
+        string? album,
+        string? title,
+        int? trackNumber,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Replaces the ordered chapter windows discovered inside one audio source. Implementations
@@ -558,7 +604,21 @@ public sealed record LibraryRootData(
     bool ScanAudio,
     bool ScanBooks,
     bool IsNsfw,
-    bool AutoIdentify = true);
+    bool AutoIdentify = true,
+    bool IsReadOnly = false) {
+    /// <summary>Whether this enabled, writable root can receive an import governed by <paramref name="policy"/>.</summary>
+    public bool Accepts(IntegrationImportPolicy policy) =>
+        Enabled && !IsReadOnly && Scans(policy.RootCapability) && (!policy.RequiresRecursiveRoot || Recursive);
+
+    /// <summary>Whether this root scans the media a library-root capability names.</summary>
+    public bool Scans(LibraryRootMediaCapability capability) => capability switch {
+        LibraryRootMediaCapability.ScanBooks => ScanBooks,
+        LibraryRootMediaCapability.ScanVideos => ScanVideos,
+        LibraryRootMediaCapability.ScanAudio => ScanAudio,
+        LibraryRootMediaCapability.ScanImages => ScanImages,
+        _ => false
+    };
+}
 
 public sealed record EntityTechnicalData(
     double? DurationSeconds,
@@ -748,13 +808,15 @@ public sealed record ImageUpsertItem(
 /// <param name="ParentGalleryEntityId">Optional parent gallery entity ID.</param>
 /// <param name="SortOrder">Position within the parent gallery.</param>
 /// <param name="IsNsfw">Whether the owning library root marks discovered media as NSFW.</param>
+/// <param name="PreserveContainer">Retain this explicit group even when it contains only one image.</param>
 public sealed record GalleryUpsertItem(
     string FolderPath,
     string Title,
     Guid LibraryRootId,
     Guid? ParentGalleryEntityId,
     int SortOrder,
-    bool IsNsfw);
+    bool IsNsfw,
+    bool PreserveContainer = false);
 
 /// <summary>
 /// Audio track discovered during an audio scan.

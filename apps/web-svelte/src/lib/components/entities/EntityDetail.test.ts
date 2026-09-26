@@ -4,7 +4,7 @@ import { createRawSnippet } from "svelte";
 import * as navigation from "$app/navigation";
 import type { BeforeNavigate } from "@sveltejs/kit";
 import { describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND, FINGERPRINT_ALGORITHM } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, BOOK_RENDITION, CAPABILITY_KIND, ENTITY_KIND, EXTERNAL_ID_PROVIDER, FINGERPRINT_ALGORITHM, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
 import type { EntityDetailSection } from "./EntityDetail.svelte";
 import EntityDetail from "./EntityDetail.test-harness.svelte";
@@ -41,6 +41,202 @@ function buildCard(): EntityDetailCard {
 }
 
 describe("EntityDetail", () => {
+  it("omits external-library origin for a native library entity", () => {
+    render(EntityDetail, { card: buildCard() });
+
+    expect(screen.queryByRole("tab", { name: "External library" })).not.toBeInTheDocument();
+  });
+
+  it("shows external provenance in a read-only tab while retaining standalone detail content", async () => {
+    const card = buildCard();
+    card.description = "A gentle rabbit adventure.";
+    card.externalLibraryProvenance = externalLibraryProvenance();
+    render(EntityDetail, {
+      props: {
+        card,
+        afterBody: createRawSnippet(() => ({ render: () => "<p>Route-specific content</p>" })),
+        extraSections: createRawSnippet(() => ({ render: () => "<p>Additional metadata</p>" })),
+      },
+    });
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual(["Details", "External library"]);
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("A gentle rabbit adventure.")).toBeInTheDocument();
+    expect(screen.getByText("Route-specific content")).toBeInTheDocument();
+    expect(screen.getByText("Additional metadata")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
+
+    const panel = screen.getByRole("tabpanel", { name: "External library" });
+    expect(within(panel).getByRole("heading", { name: "Radarr" })).toBeInTheDocument();
+    expect(within(panel).getByText("Movies on NAS")).toBeInTheDocument();
+    expect(within(panel).getByText("Files stay managed by Radarr. Prismedia reads them in place.")).toBeInTheDocument();
+    expect(within(panel).queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit External library" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+    expect(screen.getByText("Route-specific content")).toBeInTheDocument();
+    expect(screen.getByText("Additional metadata")).toBeInTheDocument();
+  });
+
+  it("removes a route-provided Acquisition tab for an externally managed entity", () => {
+    const card = buildCard();
+    card.description = "Externally managed movie";
+    card.externalLibraryProvenance = externalLibraryProvenance();
+
+    render(EntityDetail, {
+      props: {
+        card,
+        tabs: [{ id: "acquisition", label: "Acquisition", sections: ["description"] }],
+      },
+    });
+
+    expect(screen.queryByRole("tab", { name: "Acquisition" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual([
+      "Details",
+      "External library",
+    ]);
+    expect(screen.getByText("Externally managed movie")).toBeInTheDocument();
+  });
+
+  it("keeps a Book's format-specific Acquisition tab beside its external library", async () => {
+    const card = buildCard();
+    card.description = "Book format status";
+    card.externalLibraryProvenance = externalLibraryProvenance();
+
+    render(EntityDetail, {
+      props: {
+        card,
+        allowExternalAcquisitionTab: true,
+        tabs: [{ id: "acquisition", label: "Acquisition", sections: ["description"] }],
+      },
+    });
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual([
+      "Acquisition",
+      "External library",
+    ]);
+    await fireEvent.click(screen.getByRole("tab", { name: "Acquisition" }));
+    expect(screen.getByRole("tabpanel", { name: "Acquisition" })).toBeInTheDocument();
+  });
+
+  it("shows separate linked Book rendition controls across mapped roots", async () => {
+    const card = buildCard();
+    card.entity.kind = ENTITY_KIND.book;
+    card.externalLibraryProvenance = {
+      ...externalLibraryProvenance(),
+      bookRenditions: ([
+        [BOOK_RENDITION.ebook, "ebook-holding", "Ebook root"],
+        [BOOK_RENDITION.audiobook, "audio-holding", "Audio root"],
+      ] as const).map(([rendition, holdingId, libraryLabel]) => ({
+        rendition,
+        connectionId: "connection-one",
+        connectionName: "LazyLibrarian",
+        pluginId: "lazylibrarian",
+        libraryRootId: `${holdingId}-root`,
+        libraryLabel,
+        holding: {
+          holdingId,
+          item: {
+            entityKind: ENTITY_KIND.book,
+            remoteId: "OL123W",
+            expectedExternalIds: { [EXTERNAL_ID_PROVIDER.openLibraryWork]: "OL123W" },
+            bookRendition: rendition,
+          },
+          status: MANAGED_TRACKING_STATUS.tracking,
+        },
+        request: {
+          requestId: holdingId,
+          phase: MANAGED_REQUEST_PHASE.completed,
+          updatedAt: "2026-09-23T12:00:00Z",
+          problem: null,
+        },
+      })),
+    };
+    render(EntityDetail, { card, admin: true });
+
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
+
+    const panel = screen.getByRole("tabpanel", { name: "External library" });
+    expect(within(panel).getByRole("heading", { name: "Ebook" })).toBeInTheDocument();
+    expect(within(panel).getByRole("heading", { name: "Audiobook" })).toBeInTheDocument();
+    expect(within(panel).getByText("Ebook root")).toBeInTheDocument();
+    expect(within(panel).getByText("Audio root")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Ebook settings and activity in LazyLibrarian" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Audiobook settings and activity in LazyLibrarian" })).toBeInTheDocument();
+    const ebookLink = within(panel).getByRole("link", { name: "Open ebook connected title" });
+    const audioLink = within(panel).getByRole("link", { name: "Open audiobook connected title" });
+    expect(new URL(ebookLink.getAttribute("href")!, "http://localhost").searchParams.get("rendition"))
+      .toBe(BOOK_RENDITION.ebook);
+    expect(new URL(audioLink.getAttribute("href")!, "http://localhost").searchParams.get("rendition"))
+      .toBe(BOOK_RENDITION.audiobook);
+  });
+
+  it("links administrators to the exact identity-pinned connected holding", async () => {
+    const card = buildCard();
+    card.externalLibraryProvenance = externalLibraryProvenance();
+    render(EntityDetail, { card, admin: true });
+
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
+    const link = screen.getByRole("link", { name: "Open Radarr connected title" });
+    const url = new URL(link.getAttribute("href")!, "http://localhost");
+    expect(url.pathname).toBe("/request/source/connection-one/movie/movie-42");
+    expect(JSON.parse(url.searchParams.get("identities")!)).toEqual({ [EXTERNAL_ID_PROVIDER.tmdb]: "42" });
+  });
+
+  it("links administrators back to the scoped source when no exact holding is saved", async () => {
+    const card = buildCard();
+    card.entity.kind = ENTITY_KIND.movie;
+    card.externalLibraryProvenance = { ...externalLibraryProvenance(), holding: null };
+    render(EntityDetail, { card, admin: true });
+
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
+    const link = screen.getByRole("link", { name: "Browse Radarr connected source" });
+    const url = new URL(link.getAttribute("href")!, "http://localhost");
+    expect(url.pathname).toBe("/request");
+    expect(url.searchParams.get("connection")).toBe("connection-one");
+    expect(url.searchParams.get("kind")).toBe(REQUEST_MEDIA_KIND.movie);
+  });
+
+  it("presents a removed external title as retained history without promising future files", async () => {
+    const card = buildCard();
+    card.entity.kind = ENTITY_KIND.movie;
+    card.entity.hasSourceMedia = false;
+    card.externalLibraryProvenance = {
+      ...externalLibraryProvenance(),
+      holding: { ...externalLibraryProvenance().holding!, status: MANAGED_TRACKING_STATUS.removed },
+      request: {
+        requestId: "request-one",
+        phase: MANAGED_REQUEST_PHASE.remoteRemoved,
+        updatedAt: "2026-09-18T12:00:00Z",
+        problem: null,
+      },
+    };
+    render(EntityDetail, { card });
+
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
+
+    expect(screen.getByText("Removed from source")).toBeInTheDocument();
+    expect(screen.getByText("This title was removed from Radarr. Prismedia retained its metadata and request history.")).toBeInTheDocument();
+    expect(screen.queryByText(/When its files are ready/)).not.toBeInTheDocument();
+  });
+
+  it("keeps external-library origin independent from metadata-provider identity", () => {
+    const card = buildCard();
+    card.externalLibraryProvenance = externalLibraryProvenance();
+    card.providerIdentity = {
+      pluginId: "metadata-router",
+      identityNamespace: EXTERNAL_ID_PROVIDER.imdb,
+      identityValue: "tt0000042",
+      url: null,
+    };
+    render(EntityDetail, { card });
+
+    expect(screen.getByRole("tab", { name: "External library" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Metadata and monitoring source: metadata-router, imdb ID tt0000042"))
+      .toBeInTheDocument();
+  });
+
   it("protects the shared editor draft on route navigation and releases the guard after cancel", async () => {
     let guard: ((event: BeforeNavigate) => void) | undefined;
     const hook = vi.spyOn(navigation, "beforeNavigate").mockImplementation((callback) => { guard = callback; });
@@ -600,6 +796,7 @@ describe("EntityDetail", () => {
     const card = buildCard();
     card.description = "A visible details tab";
     card.links = [{ label: "https://example.test", url: "https://example.test" }];
+    card.externalLibraryProvenance = externalLibraryProvenance();
 
     render(EntityDetail, {
       props: {
@@ -619,7 +816,7 @@ describe("EntityDetail", () => {
       target: { value: "https://changed.test" },
     });
     await fireEvent.keyDown(screen.getByRole("textbox", { name: "Links item" }), { key: "Enter" });
-    await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
 
     expect(screen.getByRole("dialog", { name: "Discard unsaved edits?" })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: "Discard unsaved edits?" })).toHaveLength(1);
@@ -631,11 +828,12 @@ describe("EntityDetail", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument());
     expect(screen.getByRole("tab", { name: "Links" })).toHaveAttribute("aria-selected", "true");
 
-    await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
 
     await fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "External library" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("button", { name: "Edit External library" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument());
   });
 
@@ -741,3 +939,23 @@ describe("EntityDetail", () => {
     expect(screen.getByText("418214")).toBeInTheDocument();
   });
 });
+
+function externalLibraryProvenance(): NonNullable<EntityDetailCard["externalLibraryProvenance"]> {
+  return {
+    kind: CAPABILITY_KIND.externalLibraryProvenance,
+    connectionId: "connection-one",
+    connectionName: "Radarr",
+    pluginId: "radarr",
+    libraryRootId: "library-one",
+    libraryLabel: "Movies on NAS",
+    holding: {
+      holdingId: "holding-one",
+      item: {
+        entityKind: ENTITY_KIND.movie,
+        remoteId: "movie-42",
+        expectedExternalIds: { [EXTERNAL_ID_PROVIDER.tmdb]: "42" },
+      },
+      status: MANAGED_TRACKING_STATUS.released,
+    },
+  };
+}

@@ -272,6 +272,11 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AudiobookShape")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("audiobook_shape");
+
                     b.Property<string>("Author")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
@@ -545,6 +550,14 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("embedded_artist");
 
+                    b.Property<string>("EmbeddedTitle")
+                        .HasColumnType("text")
+                        .HasColumnName("embedded_title");
+
+                    b.Property<int?>("EmbeddedTrackNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("embedded_track_number");
+
                     b.Property<string>("SectionLabel")
                         .HasColumnType("text")
                         .HasColumnName("section_label");
@@ -554,6 +567,10 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("section_order");
+
+                    b.Property<DateTimeOffset?>("TagsRecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("tags_recorded_at");
 
                     b.HasKey("EntityId");
 
@@ -2161,6 +2178,10 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("title");
 
+                    b.Property<bool>("Untitled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("untitled");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -2174,6 +2195,55 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasFilter("source_index IS NOT NULL");
 
                     b.ToTable("entity_markers", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.EntityMetadataFieldRow", b =>
+                {
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("Field")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("field");
+
+                    b.Property<decimal?>("Confidence")
+                        .HasPrecision(7, 6)
+                        .HasColumnType("numeric(7,6)")
+                        .HasColumnName("confidence");
+
+                    b.Property<bool>("IsCleared")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_cleared");
+
+                    b.Property<bool>("IsLocked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_locked");
+
+                    b.Property<DateTimeOffset?>("ObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_at");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("origin");
+
+                    b.Property<string>("ProviderId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("provider_id");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("revision");
+
+                    b.HasKey("EntityId", "Field");
+
+                    b.ToTable("entity_metadata_fields", (string)null);
                 });
 
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.EntityPageEntryRow", b =>
@@ -2470,6 +2540,12 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<bool>("IsLibraryArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_library_archived");
 
                     b.Property<bool>("IsNsfw")
                         .ValueGeneratedOnAdd()
@@ -2801,6 +2877,53 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.ToTable("entity_urls", (string)null);
                 });
 
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ExternalLibraryMountRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("LibraryRootId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("library_root_id");
+
+                    b.Property<string>("LocalPath")
+                        .IsRequired()
+                        .HasMaxLength(8192)
+                        .HasColumnType("character varying(8192)")
+                        .HasColumnName("local_path");
+
+                    b.Property<string>("RemotePath")
+                        .IsRequired()
+                        .HasMaxLength(8192)
+                        .HasColumnType("character varying(8192)")
+                        .HasColumnName("remote_path");
+
+                    b.Property<string>("RemoteRootId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("remote_root_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LibraryRootId")
+                        .IsUnique();
+
+                    b.HasIndex("ConnectionId", "RemoteRootId")
+                        .IsUnique();
+
+                    b.ToTable("external_library_mounts", (string)null);
+                });
+
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.FingerprintSubmissionRow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2850,6 +2973,65 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.ToTable("fingerprint_submissions", (string)null);
                 });
 
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.FulfillmentReservationRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BookRendition")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("book_rendition");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("ExternalIdsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("external_ids");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<string>("OwnerKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("owner_kind");
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectionId");
+
+                    b.HasIndex("EntityId");
+
+                    b.HasIndex("OwnerId", "OwnerKind", "EntityId", "BookRendition")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("OwnerId", "OwnerKind", "EntityId", "BookRendition"), false);
+
+                    b.HasIndex(new[] { "EntityId" }, "IX_fulfillment_reservations_active_entity_id")
+                        .HasFilter("released_at IS NULL");
+
+                    b.ToTable("fulfillment_reservations", (string)null);
+                });
+
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.GalleryDetailRow", b =>
                 {
                     b.Property<Guid>("EntityId")
@@ -2865,6 +3047,12 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("gallery_type");
+
+                    b.Property<bool>("PreserveContainer")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("preserve_container");
 
                     b.HasKey("EntityId");
 
@@ -3137,6 +3325,151 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasKey("IndexerConfigId");
 
                     b.ToTable("indexer_statuses", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.IntegrationConnectionRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("base_url");
+
+                    b.Property<string>("EffectiveCapabilitiesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("effective_capabilities");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("EnabledCapabilitiesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("enabled_capabilities");
+
+                    b.Property<bool>("HasPersistentRemoteIdentity")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_persistent_remote_identity");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_checked_at");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<string>("ProtectedSecretsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("protected_secrets");
+
+                    b.Property<string>("RemoteInstanceId")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("remote_instance_id");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("SettingsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("settings");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PluginId");
+
+                    b.ToTable("integration_connections", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.IntegrationTransferRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActiveOwnershipKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("active_ownership_key");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("phase");
+
+                    b.Property<string>("ProtectedPlan")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protected_plan");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("state");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActiveOwnershipKey")
+                        .IsUnique();
+
+                    b.HasIndex("ConnectionId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("integration_transfers", (string)null);
                 });
 
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.JobDependencyRow", b =>
@@ -3609,6 +3942,356 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("library_roots", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ManagedControlRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ActiveHoldingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("active_holding_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("HoldingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("holding_id");
+
+                    b.Property<DateTimeOffset?>("NextCheckAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_check_at");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("phase");
+
+                    b.Property<string>("PlanJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("plan");
+
+                    b.Property<string>("Problem")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("problem");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("state");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActiveHoldingId")
+                        .IsUnique();
+
+                    b.HasIndex("ConnectionId");
+
+                    b.HasIndex("NextCheckAt");
+
+                    b.HasIndex("HoldingId", "CreatedAt");
+
+                    b.ToTable("managed_controls", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ManagedHoldingRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BookRendition")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("book_rendition");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("ItemJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("item");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_checked_at");
+
+                    b.Property<Guid>("LibraryRootId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("library_root_id");
+
+                    b.Property<DateTimeOffset>("NextCheckAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_check_at");
+
+                    b.Property<DateTimeOffset?>("PeopleEnrichmentCompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("people_enrichment_completed_at");
+
+                    b.Property<string>("PeopleEnrichmentFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("people_enrichment_fingerprint");
+
+                    b.Property<string>("Problem")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("problem");
+
+                    b.Property<Guid?>("ReleaseOperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("release_operation_id");
+
+                    b.Property<string>("ReleaseRequestJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("release_request");
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at");
+
+                    b.Property<string>("ReleasedBindingsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("[]")
+                        .HasColumnName("released_bindings");
+
+                    b.Property<string>("RemoteId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("remote_id");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("SelectionsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("selections");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TargetsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("targets");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LibraryRootId");
+
+                    b.HasIndex("NextCheckAt");
+
+                    b.HasIndex("ReleaseOperationId")
+                        .IsUnique();
+
+                    b.HasIndex("ConnectionId", "Kind", "RemoteId", "BookRendition")
+                        .IsUnique()
+                        .HasFilter("released_at IS NULL");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("ConnectionId", "Kind", "RemoteId", "BookRendition"), false);
+
+                    b.ToTable("managed_holdings", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ManagedRequestRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<Guid>("LibraryRootId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("library_root_id");
+
+                    b.Property<DateTimeOffset?>("NextCheckAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_check_at");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("phase");
+
+                    b.Property<string>("PlanJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("plan");
+
+                    b.Property<string>("Problem")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("problem");
+
+                    b.Property<bool>("ReviewRequired")
+                        .HasColumnType("boolean")
+                        .HasColumnName("review_required");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("state");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntityId");
+
+                    b.HasIndex("LibraryRootId");
+
+                    b.HasIndex("NextCheckAt");
+
+                    b.HasIndex("ConnectionId", "CreatedAt");
+
+                    b.ToTable("managed_requests", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ManagedSourceBindingRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("AbsoluteNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("absolute_number");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<int?>("EpisodeNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("episode_number");
+
+                    b.Property<Guid>("HoldingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("holding_id");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_available");
+
+                    b.Property<string>("IssueLabel")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("issue_label");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LocalPath")
+                        .IsRequired()
+                        .HasMaxLength(8192)
+                        .HasColumnType("character varying(8192)")
+                        .HasColumnName("local_path");
+
+                    b.Property<string>("RemoteFileId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("remote_file_id");
+
+                    b.Property<string>("RemoteTargetId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("remote_target_id");
+
+                    b.Property<int?>("SeasonNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("season_number");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<Guid>("SourceFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_file_id");
+
+                    b.Property<DateTimeOffset>("WrittenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("written_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntityId")
+                        .IsUnique();
+
+                    b.HasIndex("SourceFileId")
+                        .IsUnique();
+
+                    b.HasIndex("HoldingId", "RemoteTargetId")
+                        .IsUnique();
+
+                    b.ToTable("managed_source_bindings", (string)null);
                 });
 
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.MediaFileIgnoreRow", b =>
@@ -4088,6 +4771,45 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.ToTable("person_details", (string)null);
                 });
 
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.PluginInvocationLeaseRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("plugin_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PluginId", "ExpiresAt");
+
+                    b.ToTable("plugin_invocation_leases", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.PluginInvocationStateRow", b =>
+                {
+                    b.Property<string>("PluginId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<DateTimeOffset>("NextStartAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_start_at");
+
+                    b.HasKey("PluginId");
+
+                    b.ToTable("plugin_invocation_states", (string)null);
+                });
+
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ProviderConfigRow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4161,6 +4883,12 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("encrypted_value");
+
+                    b.Property<int>("ProtectionVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("protection_version");
 
                     b.Property<Guid>("ProviderConfigId")
                         .HasColumnType("uuid")
@@ -4576,6 +5304,74 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasIndex("LibraryRootId");
 
                     b.ToTable("user_library_access", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.UserProgressCheckpointRow", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("Modality")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("modality");
+
+                    b.Property<int>("Index")
+                        .HasColumnType("integer")
+                        .HasColumnName("index");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("text")
+                        .HasColumnName("location");
+
+                    b.Property<Guid?>("MarkerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("marker_id");
+
+                    b.Property<string>("Mode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("mode");
+
+                    b.Property<double?>("OffsetSeconds")
+                        .HasColumnType("double precision")
+                        .HasColumnName("offset_seconds");
+
+                    b.Property<Guid>("PositionEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("position_entity_id");
+
+                    b.Property<int>("Total")
+                        .HasColumnType("integer")
+                        .HasColumnName("total");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("unit");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("UserId", "EntityId", "Modality");
+
+                    b.HasIndex("MarkerId");
+
+                    b.HasIndex("PositionEntityId");
+
+                    b.ToTable("user_progress_checkpoints", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_user_progress_checkpoints_bounds", "\"index\" >= 0 AND total >= 0 AND \"index\" <= total AND (offset_seconds IS NULL OR offset_seconds >= 0)");
+
+                            t.HasCheckConstraint("ck_user_progress_checkpoints_offset", "(modality IN ('listening')) = (offset_seconds IS NOT NULL) AND (marker_id IS NULL OR offset_seconds IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.UserRow", b =>
@@ -5140,6 +5936,15 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.EntityMetadataFieldRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
+                        .WithMany()
+                        .HasForeignKey("EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.EntityPageEntryRow", b =>
                 {
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityPageManifestRow", null)
@@ -5283,6 +6088,21 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ExternalLibraryMountRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.IntegrationConnectionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.LibraryRootRow", null)
+                        .WithMany()
+                        .HasForeignKey("LibraryRootId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.FingerprintSubmissionRow", b =>
                 {
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
@@ -5295,6 +6115,21 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ProviderConfigId")
                         .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.FulfillmentReservationRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.IntegrationConnectionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
+                        .WithMany()
+                        .HasForeignKey("EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.GalleryDetailRow", b =>
@@ -5349,6 +6184,15 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .WithOne()
                         .HasForeignKey("Prismedia.Infrastructure.Persistence.Entities.IndexerStatusRow", "IndexerConfigId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.IntegrationTransferRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.IntegrationConnectionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
@@ -5427,6 +6271,78 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ManagedControlRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.IntegrationConnectionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.ManagedHoldingRow", null)
+                        .WithMany()
+                        .HasForeignKey("HoldingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ManagedHoldingRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.IntegrationConnectionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.LibraryRootRow", null)
+                        .WithMany()
+                        .HasForeignKey("LibraryRootId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ManagedRequestRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.IntegrationConnectionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
+                        .WithMany()
+                        .HasForeignKey("EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.LibraryRootRow", null)
+                        .WithMany()
+                        .HasForeignKey("LibraryRootId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ManagedSourceBindingRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
+                        .WithMany()
+                        .HasForeignKey("EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.ManagedHoldingRow", null)
+                        .WithMany()
+                        .HasForeignKey("HoldingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityFileRow", null)
+                        .WithMany()
+                        .HasForeignKey("SourceFileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.MediaFileIgnoreRow", b =>
                 {
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.LibraryRootRow", null)
@@ -5478,6 +6394,15 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
                         .WithOne()
                         .HasForeignKey("Prismedia.Infrastructure.Persistence.Entities.PersonDetailRow", "EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.PluginInvocationLeaseRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.PluginInvocationStateRow", null)
+                        .WithMany()
+                        .HasForeignKey("PluginId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -5572,6 +6497,26 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.UserRow", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.UserProgressCheckpointRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityMarkerRow", null)
+                        .WithMany()
+                        .HasForeignKey("MarkerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
+                        .WithMany()
+                        .HasForeignKey("PositionEntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.UserEntityStateRow", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "EntityId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

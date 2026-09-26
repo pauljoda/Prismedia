@@ -16,6 +16,10 @@ public interface IPluginCatalogService {
     /// </summary>
     Task<IReadOnlyList<PluginProvider>> ListInstalledProvidersAsync(CancellationToken cancellationToken);
 
+    /// <summary>Returns a validated packaged icon for a local or community-index plugin.</summary>
+    Task<PluginIconAsset?> GetIconAsync(string providerId, string? version, CancellationToken cancellationToken) =>
+        Task.FromResult<PluginIconAsset?>(null);
+
     /// <summary>Installs and enables a provider, or returns null when it cannot be found.</summary>
     Task<PluginProvider?> InstallAsync(string providerId, CancellationToken cancellationToken);
 

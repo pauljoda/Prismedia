@@ -3,6 +3,7 @@ using Prismedia.Domain.Entities;
 using BookMetadataDocumentCapability = Prismedia.Contracts.Entities.BookMetadataCapability;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
+using MediaContentTypes = Prismedia.Contracts.Media.MediaContentTypes;
 
 namespace Prismedia.Domain.Media;
 
@@ -28,7 +29,9 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Book, enumeratesChildren: true),
         manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
-        engagement: new(EntityEngagementMode.Reading),
+        engagement: new(
+            EntityEngagementMode.Reading,
+            modalities: [ConsumptionModalityDefinition.Reading, ConsumptionModalityDefinition.Listening]),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,
         upgradeMode: EntityUpgradeMode.AtomicBookFile),
@@ -38,12 +41,35 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         new CapabilityProgress(),
         new CapabilityConsumption()
     ]),
-    IAudioPlaybackOwnerKindDefinition {
+    IAudioPlaybackOwnerKindDefinition,
+    IManagedFulfillmentKindDefinition,
+    IIntegrationImportKindDefinition {
+    #region Variables
+
+    /// <inheritdoc />
+    public IntegrationImportPolicy IntegrationImport { get; } = new(
+        LibraryRootMediaCapability.ScanBooks,
+        extensions: [".epub", ".pdf"],
+        mediaTypes: [MediaContentTypes.Epub, MediaContentTypes.Pdf]);
+
     /// <inheritdoc />
     public AudioPlaybackPolicy AudioPlaybackPolicy { get; } = new(
         EntityKind.AudioTrack,
         PreservesQueueOrder: true,
         SupportsPlaybackRate: true);
+
+    /// <inheritdoc />
+    /// <remarks>Ebook and audiobook are owned, monitored, and delivered independently under one work.</remarks>
+    public ManagedFulfillmentPolicy ManagedFulfillment { get; } = new(
+        identityFormats: [ProviderIdentityFormat.OpenLibraryWork],
+        identityDescription: "one exact Open Library work",
+        usesProfile: false,
+        renditionTargets: new Dictionary<BookRendition, ManagedTarget> {
+            [BookRendition.Ebook] = new(EntityKind.Book, ManagedTargetShape.Item),
+            [BookRendition.Audiobook] = new(EntityKind.AudioTrack, ManagedTargetShape.Part)
+        },
+        requiredMonitoring: true,
+        monitorsWholeItem: true);
 
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(EntityKind.Book);
@@ -99,11 +125,17 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         AcquisitionCheckpointProtocol.Placement,
         JobType.ScanBook);
 
+    #endregion
+
+    #region Actions - Projection
+
     /// <inheritdoc />
     protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
         Book entity,
         EntityKindProjectionContext context) =>
         [new BookMetadataDocumentCapability(entity.BookType, entity.Format)];
+
+    #endregion
 }
 
 /// <summary>
@@ -111,6 +143,21 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
 /// that work; serialized comics use their separate series/volume/installment aggregate.
 /// </summary>
 public sealed class Book : Entity<BookEntityKindDefinition> {
+    #region Variables
+
+    /// <summary>Editorial type of the book, such as novel or nonfiction.</summary>
+    public BookType BookType { get; private set; }
+
+    /// <summary>
+    /// Physical format of the book, which selects the reader and detail presentation.
+    /// </summary>
+    public BookFormat Format { get; private set; }
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>Creates a Book with its editorial type and readable format.</summary>
     public Book(
         Guid id,
         string title,
@@ -124,11 +171,5 @@ public sealed class Book : Entity<BookEntityKindDefinition> {
         Format = format;
     }
 
-    public BookType BookType { get; private set; }
-
-    /// <summary>
-    /// Physical format of the book, which selects the reader and detail presentation.
-    /// </summary>
-    public BookFormat Format { get; private set; }
-
+    #endregion
 }

@@ -30,7 +30,6 @@ function baseProps(overrides: Partial<InstalledPluginsTabProps> = {}): Installed
     authExpandedFor: null,
     authSavingFor: null,
     authValues: {},
-    isSfw: false,
     onAuthCancel: vi.fn(),
     onProviderAuthToggle: vi.fn(),
     onProviderInstall: vi.fn(),
@@ -83,8 +82,17 @@ describe("InstalledPluginsTab", () => {
       target: { value: "open" },
     });
 
-    expect(screen.queryByText("TMDB")).not.toBeInTheDocument();
-    expect(screen.getByText("Open Library")).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: "TMDB" })).not.toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Open Library" })).toBeInTheDocument();
+  });
+
+  it("narrows the cards to one media family from the coverage strip", async () => {
+    render(InstalledPluginsTab, { props: baseProps() });
+
+    await fireEvent.click(screen.getByRole("button", { name: /Books & comics/ }));
+
+    expect(screen.queryByRole("article", { name: "TMDB" })).not.toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Open Library" })).toBeInTheDocument();
   });
 
   it("emits update actions from the current provider contract", async () => {
@@ -101,11 +109,10 @@ describe("InstalledPluginsTab", () => {
       }),
     });
 
-    const pluginCard = screen.getByText("TMDB").closest(".surface-card");
-    expect(pluginCard).not.toBeNull();
-    expect(within(pluginCard as HTMLElement).getByText("v1.1.0 available")).toBeInTheDocument();
+    const pluginCard = screen.getByRole("article", { name: "TMDB" });
+    expect(within(pluginCard).getByText("v1.1.0 available")).toBeInTheDocument();
 
-    await fireEvent.click(within(pluginCard as HTMLElement).getByRole("button", { name: /update/i }));
+    await fireEvent.click(within(pluginCard).getByRole("button", { name: /update/i }));
 
     expect(onProviderUpdate).toHaveBeenCalledWith(updateable);
     expect(screen.queryByRole("button", { name: /check for updates/i })).not.toBeInTheDocument();
@@ -116,6 +123,6 @@ describe("InstalledPluginsTab", () => {
       props: baseProps({ providers: [] }),
     });
 
-    expect(screen.getByText("No plugins installed. Browse the community tabs to get started.")).toBeInTheDocument();
+    expect(screen.getByText("No plugins installed")).toBeInTheDocument();
   });
 });

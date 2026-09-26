@@ -1,5 +1,6 @@
 import {
   addIdentifyQueueItem as addIdentifyQueueItemRequest,
+  countUnidentifiedEntities,
   applyIdentifyProposal as applyIdentifyProposalRequest,
   identifyEntity as identifyEntityRequest,
   applyIdentifyQueueItem as applyIdentifyQueueItemRequest,
@@ -23,6 +24,7 @@ import type {
   IdentifyQueueItemStatus,
   ListIdentifyQueueParams,
   SaveIdentifyQueueProposalRequest,
+  UnidentifiedKindCount,
 } from "$lib/api/generated/model";
 import { problemMessage, requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 import { apiPath, fetchApi } from "$lib/api/orval-fetch";
@@ -36,6 +38,19 @@ import type {
   PluginProvider,
 } from "$lib/api/identify-types";
 export { providerCanIdentifyKind } from "$lib/identify/provider-selection";
+
+/** Unidentified items per requested kind in one read; a kind the server omits has none. */
+export async function fetchUnidentifiedCounts(
+  kinds: readonly string[],
+  hideNsfw: boolean,
+  options?: RequestOptions,
+): Promise<Record<string, number>> {
+  const counts = unwrapGenerated<UnidentifiedKindCount[]>(
+    await countUnidentifiedEntities({ kind: kinds.join(","), hideNsfw }, requestInit(options)),
+    "Failed to count unidentified items",
+  );
+  return Object.fromEntries(kinds.map((kind) => [kind, Number(counts.find((entry) => entry.kind === kind)?.count ?? 0)]));
+}
 
 interface ApplyIdentifyQueueItemOptions extends RequestOptions {
   progressId?: string | null;

@@ -100,9 +100,9 @@ export function useIdentifyDetailAction(
         label: "Identify",
         icon: ScanSearch,
         iconClass: "h-3.5 w-3.5",
-        ariaLabel: "Identify (no compatible plugin installed)",
-        title: "No compatible Identify plugin for this media type. Open Plugins to install one.",
-        onClick: () => void goto("/plugins"),
+        ariaLabel: "Identify (metadata setup required)",
+        title: "Open Identify to set up a metadata provider for this media type.",
+        onClick: () => void navigate(current.id),
       };
     }
 
@@ -139,10 +139,10 @@ export function useIdentifyDetailAction(
   }
 
   async function navigate(id: string) {
-    if (!eligible || (!isQueued && !hasReadyProvider)) return;
+    if (!eligible) return;
     // A fresh identify requests the search up front (the server walks enabled providers);
     // the review page then just renders the item's queued → searching → result states.
-    if (!isQueued) {
+    if (!isQueued && hasReadyProvider) {
       await requestIdentifySearch(id, null).catch(() => undefined);
     }
 

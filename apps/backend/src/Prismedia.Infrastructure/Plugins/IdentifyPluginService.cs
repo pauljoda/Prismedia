@@ -272,7 +272,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             parent.SortOrder,
             cancellationToken);
         var structuralContext = ancestors.Count > 0 || positions.Count > 0
-            ? new IdentifyStructuralContext(ancestors, positions)
+            ? new IdentifyStructuralContext(ancestors, positions) { PositionEntries = await ResolveStructuralPositionEntriesAsync(parent.Id, cancellationToken) }
             : null;
         var pluginRequestKind = PluginEntityKindCompatibility.RequestKindFor(descriptor.Manifest, parent.KindCode);
         var query = new IdentifyQuery(null, null, null);
@@ -576,7 +576,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             parentSortOrder,
             cancellationToken);
         var structuralContext = ancestors.Count > 0 || positions.Count > 0
-            ? new IdentifyStructuralContext(ancestors, positions)
+            ? new IdentifyStructuralContext(ancestors, positions) { PositionEntries = await ResolveStructuralPositionEntriesAsync(entity.Id, cancellationToken) }
             : null;
         var pluginRequestKind = PluginEntityKindCompatibility.RequestKindFor(descriptor.Manifest, entity.KindCode);
         var resolvedAction = ResolveAction(descriptor.Manifest, entity.KindCode, query, hints);

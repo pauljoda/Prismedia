@@ -10,6 +10,7 @@ export type EntityFileRole = typeof EntityFileRole[keyof typeof EntityFileRole];
 
 export const EntityFileRole = {
   source: 'source',
+  'unavailable-source': 'unavailable-source',
   thumbnail: 'thumbnail',
   'grid-thumbnail': 'grid-thumbnail',
   'grid-thumbnail-2x': 'grid-thumbnail-2x',

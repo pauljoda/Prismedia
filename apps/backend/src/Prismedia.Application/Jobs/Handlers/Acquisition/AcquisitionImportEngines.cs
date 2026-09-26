@@ -210,7 +210,8 @@ public sealed partial class BookAcquisitionImportEngine(
     IImportedEntityMaterializer materializer,
     DownloadClientCleanupService torrents,
     IAcquisitionHistoryStore history,
-    ILogger<BookAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
+    ILogger<BookAcquisitionImportEngine> logger,
+    IAcquisitionBlocklistStore? blocklist = null) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profileKind = AcquisitionProfileKinds.For(import.Kind);
@@ -428,6 +429,11 @@ public sealed partial class BookAcquisitionImportEngine(
         // The owned custom-format score is the selected release scored against this profile's formats, so the
         // upgrade loop's same-quality format-score cutoff has a baseline. Null-safe: no selected release → 0.
         var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, import.Kind, selected, cancellationToken);
+        var audiobookShape = import.BookRendition == BookRendition.Audiobook
+            ? PlacedAudiobookShape(checkpoint.Units
+                .Where(unit => unit.IsMedia)
+                .Select(unit => (unit.SourceRelativePath, unit.FinalPath!)))
+            : null;
 
         await acquisitions.WriteImportHintAsync(import.Id, checkpoint.HintPath, import, ownedQuality, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, checkpoint.FinalSourcePath, cancellationToken);
@@ -446,10 +452,30 @@ public sealed partial class BookAcquisitionImportEngine(
                 ownedQuality,
                 checkpoint.SuccessMessage,
                 ownedFormatScore: ownedFormatScore,
-                touchedAncestorIds: materialized.TouchedAncestorIds),
+                touchedAncestorIds: materialized.TouchedAncestorIds,
+                audiobookShape: audiobookShape),
             cancellationToken);
 
         await torrents.HandleImportedAsync(import, checkpoint.ImportMode, cancellationToken);
+    }
+
+    /// <summary>
+    /// The layout of the audiobook files an import placed, read from their payload-relative names and the
+    /// sizes of the placed files, so a resumed import records the same shape as a fresh one.
+    /// </summary>
+    private static AudiobookReleaseShape PlacedAudiobookShape(
+        IEnumerable<(string SourceRelativePath, string PlacedPath)> placed) =>
+        AudiobookReleaseShape.Resolve(placed
+            .Select(file => new ImportCandidateFile(file.SourceRelativePath, SizeOf(file.PlacedPath)))
+            .ToArray());
+
+    private static long SizeOf(string path) {
+        try {
+            var file = new FileInfo(path);
+            return file.Exists ? file.Length : 0;
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            return 0;
+        }
     }
 
     private async Task<LibraryRootData?> ResolveCheckpointRootAsync(
@@ -621,12 +647,14 @@ internal static class ImportRootResolution {
             }
 
             var chosen = await roots.GetLibraryRootAsync(id, cancellationToken);
+            if (chosen is { IsReadOnly: true }) throw new InvalidOperationException("The chosen library is externally managed and cannot receive native imports.");
             if (chosen is { Enabled: true } && supportsKind(chosen)) {
                 return chosen;
             }
         }
 
         return (await roots.GetEnabledRootsAsync(cancellationToken))
+            .Where(root => !root.IsReadOnly)
             .Where(supportsKind)
             .OrderBy(candidate => candidate.IsNsfw)
             .ThenBy(candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
@@ -640,6 +668,7 @@ internal static class ImportRootResolution {
         CancellationToken cancellationToken) {
         var candidate = Path.GetFullPath(path);
         return (await roots.GetEnabledRootsAsync(cancellationToken))
+            .Where(root => !root.IsReadOnly)
             .Where(supportsKind)
             .Where(root => IsAtOrUnder(candidate, Path.GetFullPath(root.Path)))
             .OrderByDescending(root => Path.GetFullPath(root.Path).Length)
@@ -1978,7 +2007,7 @@ public sealed class TvAcquisitionImportEngine(
         CancellationToken cancellationToken) {
         var seriesFolder = Path.GetFullPath(seriesFolderPath);
         return (await roots.GetEnabledRootsAsync(cancellationToken))
-            .Where(root => root.ScanVideos && IsAtOrUnderFolder(seriesFolder, Path.GetFullPath(root.Path)))
+            .Where(root => !root.IsReadOnly && root.ScanVideos && IsAtOrUnderFolder(seriesFolder, Path.GetFullPath(root.Path)))
             .OrderByDescending(root => Path.GetFullPath(root.Path).Length)
             .FirstOrDefault();
     }

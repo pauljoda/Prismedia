@@ -23,6 +23,14 @@ public static class EntityMetadataPatchValidator {
     public static void Validate(ISet<string> fields, EntityMetadataPatch patch) {
         var errors = new List<string>();
 
+        if (patch.RetiredExternalIds is { Count: > 0 }) {
+            errors.Add("external identity retirement is available only through a reviewed provider proposal");
+        }
+
+        if (fields.Contains(MetadataPatchField.Positions.ToCode())) {
+            _ = EntityMetadataPositionRules.Normalize(patch);
+        }
+
         if (fields.Contains(MetadataPatchField.Title.ToCode()) && string.IsNullOrWhiteSpace(patch.Title)) {
             errors.Add("title is required");
         }

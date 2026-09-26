@@ -15,5 +15,9 @@ public enum LibraryRootMediaCapability {
 
     /// <summary>The root accepts audio scans.</summary>
     [Code("scanAudio")]
-    ScanAudio
+    ScanAudio,
+
+    /// <summary>The root accepts still-image and gallery scans.</summary>
+    [Code("scanImages")]
+    ScanImages
 }

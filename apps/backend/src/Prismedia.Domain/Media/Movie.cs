@@ -31,7 +31,15 @@ public sealed class MovieEntityKindDefinition() : PlayableVideoEntityKindDefinit
         new CapabilityDescription(),
         new CapabilityDates(),
         new CapabilitySource()
-    ]) {
+    ]),
+    IManagedFulfillmentKindDefinition {
+    /// <inheritdoc />
+    public ManagedFulfillmentPolicy ManagedFulfillment { get; } = new(
+        identityFormats: [ProviderIdentityFormat.Tmdb],
+        identityDescription: "an exact TMDB identity",
+        usesProfile: true,
+        target: new(EntityKind.Movie, ManagedTargetShape.Item));
+
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

@@ -10,6 +10,7 @@ using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.Requests;
 using Prismedia.Contracts.Security;
@@ -233,6 +234,46 @@ public sealed class RequestEndpointTests {
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal(ApiProblemCodes.RequestProposalChanged, problem!.Code);
         Assert.True(reviews.LastHideNsfw);
+    }
+
+    [Fact]
+    public async Task ExternalManagerReviewedCommitRejectsMissingRequestAsBadRequest() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        var input = new CommitReviewedManagedRequestInput(
+            Guid.NewGuid(), 1, [new(LibraryRootId: Guid.NewGuid())], "profile", true, true);
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/connections/{Guid.NewGuid():D}/manager/requests/commit-reviewed",
+            input,
+            CodecJson);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.RequestInvalid, problem!.Code);
+    }
+
+    [Fact]
+    public async Task ExternalManagerReviewedCommitRejectsMissingProposalSelectionAsBadRequest() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        var request = new ReviewedRequestCommitRequest(
+            RequestMediaKind.Movie,
+            "movie-plugin",
+            new ExternalIdentity(Prismedia.Contracts.Entities.ExternalIdProviders.Tmdb, "603"),
+            "revision",
+            null!);
+        var input = new CommitReviewedManagedRequestInput(
+            Guid.NewGuid(), 1, [new(LibraryRootId: Guid.NewGuid())], "profile", true, true, Request: request);
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/connections/{Guid.NewGuid():D}/manager/requests/commit-reviewed",
+            input,
+            CodecJson);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.RequestInvalid, problem!.Code);
     }
 
     [Fact]

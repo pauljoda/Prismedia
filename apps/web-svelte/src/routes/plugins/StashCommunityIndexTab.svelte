@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Check, Download, Loader2, RefreshCw } from "@lucide/svelte";
-  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
+  import { Check, Download, Globe, Loader2, RefreshCw } from "@lucide/svelte";
+  import { Button, SearchInput } from "@prismedia/ui-svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
 
   /** A Stash community scraper row with its locally-installed state resolved. */
   export interface StashScraperRow {
@@ -40,74 +41,56 @@
   });
 </script>
 
-<section class="space-y-3">
-  <div class="flex items-center justify-between gap-3 flex-wrap">
-    <p class="text-text-muted text-[0.72rem]">
-      {entries.length} scrapers available · All Stash community scrapers are classified as NSFW
-    </p>
-    <div class="flex items-center gap-2">
-      <SearchInput
-        class="w-64"
-        inputClass="text-sm"
-        ariaLabel="Filter scrapers by name or ID"
-        placeholder="Filter by name or ID..."
-        bind:value={search}
-      />
-      <Button variant="secondary" size="sm" onclick={onRefresh} disabled={loading}>
-        {#if loading}
-          <Loader2 class="h-3.5 w-3.5 animate-spin" />
-        {:else}
-          <RefreshCw class="h-3.5 w-3.5" />
-        {/if}
-        Refresh
-      </Button>
-    </div>
+<section class="flex flex-col gap-4">
+  <div class="flex flex-wrap items-center gap-2">
+    <SearchInput
+      class="w-full sm:w-64"
+      inputClass="text-sm"
+      ariaLabel="Filter scrapers by name or ID"
+      placeholder="Filter by name or ID..."
+      bind:value={search}
+    />
+    <Button variant="ghost" size="sm" onclick={onRefresh} disabled={loading}>
+      {#if loading}<Loader2 class="animate-spin" aria-hidden="true" />{:else}<RefreshCw aria-hidden="true" />{/if}
+      Refresh
+    </Button>
   </div>
 
   {#if loading && !loaded}
-    <div class="surface-card no-lift p-12 flex items-center justify-center">
-      <Loader2 class="h-6 w-6 animate-spin text-text-muted" />
-    </div>
+    <StatePlaceholder icon={Globe} title="Loading scraper index" busy />
+  {:else if filteredEntries.length === 0}
+    <StatePlaceholder icon={Globe} title={search ? "No matching scrapers" : "Index is empty"} />
   {:else}
-    <div class="space-y-1 max-h-[600px] overflow-y-auto scrollbar-hidden">
+    <ul
+      class="flex max-h-[600px] flex-col divide-y divide-[var(--color-border-subtle)] overflow-y-auto rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] scrollbar-hidden"
+    >
       {#each filteredEntries as entry (entry.providerId)}
-        <div class="surface-card no-lift px-4 py-3 flex items-center gap-3">
+        <li class="flex min-w-0 items-center gap-3 px-3 py-2.5 sm:px-4">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium">{entry.name}</p>
-            <p class="text-text-disabled text-[0.65rem] mt-0.5 font-mono">
-              {entry.providerId}
-              <span class="text-text-disabled/60 ml-2">{entry.version}</span>
+            <p class="truncate text-label font-medium text-text-primary">{entry.name}</p>
+            <p class="truncate font-mono text-[0.64rem] text-text-disabled">
+              {entry.providerId}<span class="ml-2">{entry.version}</span>
             </p>
           </div>
           {#if entry.installed}
-            <Badge variant="accent">
-              <Check class="h-2.5 w-2.5 mr-1" />Installed
-            </Badge>
+            <span class="flex h-control-sm shrink-0 items-center gap-1.5 px-2 text-caption text-text-muted">
+              <Check class="size-3.5" aria-hidden="true" />
+              Installed
+            </span>
           {:else}
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
+              class="shrink-0"
               onclick={() => onInstall(entry.providerId)}
               disabled={installingId === entry.providerId}
-              class="shrink-0 text-text-muted hover:text-text-accent"
             >
-              {#if installingId === entry.providerId}
-                <Loader2 class="h-3.5 w-3.5 animate-spin" />
-              {:else}
-                <Download class="h-3.5 w-3.5" />
-              {/if}
+              {#if installingId === entry.providerId}<Loader2 class="animate-spin" aria-hidden="true" />{:else}<Download aria-hidden="true" />{/if}
               Install
             </Button>
           {/if}
-        </div>
+        </li>
       {/each}
-      {#if filteredEntries.length === 0}
-        <div class="surface-card no-lift p-8 text-center">
-          <p class="text-text-muted text-sm">
-            {search ? "No scrapers match your search." : "Index is empty."}
-          </p>
-        </div>
-      {/if}
-    </div>
+    </ul>
   {/if}
 </section>

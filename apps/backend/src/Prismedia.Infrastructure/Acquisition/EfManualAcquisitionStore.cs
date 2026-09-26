@@ -61,8 +61,9 @@ public sealed class EfManualAcquisitionStore(
             kind,
             cancellationToken);
         var work = MediaQualityLadder.IsVideoKind(kind)
+            || kind is EntityKind.Book or EntityKind.ComicVolume or EntityKind.ComicInstallment
             ? await new EfAcquisitionWorkContext(db).ReadIdentityAsync(entityId, cancellationToken)
-            : (Year: (int?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
+            : (Year: (int?)null, Title: (string?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
         var input = new AcquisitionSearchInput(
             Guid.Empty,
             entity.Title,
@@ -71,11 +72,12 @@ public sealed class EfManualAcquisitionStore(
             entityId,
             Year: work.Year,
             ProfileId: kind == EntityKind.VideoEpisode ? await ResolveEpisodeProfileAsync(entityId, cancellationToken) : null,
-            Series: series,
+            Series: kind is EntityKind.ComicVolume or EntityKind.ComicInstallment ? work.Title ?? series : series,
             SeasonNumber: seasonNumber,
             EpisodeNumber: episodeNumber,
             BookRendition: kind == EntityKind.Book ? BookRendition.Ebook : null,
             AbsoluteEpisodeNumber: absoluteEpisodeNumber) {
+            InstallmentLabel = await new EfAcquisitionWorkContext(db).ReadInstallmentLabelAsync(entityId, kind, cancellationToken),
             AlternativeWorkTitles = work.Titles,
             EpisodeCatalog = kind == EntityKind.VideoEpisode
                 ? await new EfImportTargetIndex(db).GetSeriesEpisodeCatalogAsync(entityId, cancellationToken) : []
@@ -143,6 +145,7 @@ public sealed class EfManualAcquisitionStore(
                 OwnedMediaQuality = target.OwnedQuality.MediaQualityCode,
                 OwnedMediaRevision = target.OwnedQuality.MediaRevision,
                 OwnedFormatScore = target.OwnedQuality.FormatScore,
+                AudiobookShape = target.OwnedQuality.AudiobookShape,
                 UpgradeQualityCaptured = true,
                 SelectedReleaseJson = JsonSerializer.Serialize(new SelectedRelease(
                     Path.GetFileName(sourcePath!),
@@ -381,7 +384,9 @@ public sealed class EfManualAcquisitionStore(
             : new UpgradeOwnedQuality(
                 new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier),
                 null,
-                FormatScore: parent.OwnedFormatScore);
+                FormatScore: parent.OwnedFormatScore) {
+                AudiobookShape = parent.BookRendition == BookRendition.Audiobook ? parent.AudiobookShape : null
+            };
 
     private static bool TryDecodeReplaceableKind(string code, out EntityKind kind) {
         if (EntityKindRegistry.TryDescribe(code, out var definition) &&

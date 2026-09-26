@@ -1,6 +1,7 @@
 import type {
   ConsumptionActivityKindCode,
   ConsumptionEventKindCode,
+  ConsumptionModalityCode,
   ProgressUnitCode,
   ReaderModeCode,
 } from "$lib/api/generated/codes";
@@ -43,14 +44,17 @@ export async function updateEntityConsumption(
   );
 }
 
-/** Updates the canonical last-active progress cursor and optional exact locator. */
+/**
+ * Reports progress. Reading reports carry the cursor and exact locator; listening reports carry the
+ * modality and exact track position, and the server places the shared cursor.
+ */
 export async function updateEntityProgress(
   id: string,
   payload: {
-    currentEntityId: string;
-    unit: ProgressUnitCode;
-    index: number;
-    total: number;
+    currentEntityId?: string | null;
+    unit?: ProgressUnitCode | null;
+    index?: number | null;
+    total?: number | null;
     mode?: ReaderModeCode | null;
     completed?: boolean | null;
     reset?: boolean;
@@ -58,6 +62,8 @@ export async function updateEntityProgress(
     activitySeconds?: number | null;
     activityKind?: ConsumptionActivityKindCode;
     utcOffsetMinutes?: number | null;
+    modality?: ConsumptionModalityCode | null;
+    listening?: EntityProgressUpdateRequest["listening"];
   },
   options?: RequestOptions,
 ): Promise<void> {
@@ -65,10 +71,10 @@ export async function updateEntityProgress(
     await updateEntityProgressRequest(
       id,
       {
-        currentEntityId: payload.currentEntityId,
-        unit: payload.unit,
-        index: payload.index,
-        total: payload.total,
+        currentEntityId: payload.currentEntityId ?? null,
+        unit: payload.unit ?? null,
+        index: payload.index ?? null,
+        total: payload.total ?? null,
         mode: payload.mode ?? null,
         completed: payload.completed ?? null,
         reset: payload.reset ?? false,
@@ -76,6 +82,8 @@ export async function updateEntityProgress(
         activitySeconds: payload.activitySeconds ?? null,
         activityKind: payload.activityKind,
         utcOffsetMinutes: payload.utcOffsetMinutes ?? localUtcOffsetMinutes(),
+        modality: payload.modality ?? null,
+        listening: payload.listening ?? null,
       } as EntityProgressUpdateRequest,
       {
         ...requestInit(options),

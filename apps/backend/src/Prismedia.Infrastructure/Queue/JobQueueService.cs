@@ -64,6 +64,15 @@ public sealed partial class JobQueueService : IJobQueueService {
         return await EnqueueAsync(new EnqueueJobRequest(type), cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task WakeTargetAsync(JobType type, string targetEntityId, CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        var pending = await _db.JobRuns.Where(row => row.Type == type && row.TargetEntityId == targetEntityId
+            && row.Status == JobRunStatus.Queued && row.AvailableAt > now).ToArrayAsync(cancellationToken);
+        foreach (var row in pending) row.AvailableAt = now;
+        if (pending.Length > 0) await _db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
         // Some jobs are queue-wide singletons: scans already walk every enabled root of their kind,
         // and database backups should never overlap. When one is already queued or running, return
@@ -452,6 +461,17 @@ public sealed partial class JobQueueService : IJobQueueService {
             row.FinishedAt = DateTimeOffset.UtcNow;
             return true;
         }, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<int> CancelTargetAsync(JobType type, string targetEntityId, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(targetEntityId)) throw new ArgumentException("A specific cancellation target is required.");
+        var ids = await _db.JobRuns.AsNoTracking().Where(job => job.Type == type && job.TargetEntityId == targetEntityId
+            && (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running))
+            .Select(job => job.Id).ToArrayAsync(cancellationToken);
+        var count = 0;
+        foreach (var id in ids) if (await CancelRunAsync(id, cancellationToken)) count++;
+        return count;
+    }
 
     public async Task<bool> IsRunCancelledAsync(Guid id, CancellationToken cancellationToken) {
         var status = await _db.JobRuns

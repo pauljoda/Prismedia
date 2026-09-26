@@ -5,7 +5,7 @@
   import {
     proposalFieldValue,
     proposalHasField,
-    reviewDiffFieldKeys,
+    reviewBaseFieldKeys,
     reviewFieldLabels,
   } from "$lib/components/identify-review";
   import ReviewSection from "./ReviewSection.svelte";
@@ -32,7 +32,7 @@
     variant = "compare",
   }: Props = $props();
 
-  const fields = $derived(reviewDiffFieldKeys.filter((field) => proposalHasField(proposal, field)));
+  const fields = $derived(reviewBaseFieldKeys(proposal).filter((field) => proposalHasField(proposal, field)));
   const selectedCount = $derived(fields.filter((field) => selectedFields[field]).length);
 </script>
 
