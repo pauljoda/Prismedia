@@ -139,6 +139,44 @@ public sealed partial class WorkAlignment {
 
     #endregion
 
+    #region Actions - Continue Targets
+
+    /// <summary>
+    /// Where continuing to read opens. Reading and listening of a Linked work move one shared position:
+    /// when listening is newer and its chapter is paired, reading continues from the listening position
+    /// aligned into the paired readable chapter. Otherwise reading continues from its own exact position,
+    /// and a work never read continues from listening only when that position aligns.
+    /// </summary>
+    /// <param name="reading">Resumable reading checkpoint, or null.</param>
+    /// <param name="listening">Resumable listening checkpoint, or null.</param>
+    /// <param name="readerMode">Reader layout to open aligned reading positions with.</param>
+    public AlignedTarget ContinueReading(ProgressCheckpoint? reading, ProgressCheckpoint? listening, ReaderMode? readerMode) =>
+        ContinueFrom(reading, listening, readerMode);
+
+    /// <summary>
+    /// Where continuing to listen opens: the listening counterpart of <see cref="ContinueReading"/>. A
+    /// newer reading position of a Linked work carries into its paired audio chapter, starting the
+    /// listening runway before the aligned point so the listener re-hears the words leading into it.
+    /// </summary>
+    /// <param name="reading">Resumable reading checkpoint, or null.</param>
+    /// <param name="listening">Resumable listening checkpoint, or null.</param>
+    /// <param name="readerMode">Reader layout of the reading position (unused for the listening side).</param>
+    public AlignedTarget ContinueListening(ProgressCheckpoint? reading, ProgressCheckpoint? listening, ReaderMode? readerMode) =>
+        ContinueFrom(listening, reading, readerMode);
+
+    private AlignedTarget ContinueFrom(ProgressCheckpoint? own, ProgressCheckpoint? other, ReaderMode? readerMode) {
+        var otherIsNewer = other is not null && (own is null || other.UpdatedAt > own.UpdatedAt);
+        if (otherIsNewer && Link.IsLinked && Switch(other, readerMode) is { Gap: null } aligned) {
+            return aligned;
+        }
+        if (own is not null) {
+            return Continue(own);
+        }
+        return other is null ? Gap(null, AlignmentGapReason.NoPosition, null) : Switch(other, readerMode);
+    }
+
+    #endregion
+
     #region Actions - Cursor Placement
 
     /// <summary>

@@ -140,10 +140,12 @@
       returnHref = await resolveReaderReturnHref(nextBook.id, nextContext);
       sourceUrl = `/entities/${nextBook.id}/files/source`;
       readablePositionTotal = Number(alignment.readablePositionTotal);
-      // The exact reading checkpoint resumes only while it is newer than the Book's completion.
-      const exactReading = nextContext.command === "start-over"
+      // Reading resumes where the server says to continue: the exact reading checkpoint, or for a
+      // Linked Book the position carried over from newer listening. Neither survives a completion.
+      const continueReading = alignment.resume?.continueReading;
+      const exactReading = nextContext.command === "start-over" || continueReading?.gap
         ? null
-        : alignment.resume?.exactReading ?? null;
+        : continueReading?.reading ?? null;
       if (format === BOOK_FORMAT.epub) loadEpubState(nextBook, exactReading, nextContext);
       else loadPdfState(exactReading);
       loadState = "ready";

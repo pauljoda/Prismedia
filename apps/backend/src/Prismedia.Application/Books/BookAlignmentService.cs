@@ -89,7 +89,8 @@ public sealed class BookAlignmentService {
     /// <summary>
     /// Exact positions resume only when recorded after the work's completion. Switch targets align
     /// the other modality's resumable position; the combined target anchors on the newest resumable
-    /// position, or starts fresh at the first paired chapter when there is none.
+    /// position, or starts fresh at the first paired chapter when there is none. Continue targets follow
+    /// the newest resumable position of a Linked work into each format.
     /// </summary>
     private static BookResumeProjection Resume(WorkAlignment alignment, CapabilityProgress? progress) {
         var reading = Resumable(progress, ConsumptionModality.Reading);
@@ -104,7 +105,9 @@ public sealed class BookAlignmentService {
             listening is null ? null : alignment.ExactListening(listening),
             alignment.Switch(listening, readerMode),
             alignment.Switch(reading, readerMode),
-            alignment.Combined(resumable, readerMode));
+            alignment.Combined(resumable, readerMode),
+            alignment.ContinueReading(reading, listening, readerMode),
+            alignment.ContinueListening(reading, listening, readerMode));
     }
 
     private static ProgressCheckpoint? Resumable(CapabilityProgress? progress, ConsumptionModality modality) =>

@@ -182,8 +182,12 @@
   // offers to switch between them; a Linked Book keeps one progress and the switching actions.
   const separateProgress = $derived(bookSeparateProgress(alignment));
   const readableChapters = $derived(readableChaptersFromAlignment(alignment));
-  const readingRowId = $derived(resume?.exactReading ? resume.switchToListening.rowId : null);
-  const listeningRowId = $derived(resume?.exactListening ? resume.switchToReading.rowId : null);
+  // Reading and listening of a Linked Book move one shared position, so each format continues from
+  // the newer of the two whenever it maps chapter to chapter; the server resolves both targets.
+  const continueReadingTarget = $derived(alignedSide(resume?.continueReading)?.reading ? resume!.continueReading : null);
+  const continueListeningTarget = $derived(alignedSide(resume?.continueListening)?.listening ? resume!.continueListening : null);
+  const readingRowId = $derived(continueReadingTarget?.rowId ?? null);
+  const listeningRowId = $derived(continueListeningTarget?.rowId ?? null);
   const chapterRows = $derived(bookChapterRowsFromAlignment({
     alignment,
     audioTracks: audiobookTracks,
@@ -192,7 +196,7 @@
     playingTrackId: isCurrentAudiobook ? playback.currentTrack?.id ?? null : null,
     playingSeconds: isCurrentAudiobook ? playback.currentTime : null,
   }));
-  const savedAudiobookResume = $derived(resume?.exactListening ?? null);
+  const savedAudiobookResume = $derived(continueListeningTarget?.listening ?? null);
   const currentAudiobookTrackId = $derived(
     isCurrentAudiobook
       ? playback.currentTrack?.id ?? savedAudiobookResume?.trackEntityId ?? null
@@ -220,27 +224,25 @@
   const bookActivityLabel = $derived(
     bookActivitySeconds > 0 ? `${formatActiveDuration(bookActivitySeconds)} read or listened` : null,
   );
-  const alignedReading = $derived(alignedSide(resume?.switchToReading)?.reading ?? null);
-  const alignedListening = $derived(alignedSide(resume?.switchToListening)?.listening ?? null);
   const readAction = $derived.by(() => {
-    if (resume?.exactReading) return { label: "Continue reading", hint: null };
-    if (alignedReading) {
-      return {
-        label: resume?.switchToReading.approximate ? "Continue reading ≈" : "Continue reading",
-        hint: "Reading estimated from where you stopped listening.",
-      };
-    }
-    return { label: canonicalCompleted ? "Read again" : "Start reading", hint: null };
+    const target = continueReadingTarget;
+    if (!target) return { label: canonicalCompleted ? "Read again" : "Start reading", hint: null };
+    return target.basis === ALIGNMENT_BASIS.exact
+      ? { label: "Continue reading", hint: null }
+      : {
+          label: target.approximate ? "Continue reading ≈" : "Continue reading",
+          hint: "Reading estimated from where you stopped listening.",
+        };
   });
   const listenAction = $derived.by(() => {
-    if (resume?.exactListening) return { label: "Continue listening", hint: null };
-    if (alignedListening) {
-      return {
-        label: resume?.switchToListening.approximate ? "Continue listening ≈" : "Continue listening",
-        hint: "Listening estimated from where you stopped reading.",
-      };
-    }
-    return { label: canonicalCompleted ? "Listen again" : "Start listening", hint: null };
+    const target = continueListeningTarget;
+    if (!target) return { label: canonicalCompleted ? "Listen again" : "Start listening", hint: null };
+    return target.basis === ALIGNMENT_BASIS.exact
+      ? { label: "Continue listening", hint: null }
+      : {
+          label: target.approximate ? "Continue listening ≈" : "Continue listening",
+          hint: "Listening estimated from where you stopped reading.",
+        };
   });
   const combinedAction = $derived.by(() => {
     const combined = resume?.combined;
@@ -256,17 +258,13 @@
       explanation: null,
     };
   });
-  // When both formats have exact positions, offer to bring the older one to the newer one's
-  // aligned spot; the exact position stays the primary action.
-  const switchOffer = $derived.by(() => {
+  // When the newer position sits in a chapter with no match, the other format stays at its own
+  // position; say why.
+  const continueNote = $derived.by(() => {
     if (!resume?.exactReading || !resume.exactListening) return null;
     const fromListening = resume.lastModality === CONSUMPTION_MODALITY.listening;
     const target = fromListening ? resume.switchToReading : resume.switchToListening;
-    if (target.gap) return { label: null, note: alignmentGapExplanation(target) };
-    const approximate = target.approximate ? " ≈" : "";
-    return fromListening
-      ? { label: `Read from your listening spot${approximate}`, note: null }
-      : { label: `Listen from your reading spot${approximate}`, note: null };
+    return target.gap ? alignmentGapExplanation(target) : null;
   });
   const hasCombinedContent = $derived(
     separateProgress !== null || chapterRows.some((row) => row.readTarget && row.audioTrack),
@@ -282,7 +280,7 @@
     secondary: fallbackBookPalette.secondary,
     background: "#000000",
   });
-  const chapterReadingProgressLabel = $derived(readingPositionLabel(resume?.exactReading ?? null));
+  const chapterReadingProgressLabel = $derived(readingPositionLabel(continueReadingTarget?.reading ?? null));
   const chapterListeningProgressLabel = $derived(
     savedAudiobookResume
       ? `at ${formatDuration(Number(savedAudiobookResume.offsetSeconds)) ?? "0:00"}`
@@ -814,12 +812,9 @@
   }
 
   function continueReading() {
-    if (resume?.exactReading) {
-      openReadingTarget(resume.exactReading, { exact: true });
-      return;
-    }
-    if (alignedReading) {
-      openReadingTarget(alignedReading);
+    const target = continueReadingTarget;
+    if (target?.reading) {
+      openReadingTarget(target.reading, { exact: target.basis === ALIGNMENT_BASIS.exact });
       return;
     }
     if (isSingleFileBook) {
@@ -834,14 +829,6 @@
     openReadingTarget(combined.reading, { combined: true });
   }
 
-  function switchToNewerPosition() {
-    if (resume?.lastModality === CONSUMPTION_MODALITY.listening) {
-      if (alignedReading) openReadingTarget(alignedReading);
-      return;
-    }
-    if (alignedListening) playListeningTarget(alignedListening);
-  }
-
   function listenToBook(options: { startOver?: boolean } = {}) {
     if (!book || audiobookTracks.length === 0) return;
     // Only a playing audiobook is paused in place. A loaded but paused player (including one restored
@@ -852,7 +839,7 @@
       return;
     }
 
-    const target = options.startOver ? null : savedAudiobookResume ?? alignedListening;
+    const target = options.startOver ? null : savedAudiobookResume;
     if (target) {
       playListeningTarget(target);
       return;
@@ -1148,12 +1135,10 @@
         combinedLabel={combinedAction.label}
         combinedDisabled={combinedAction.disabled}
         explanation={combinedAction.explanation}
-        switchLabel={switchOffer?.label ?? null}
-        switchNote={switchOffer?.note ?? null}
+        switchNote={continueNote}
         onRead={continueReading}
         onListen={() => listenToBook()}
         onCombined={continueCombined}
-        onSwitch={switchToNewerPosition}
       />
     {/if}
 

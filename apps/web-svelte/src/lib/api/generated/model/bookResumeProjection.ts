@@ -19,4 +19,6 @@ export interface BookResumeProjection {
   switchToReading: AlignedTarget;
   switchToListening: AlignedTarget;
   combined: AlignedTarget;
+  continueReading: AlignedTarget;
+  continueListening: AlignedTarget;
 }

@@ -61,6 +61,61 @@ public sealed class WorkAlignmentTests {
     }
 
     [Fact]
+    public void LinkedBooksContinueEachFormatFromTheNewestPosition() {
+        var alignment = LinkedAlignment();
+        var earlier = RecordedAt;
+        var later = RecordedAt.AddMinutes(10);
+
+        // Listened past the old reading spot: reading continues from the listening position, carried
+        // halfway into Chapter Two, and listening continues from its own exact position.
+        var readingThenListening = (Reading: Reading(2_000, earlier), Listening: Listening(MarkedTrackId, 900, later));
+        var read = alignment.ContinueReading(readingThenListening.Reading, readingThenListening.Listening, ReaderMode.Paged);
+        Assert.Equal(5_500, read.Reading?.Index);
+        Assert.Equal(AlignmentBasis.Interpolated, read.Basis);
+        Assert.Equal("read:Text/two.xhtml", read.RowId);
+        var listen = alignment.ContinueListening(readingThenListening.Reading, readingThenListening.Listening, ReaderMode.Paged);
+        Assert.Equal(AlignmentBasis.Exact, listen.Basis);
+        Assert.Equal(900d, listen.Listening?.OffsetSeconds);
+
+        // Read past the old listening spot: listening continues a few seconds before the aligned point
+        // in Chapter One, and reading continues from its own exact position.
+        var listeningThenReading = (Reading: Reading(2_000, later), Listening: Listening(MarkedTrackId, 900, earlier));
+        listen = alignment.ContinueListening(listeningThenReading.Reading, listeningThenReading.Listening, ReaderMode.Paged);
+        Assert.Equal(295d, listen.Listening?.OffsetSeconds);
+        Assert.Equal(AlignmentBasis.Interpolated, listen.Basis);
+        read = alignment.ContinueReading(listeningThenReading.Reading, listeningThenReading.Listening, ReaderMode.Paged);
+        Assert.Equal(AlignmentBasis.Exact, read.Basis);
+        Assert.Equal(2_000, read.Reading?.Index);
+
+        // A newer position in a chapter with no match leaves the other format where it was.
+        var unmatched = Listening(MarkedTrackId, 1_500, later);
+        read = alignment.ContinueReading(Reading(2_000, earlier), unmatched, ReaderMode.Paged);
+        Assert.Equal(AlignmentBasis.Exact, read.Basis);
+        Assert.Equal(2_000, read.Reading?.Index);
+
+        // A format never started continues from the other one; with nothing started there is no position.
+        Assert.Equal(5_500, alignment.ContinueReading(null, Listening(MarkedTrackId, 900, later), ReaderMode.Paged).Reading?.Index);
+        Assert.Equal(AlignmentGapReason.NoPosition, alignment.ContinueReading(null, null, ReaderMode.Paged).Gap);
+    }
+
+    [Fact]
+    public void SeparateBooksContinueEachFormatOnlyFromItsOwnPosition() {
+        var audio = new AudiobookRendition([new AudioTrackSpan(MarkedTrackId, "Whole Book", 36_000, SourcePath: "/b/Whole Book.mp3")]);
+        var alignment = new WorkAlignment(
+            BookId,
+            hasReadableRendition: true,
+            [Chapter("Text/one.xhtml", "Chapter One", 0, 0.5), Chapter("Text/two.xhtml", "Chapter Two", 0.5, 1)],
+            audio,
+            [new ChapterPairing("Text/one.xhtml", MarkedTrackId, null, BookChapterMappingOrigin.Manual)]);
+
+        var read = alignment.ContinueReading(Reading(2_500, RecordedAt), Listening(MarkedTrackId, 20_000, RecordedAt.AddMinutes(10)), ReaderMode.Paged);
+
+        Assert.Equal(AlignmentBasis.Exact, read.Basis);
+        Assert.Equal(2_500, read.Reading?.Index);
+        Assert.Equal(AlignmentGapReason.AudioUnstructured, alignment.ContinueReading(null, Listening(MarkedTrackId, 20_000, RecordedAt), ReaderMode.Paged).Gap);
+    }
+
+    [Fact]
     public void AudioOnlyWindowsSitWhereTheGapHappensAndFreshStartUsesTheFirstPair() {
         var alignment = LinkedAlignment();
 
@@ -228,16 +283,16 @@ public sealed class WorkAlignmentTests {
             ]);
     }
 
-    private static ProgressCheckpoint Listening(Guid trackId, double offset) =>
-        ConsumptionModalityDefinition.Listening.OffsetCheckpoint(trackId, null, offset, null, RecordedAt);
+    private static ProgressCheckpoint Listening(Guid trackId, double offset, DateTimeOffset? recordedAt = null) =>
+        ConsumptionModalityDefinition.Listening.OffsetCheckpoint(trackId, null, offset, null, recordedAt ?? RecordedAt);
 
-    private static ProgressCheckpoint Reading(int index) =>
+    private static ProgressCheckpoint Reading(int index, DateTimeOffset? recordedAt = null) =>
         ConsumptionModalityDefinition.Reading.Checkpoint(
             BookId,
             ProgressUnit.Cfi,
             index,
             ConsumptionModalityDefinition.ReadablePositionTotal,
-            RecordedAt);
+            recordedAt ?? RecordedAt);
 
     private static ReadableChapterWindow Chapter(string key, string title, double start, double end) =>
         new(key, title, 0, key, null, start, end, null);

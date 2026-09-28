@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowRightLeft, BookOpen, Headphones, Layers2 } from "@lucide/svelte";
+  import { BookOpen, Headphones, Layers2 } from "@lucide/svelte";
   import { Button, Meter, Panel, Progress } from "@prismedia/ui-svelte";
   import type { BookSeparateProgress } from "$lib/entities/book-chapter-list";
 
@@ -25,14 +25,11 @@
     combinedDisabled?: boolean;
     /** Card explanation; gap explanations replace the default copy. */
     explanation?: string | null;
-    /** Offer to move the older format to the newer one's aligned position. */
-    switchLabel?: string | null;
-    /** Note shown with the switch offer, or alone when the switch is not possible. */
+    /** Why a format continues at its own position when the newer one could not be carried across. */
     switchNote?: string | null;
     onRead: () => void;
     onListen: () => void;
     onCombined?: () => void;
-    onSwitch?: () => void;
   }
 
   let {
@@ -49,12 +46,10 @@
     combinedLabel = "Continue both",
     combinedDisabled = false,
     explanation = null,
-    switchLabel = null,
     switchNote = null,
     onRead,
     onListen,
     onCombined,
-    onSwitch,
   }: Props = $props();
 
   const percent = $derived(Math.max(0, Math.min(100, progressPercent)));
@@ -122,19 +117,13 @@
       {/if}
     </div>
 
-    {#if !separate && (notes.length > 0 || switchLabel || switchNote)}
+    {#if !separate && (notes.length > 0 || switchNote)}
       <div class="combined-notes" aria-live="polite">
         {#each notes as note (note)}
           <span class="note">{note}</span>
         {/each}
         {#if switchNote}
           <span class="note">{switchNote}</span>
-        {/if}
-        {#if switchLabel && onSwitch}
-          <Button variant="ghost" size="sm" class="switch-button gap-1.5" onclick={onSwitch}>
-            <ArrowRightLeft class="h-3.5 w-3.5" />
-            {switchLabel}
-          </Button>
         {/if}
       </div>
     {/if}
@@ -229,9 +218,6 @@
     font-size: 0.7rem;
     line-height: 1.4;
   }
-  :global(.switch-button) {
-    margin-left: auto;
-  }
   :global(.combined-button) {
     border-color: color-mix(in srgb, var(--reading-accent) 30%, var(--listening-accent));
     background: linear-gradient(
@@ -249,7 +235,6 @@
     :global(.combined-progress-card) { grid-template-columns: 1fr; padding: 0.9rem 0.85rem 0.85rem 1rem; }
     .combined-actions { grid-column: auto; }
     .combined-notes { grid-column: auto; }
-    :global(.switch-button) { margin-left: 0; }
     :global(.combined-actions > button) { flex: 1 1 auto; }
   }
 </style>

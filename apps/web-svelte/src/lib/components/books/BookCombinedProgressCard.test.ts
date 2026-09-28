@@ -61,11 +61,9 @@ describe("BookCombinedProgressCard", () => {
       },
       progressPercent: 80,
       progressLabel: "80% of book",
-      switchLabel: "Read from your listening spot",
       onRead,
       onListen,
       onCombined: vi.fn(),
-      onSwitch: vi.fn(),
     });
 
     expect(screen.getByText(/no chapter markers, so reading and listening are tracked separately/)).toBeInTheDocument();
@@ -76,7 +74,6 @@ describe("BookCombinedProgressCard", () => {
     // The shared single progress and every switching action are gone.
     expect(screen.queryByText("80% of book")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Continue both" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Read from your listening spot" })).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "Continue reading" }));
     await fireEvent.click(screen.getByRole("button", { name: "Continue listening" }));

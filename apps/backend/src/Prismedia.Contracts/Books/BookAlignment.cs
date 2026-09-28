@@ -69,6 +69,15 @@ public sealed record BookAlignmentRow(
 /// <param name="SwitchToReading">Reading destination aligned from the listening position, or its gap.</param>
 /// <param name="SwitchToListening">Listening destination aligned from the reading position, or its gap.</param>
 /// <param name="Combined">Both sides anchored on the newest resumable position, or a fresh start.</param>
+/// <param name="ContinueReading">
+/// Where continuing to read opens. For a Linked Book reading and listening move one shared position, so
+/// a newer listening position in a paired chapter carries into reading; otherwise the exact reading
+/// position, or a gap when neither format can be resumed into reading.
+/// </param>
+/// <param name="ContinueListening">
+/// Where continuing to listen opens: the listening counterpart of <paramref name="ContinueReading"/>,
+/// starting a few seconds before the point aligned from a newer reading position.
+/// </param>
 public sealed record BookResumeProjection(
     ConsumptionModality? LastModality,
     DateTimeOffset? CompletedAt,
@@ -77,4 +86,6 @@ public sealed record BookResumeProjection(
     ListeningTarget? ExactListening,
     AlignedTarget SwitchToReading,
     AlignedTarget SwitchToListening,
-    AlignedTarget Combined);
+    AlignedTarget Combined,
+    AlignedTarget ContinueReading,
+    AlignedTarget ContinueListening);

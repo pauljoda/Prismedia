@@ -73,6 +73,10 @@ public sealed class BookListeningAlignmentPostgresTests {
             Assert.Equal(AlignmentGapReason.AudioChapterUnpaired, resume.SwitchToReading.Gap);
             Assert.Equal("Afterword", resume.SwitchToReading.GapChapterTitle);
             Assert.Null(resume.SwitchToReading.Reading);
+            // Listening in a chapter with no match leaves reading where it was.
+            Assert.Equal(AlignmentBasis.Exact, resume.ContinueReading.Basis);
+            Assert.Equal("epubcfi(/6/4!/4/2)", resume.ContinueReading.Reading?.Location);
+            Assert.Equal(120.5, resume.ContinueListening.Listening?.OffsetSeconds);
             Assert.Equal(BookLinkState.Linked, alignment!.Link.State);
             Assert.Equal(AudiobookStructure.FilePerChapter, alignment.Link.AudioStructure);
         }
@@ -89,6 +93,13 @@ public sealed class BookListeningAlignmentPostgresTests {
                 .SingleAsync(row => row.UserId == fixture.UserId && row.EntityId == fixture.BookId);
             Assert.Equal(3_750, state.ProgressIndex);
             Assert.Null(state.ProgressLocation);
+
+            // Reading then continues from where listening stopped; the recorded reading position stays.
+            var resume = (await CreateAlignments(db, fixture).GetAsync(fixture.BookId, CancellationToken.None))!.Resume!;
+            Assert.Equal(3_750, resume.ContinueReading.Reading?.Index);
+            Assert.Null(resume.ContinueReading.Reading?.Location);
+            Assert.True(resume.ContinueReading.Approximate);
+            Assert.Equal("epubcfi(/6/4!/4/2)", resume.ExactReading?.Location);
         }
 
         await using (var db = database.CreateContext()) {
