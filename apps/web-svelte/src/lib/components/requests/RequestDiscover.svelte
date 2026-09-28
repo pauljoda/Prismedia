@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { AlertTriangle, PackageSearch, PlugZap, ArrowLeft, ArrowUpRight, Library } from "@lucide/svelte";
-  import { Alert, Button, ChoiceGroup, Select } from "@prismedia/ui-svelte";
+  import { Alert, Button, Select } from "@prismedia/ui-svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -32,7 +32,7 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { discoverSearchProviders, discoverSearchSupport } from "$lib/requests/discovery-plugins";
   import { DISCOVERABLE_REQUEST_KINDS, numericValue } from "$lib/requests/request-helpers";
-  import { requestKindAccent, requestKindIcon } from "$lib/requests/request-kind-presentation";
+  import { requestKindIcon } from "$lib/requests/request-kind-presentation";
   import { canBrowseRequestSource, requestSourceMode } from "$lib/requests/request-source-compatibility";
   import { settingKeys, valueAsStringMap } from "$lib/settings/app-settings";
   import { mediaFamilyForKind, mediaFamilyOrder, type MediaFamily } from "$lib/entities/media-families";
@@ -46,8 +46,6 @@
     initialKind?: RequestMediaKindCode | null;
     onConnectionChange?: (id: string | null) => void;
     onKindChange?: (kind: RequestMediaKindCode | null) => void;
-    /** Concept: family cards and a compact kind-and-source bar instead of tiles and helper text. */
-    preview?: boolean;
   }
 
   type NavigableRequestResult = RequestSearchResult & {
@@ -67,7 +65,6 @@
     initialKind,
     onConnectionChange,
     onKindChange,
-    preview = false,
   }: Props = $props();
   // Preserve a browse draft while switching between workspace tabs.
   let selectedConnectionId = $state(untrack(() => initialConnectionId ?? ""));
@@ -183,32 +180,13 @@
 
   /**
    * The registry lists kinds in its own grouping order, which reads as arbitrary in a picker.
-   * Sorting by label gives the chooser and the chip row one predictable order.
+   * Sorting by label gives the family cards and the kind picker one predictable order.
    */
   const orderedKinds = [...DISCOVERABLE_REQUEST_KINDS].sort((left, right) =>
     left.plural.localeCompare(right.plural),
   );
-  const kindChoices = orderedKinds.map(kind => ({ value: kind.kind, label: kind.plural, icon: requestKindIcon(kind.kind), iconColor: requestKindAccent(kind.kind) }));
+  const kindChoices = orderedKinds.map(kind => ({ value: kind.kind, label: kind.plural }));
 
-  /**
-   * How many installed providers or connected sources can serve each kind. Surfacing this on the
-   * chooser answers "what can I even request?" before a selection is made, instead of after.
-   */
-  const sourceCountByKind = $derived.by(() => {
-    const counts = new Map<RequestMediaKindCode, number>();
-    for (const info of DISCOVERABLE_REQUEST_KINDS) {
-      counts.set(
-        info.kind,
-        discoverSearchProviders(
-          providers,
-          info.kind,
-          hideNsfw,
-          defaultProviders[info.pluginEntityKind] ?? null,
-        ).length + connections.filter((connection) => canBrowseRequestSource(connection, info.entityKind)).length,
-      );
-    }
-    return counts;
-  });
   /** The requestable kinds grouped by media family, each with the sources that can find it. */
   const familyGroups = $derived.by(() => {
     const groups = new Map<string, { family: MediaFamily; kinds: RequestFamilyKind[] }>();
@@ -432,7 +410,6 @@
       namespace: result.externalIdentity.namespace,
     });
     if (back?.trim()) query.set("back", back.trim());
-    if (preview) query.set("layout", "preview");
 
     const href = `/request/${encodeURIComponent(selectedKind)}/${encodeURIComponent(result.externalIdentity.value)}?${query.toString()}`;
     void goto(resolve(href as "/"));
@@ -440,7 +417,6 @@
 </script>
 
 <div class="space-y-5">
-  {#if preview}
     {#if !selectedKind && !connection}
       <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4" role="group" aria-label="Choose what to find">
         {#each familyGroups as group (group.family.key)}
@@ -484,7 +460,7 @@
             ariaLabel="Media type"
             size="sm"
             class="w-44"
-            options={kindChoices.map((choice) => ({ value: choice.value, label: choice.label }))}
+            options={kindChoices}
             value={selectedKind}
             onchange={(value) => chooseKind(value as RequestMediaKindCode)}
           >
@@ -515,58 +491,6 @@
         {/if}
       </div>
     {/if}
-  {:else}
-  {#if !connection}
-    <section aria-label="Choose what to find" class="space-y-3">
-      {#if selectedKind}
-        <ChoiceGroup type="single" options={kindChoices} value={selectedKind} onValueChange={chooseKind} ariaLabel="Choose a content kind" />
-      {:else}
-        <div class="space-y-1"><h2 class="text-lg font-semibold">What would you like to find?</h2><p class="text-sm text-text-muted">Choose a media type, or browse one of your connected sources below.</p></div>
-        <div class="kind-chooser" role="group" aria-label="Choose a content kind">
-          {#each orderedKinds as kind (kind.kind)}
-            {@const KindIcon = requestKindIcon(kind.kind)}
-            {@const sources = sourceCountByKind.get(kind.kind) ?? 0}
-            <Button variant="outline" class={`kind-card h-auto ${!providersLoading && sources === 0 ? "has-no-source" : ""}`}
-              style={`--family-accent: ${requestKindAccent(kind.kind)}`} aria-label={kind.plural} onclick={() => chooseKind(kind.kind)}>
-              <span class="kind-card-rail" aria-hidden="true"></span><KindIcon class="kind-card-icon" aria-hidden="true" />
-              <span class="kind-card-label">{kind.plural}</span>
-              <span class="kind-card-sources">{providersLoading ? "Checking sources…" : sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Add a source"}</span>
-            </Button>
-          {/each}
-        </div>
-      {/if}
-    </section>
-  {/if}
-
-  {#if !selectedKind && !connection && browseConnections.length}
-    <section class="space-y-3" aria-label="Your sources">
-      <div class="space-y-1"><h2 class="text-lg font-semibold">Your sources</h2><p class="text-sm text-text-muted">Explore the collections and services you’ve connected.</p></div>
-      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {#each browseConnections as source (source.id)}
-          {@const sourceMode = requestSourceMode(source)}
-          <Button variant="outline" class="h-auto min-w-0 justify-start gap-3 p-4 text-left" onclick={() => chooseSource(source.id)}>
-            <PluginIcon name={source.name} iconUrl={sourceIconUrl(source.id)} class="size-7" />
-            <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{source.name}</span><span class="mt-1 block text-xs font-normal text-text-muted"><ConnectionCapabilityChips connection={source} /></span></span>
-            <ArrowUpRight class="size-4 shrink-0 text-text-muted" />
-          </Button>
-        {/each}
-      </div>
-    </section>
-  {:else if sourceOptions.length}
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
-      <label class="w-full space-y-1.5 sm:max-w-sm"><span class="text-xs font-medium text-text-muted">Source</span>
-        <Select ariaLabel="Source" options={sourceOptions} value={connection?.id ?? activeProvider?.id ?? ""}
-          placeholder="Browse a connected source" onchange={chooseSource}>
-          {#snippet optionLeading(option)}<PluginIcon name={option.label} iconUrl={sourceIconUrl(option.value)} class="size-5" />{/snippet}
-        </Select>
-      </label>
-      {#if connection}<Button variant="ghost" size="sm" onclick={() => { selectedConnectionId = ""; resetToHome(); onConnectionChange?.(null); }}><ArrowLeft />Back to Request</Button>
-      {:else if activeProvider}<p class="pb-2 text-xs text-text-muted">Search {activeProvider.name}, then choose how to add a title.</p>{/if}
-    </div>
-  {/if}
-
-  {/if}
-
   {#if connection}
     {#key connection.id}
       {#if requestSourceMode(connection, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.externalManager}<ManagerSourceBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />
@@ -597,100 +521,8 @@
           disabled={searching} onActivate={card => { const entry = candidateEntries[Number(card.entity.id)]; if (entry) activateCandidate(entry.candidate, card.entity.id); }} />
         {#if canLoadMore}<div class="flex justify-center"><Button variant="secondary" disabled={searching} onclick={() => void runSearch(nextPluginSearchLimit(searchLimit))}>{searching ? "Loading more…" : "Load more"}</Button></div>{/if}
       {:else if searching}<StatePlaceholder icon={PackageSearch} title={`Searching ${activeProvider.name}`} busy />
-      {:else if hasSearched}<StatePlaceholder icon={PackageSearch} title="No matching titles" description={preview ? undefined : "Try a different search or choose another source."} />
-      {:else if !preview}<StatePlaceholder icon={PackageSearch} title={`Find your next ${selectedKindInfo?.label.toLowerCase() ?? "title"}`} description="Search by title or use the extra details above to narrow your results." />{/if}
+      {:else if hasSearched}<StatePlaceholder icon={PackageSearch} title="No matching titles" />{/if}
     {/if}
   {/if}
 </div>
 
-<style>
-  .kind-chooser {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-    gap: 0.5rem;
-  }
-
-  .kind-chooser :global(.kind-card) {
-    position: relative;
-    display: grid;
-    grid-template-columns: 3px auto minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    align-items: center;
-    gap: 0.1rem 0.6rem;
-    padding: 0.85rem 0.9rem 0.85rem 0;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-2);
-    text-align: left;
-    cursor: pointer;
-    overflow: hidden;
-    transition:
-      border-color var(--duration-fast, 120ms) var(--ease-default, ease),
-      background var(--duration-fast, 120ms) var(--ease-default, ease);
-  }
-
-  .kind-chooser :global(.kind-card:hover),
-  .kind-chooser :global(.kind-card:focus-visible) {
-    border-color: var(--color-border-default);
-    background: var(--color-surface-3);
-    outline: none;
-  }
-
-  .kind-chooser :global(.kind-card:focus-visible) {
-    border-color: var(--color-border-accent-strong);
-  }
-
-  /* The family's colour is a leading rail, keeping the card itself neutral material. */
-  .kind-card-rail {
-    grid-row: 1 / span 2;
-    align-self: stretch;
-    background: var(--family-accent);
-    opacity: 0.85;
-  }
-
-  .kind-chooser :global(.kind-card .kind-card-icon) {
-    grid-row: 1 / span 2;
-    box-sizing: content-box;
-    width: 1.15rem;
-    height: 1.15rem;
-    margin-left: 0.75rem;
-    padding: 0.45rem;
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-1);
-    color: var(--color-text-secondary);
-  }
-
-  .kind-card-label {
-    font-family: var(--font-heading);
-    font-size: 0.92rem;
-    font-weight: 600;
-    color: var(--color-text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .kind-card-sources {
-    font-family: var(--font-mono);
-    font-size: 0.64rem;
-    color: var(--color-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /* A kind with no installed provider stays selectable so the empty-state guidance can explain why. */
-  .kind-chooser :global(.kind-card.has-no-source .kind-card-label) {
-    color: var(--color-text-muted);
-  }
-
-  .kind-chooser :global(.kind-card.has-no-source .kind-card-rail) {
-    opacity: 0.3;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .kind-chooser :global(.kind-card) {
-      transition: none;
-    }
-  }
-</style>

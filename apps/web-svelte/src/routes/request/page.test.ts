@@ -23,13 +23,13 @@ describe("Request workspace", () => {
     vi.clearAllMocks(); mocks.isAdmin = true; mocks.canRequestContent = true;
     mocks.fetchConnections.mockResolvedValue([]); mocks.fetchIntegrationTransfers.mockResolvedValue([]); mocks.fetchManagedRequests.mockResolvedValue([]); mocks.fetchManagedTracking.mockResolvedValue([]);
     mocks.fetchRequestActivity.mockResolvedValue({ items: [], sources: [], nextCursor: null });
-    mocks.fetchConnectionCatalog.mockResolvedValue({ title: "Books", items: [], nextCursor: null });
+    mocks.fetchConnectionCatalog.mockResolvedValue({ title: "Source books", items: [], nextCursor: null });
     page.url = new URL("http://localhost/request") as unknown as typeof page.url;
     window.history.replaceState({}, "", "/request");
   });
   it("opens Activity immediately without navigation and leaves Browse ready to return to", async () => {
     render(Page);
-    await screen.findByText("What would you like to find?");
+    await screen.findByRole("group", { name: "Choose what to find" });
     expect(mocks.fetchIntegrationTransfers).not.toHaveBeenCalled();
     await fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
     expect(await screen.findByRole("heading", { name: "Request activity" })).toBeVisible();
@@ -38,14 +38,14 @@ describe("Request workspace", () => {
     expect(mocks.goto.mock.calls[0][0].searchParams.has("activity")).toBe(true);
     expect(mocks.goto.mock.calls[0][1]).toEqual(expect.objectContaining({ replaceState: true }));
     await fireEvent.click(screen.getByRole("tab", { name: "Browse" }));
-    expect(screen.getByText("What would you like to find?")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Choose what to find" })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Request activity" })).not.toBeInTheDocument();
   });
   it("does not expose connection activity or fetch admin resources to a requester", async () => {
     mocks.isAdmin = false;
     page.url = new URL("http://localhost/request?activity") as unknown as typeof page.url;
     render(Page);
-    await screen.findByText("What would you like to find?");
+    await screen.findByRole("group", { name: "Choose what to find" });
     expect(screen.queryByRole("tab", { name: "Activity" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Sources" })).not.toBeInTheDocument();
     expect(mocks.fetchConnections).not.toHaveBeenCalled();
@@ -62,27 +62,25 @@ describe("Request workspace", () => {
     };
     mocks.fetchConnections.mockResolvedValue([source]);
     render(Page);
-    await screen.findByText("What would you like to find?");
+    await screen.findByRole("group", { name: "Choose what to find" });
 
     await fireEvent.click(screen.getByRole("button", { name: "Books" }));
     expect(mocks.goto.mock.calls.at(-1)?.[0].searchParams.get("kind")).toBe("book");
-    const sourceTrigger = await screen.findByRole("button", { name: "Source" });
-    await fireEvent.keyDown(sourceTrigger, { key: "ArrowDown" });
-    await fireEvent.pointerUp(within(await screen.findByRole("listbox")).getByRole("option", { name: /Reading collection/i }));
+    await fireEvent.click(within(await screen.findByRole("group", { name: "Source" })).getByRole("button", { name: "Reading collection" }));
     expect(mocks.goto.mock.calls.at(-1)?.[0].searchParams.get("connection")).toBe(source.id);
     expect(mocks.goto.mock.calls.at(-1)?.[1]).toEqual(expect.objectContaining({ replaceState: false }));
     await waitFor(() => expect(mocks.fetchConnectionCatalog).toHaveBeenCalledWith(source.id, expect.objectContaining({ entityKind: ENTITY_KIND.book })));
 
-    await screen.findByText("Books");
+    await screen.findByText("Source books");
     await waitFor(() => expect(mocks.setBreadcrumbs).toHaveBeenLastCalledWith([
       { label: "Request", href: "/request" }, { label: source.name },
     ]));
 
     const requestCrumb = mocks.setBreadcrumbs.mock.calls.at(-1)?.[0][0];
     expect(requestCrumb).toEqual({ label: "Request", href: "/request" });
-    await fireEvent.click(screen.getByRole("button", { name: "Back to Request" }));
+    await fireEvent.click(screen.getByRole("button", { name: "All media types" }));
     await waitFor(() => expect(mocks.setBreadcrumbs).toHaveBeenLastCalledWith([{ label: "Request" }]));
-    expect(await screen.findByText("What would you like to find?")).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Choose what to find" })).toBeInTheDocument();
   });
 
   it("restores a same-path source view when browser history restores its query", async () => {
@@ -94,7 +92,7 @@ describe("Request workspace", () => {
     };
     mocks.fetchConnections.mockResolvedValue([source]);
     render(Page);
-    await screen.findByText("What would you like to find?");
+    await screen.findByRole("group", { name: "Choose what to find" });
 
     const historyUrl = new URL(`http://localhost/request?kind=book&connection=${source.id}`);
     const handleNavigate = mocks.afterNavigate.mock.calls[0]?.[0];
@@ -105,7 +103,7 @@ describe("Request workspace", () => {
       source.id,
       expect.objectContaining({ entityKind: ENTITY_KIND.book }),
     ));
-    expect(await screen.findByText("Books")).toBeInTheDocument();
+    expect(await screen.findByText("Source books")).toBeInTheDocument();
     await waitFor(() => expect(mocks.setBreadcrumbs).toHaveBeenLastCalledWith([
       { label: "Request", href: "/request" }, { label: source.name },
     ]));

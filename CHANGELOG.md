@@ -18,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Saved metadata-plugin and OpenSubtitles credentials are encrypted with persistent application keys. Each Connection passes a plugin only the credentials its current version declares; retired encrypted fields stay recoverable and cannot block a run when their old values are unreadable.
 
-- Request combines media discovery and connected collections behind one source picker, with visual library cards, a separate Activity view, and breadcrumbs and browser history that restore the source context. Reviews load metadata and provider choices together, recognize existing requests and linked library items with a direct link to their page and progress, and reject issue labels or alternative titles that were not part of the reviewed provider proposal. Requests submit in one step and open the normal entity page; imports choose their destination after a title is selected.
+- Request opens on one card per media family, listing each requestable kind with the icons of the sources that can find it, and combines media discovery and connected collections behind one kind-and-source bar, with visual library cards, a separate Activity view, and breadcrumbs and browser history that restore the source context. Reviews load metadata and provider choices together, recognize existing requests and linked library items with a direct link to their page and progress, and reject issue labels or alternative titles that were not part of the reviewed provider proposal. Requests submit in one step and open the normal entity page; imports choose their destination after a title is selected.
 
 - Radarr and Sonarr can search for new titles from Request, and reviewed movie and selected-episode requests hand acquisition to the manager. Followed series can add more selected episodes while keeping their existing library links, and the request button counts only the newly selected episodes. Sonarr reviews recognize episodes a connection already manages and show only the saved episode scope once it is submitted. Selected episodes stay linked when Sonarr also holds other episodes of the series, while shared files and changed identities get a separate review.
 
@@ -108,6 +108,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - The Dashboard's featured progress bar uses the colour of the item's media family, and Books tracked separately show reading and listening progress as two bars.
 
 - Identify opens on its queue, showing each item's cover, provider, media type, and match strength instead of internal codes, followed by one card per media family with how many items are still unidentified for each kind and the providers that can identify them. Choosing a kind opens its identify grid.
+
+- Identify and Request reviews keep the chosen artwork, provider, and match strength in a side column with the decision always in view. Details read as labelled rows that fold away unchanged fields and show the current value only when it differs, and people, related items, artwork, and tags appear as compact strips.
 
 - Watched Libraries show each library as a card with switches for the media it scans, NSFW, and automatic identification, a Scan button for that library alone, and a confirmation before removing it.
 

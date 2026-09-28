@@ -574,11 +574,11 @@ describe("reviewed request route", () => {
 
     render(Page);
 
-    expect(await screen.findAllByRole("complementary", { name: "Request options" })).toHaveLength(1);
+    expect(await screen.findAllByRole("complementary", { name: "Proposal" })).toHaveLength(1);
     await fireEvent.click(screen.getByRole("checkbox", { name: "Accept Description" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Deselect tag Drama" }));
+    await fireEvent.click(within(screen.getByRole("region", { name: "Tags" })).getByRole("button", { name: "Drama" }));
     await fireEvent.click(screen.getByRole("checkbox", { name: "Select Amy Adams" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Select poster artwork from tmdb" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Select poster from tmdb" }));
     await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
 
     await waitFor(() => expect(mocks.commitReviewedRequest).toHaveBeenCalled());

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen, within } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityMetadataPatch, EntityMetadataProposal } from "$lib/api/identify-types";
 import type { EntityCard as EntityDetailCard, EntityThumbnail as EntityCard } from "$lib/api/generated/model";
@@ -82,7 +82,7 @@ describe("Identify review surfaces", () => {
     store.applyProposal.mockReset();
   });
 
-  it("keeps the To Identify preview on audio parent and child proposal pages", () => {
+  it("keeps the To Identify preview on audio child proposal pages", () => {
     const audioEntity = entity({
       kind: ENTITY_KIND.audioLibrary,
       title: "Endgame",
@@ -91,17 +91,6 @@ describe("Identify review surfaces", () => {
       targetKind: ENTITY_KIND.audioLibrary,
       title: "Endgame",
     });
-
-    const parentSurface = render(IdentifyReviewParent, {
-      props: {
-        entity: audioEntity,
-        proposal: parentProposal,
-      },
-    });
-
-    expect(screen.getByRole("button", { name: /To Identify/ })).toBeInTheDocument();
-
-    parentSurface.unmount();
 
     render(IdentifyReviewChild, {
       props: {
@@ -117,8 +106,8 @@ describe("Identify review surfaces", () => {
     expect(screen.getByRole("button", { name: /To Identify/ })).toBeInTheDocument();
   });
 
-  it("renders poster and backdrop artwork as enlarged review groups", () => {
-    const { container } = render(IdentifyReviewParent, {
+  it("offers every proposed poster and backdrop as artwork choices", () => {
+    render(IdentifyReviewParent, {
       props: {
         entity: entity(),
         proposal: proposal("root", {
@@ -132,23 +121,20 @@ describe("Identify review surfaces", () => {
       },
     });
 
-    const posterGroup = container.querySelector<HTMLElement>("[data-artwork-kind='poster']");
-    const backdropGroup = container.querySelector<HTMLElement>("[data-artwork-kind='backdrop']");
-
-    expect(posterGroup?.classList.contains("identify-artwork-grid")).toBe(true);
-    expect(backdropGroup?.classList.contains("identify-artwork-grid")).toBe(true);
-    expect(posterGroup?.querySelectorAll(".identify-artwork-tile")).toHaveLength(2);
-    expect(backdropGroup?.querySelectorAll(".identify-artwork-tile")).toHaveLength(2);
-    for (const img of container.querySelectorAll(".identify-artwork-tile img")) {
+    const artwork = screen.getByRole("region", { name: "Artwork" });
+    expect(within(artwork).getAllByRole("button", { name: /poster from tmdb/ })).toHaveLength(2);
+    expect(within(artwork).getAllByRole("button", { name: /backdrop from tmdb/ })).toHaveLength(2);
+    for (const img of artwork.querySelectorAll("img")) {
       expect(img).toHaveAttribute("referrerpolicy", "no-referrer");
     }
   });
 
   it("labels the field diff panel as base fields and collapses panel content from the header", async () => {
-    render(IdentifyReviewParent, {
+    render(IdentifyReviewChild, {
       props: {
         entity: entity(),
-        proposal: proposal("root"),
+        parentProposal: proposal("root"),
+        proposal: proposal("child", { targetKind: ENTITY_KIND.video, title: "Pilot" }),
       },
     });
 
@@ -164,10 +150,11 @@ describe("Identify review surfaces", () => {
   });
 
   it("keeps base field actions from toggling the section", async () => {
-    render(IdentifyReviewParent, {
+    render(IdentifyReviewChild, {
       props: {
         entity: entity(),
-        proposal: proposal("root"),
+        parentProposal: proposal("root"),
+        proposal: proposal("child", { targetKind: ENTITY_KIND.video, title: "Pilot" }),
       },
     });
 
@@ -371,7 +358,7 @@ describe("Identify review surfaces", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "25");
   });
 
-  it("places reject actions before accept actions and advances on reject-and-next", async () => {
+  it("keeps accept actions above reject actions and advances on reject-and-next", async () => {
     store.nextQueueItem.mockReturnValue({ entityId: "entity-2" });
 
     render(IdentifyReviewParent, {
@@ -382,7 +369,7 @@ describe("Identify review surfaces", () => {
     });
 
     const actions = screen.getByTestId("identify-proposal-actions");
-    expect(actions).toHaveTextContent(/Reject.*Reject and Next.*Accept.*Accept and Next/);
+    expect(actions).toHaveTextContent(/Accept.*Accept and next.*Reject.*Reject and Next/);
 
     await fireEvent.click(screen.getByRole("button", { name: "Reject" }));
     expect(store.rejectQueueItem).toHaveBeenCalledWith("entity-1");

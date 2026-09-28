@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { dev } from "$app/environment";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -34,11 +33,10 @@
     reviewBaseFieldKeys,
     structuralChildProposals,
   } from "$lib/components/identify-review";
-  import MetadataProposalReview from "$lib/components/review/MetadataProposalReview.svelte";
   import ProposalReviewLayout from "$lib/components/review/ProposalReviewLayout.svelte";
   import ProposalReviewSummary from "$lib/components/review/ProposalReviewSummary.svelte";
   import { aspectRatioForKind } from "$lib/entities/entity-thumbnail";
-  import { displayNameForEntityKind, resolveEntityHref } from "$lib/entities/entity-codes";
+  import { resolveEntityHref } from "$lib/entities/entity-codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import {
     DEFAULT_MONITOR_PRESET,
@@ -80,8 +78,6 @@
   const namespaceQuery = $derived(page.url.searchParams.get("namespace"));
   /** Query string of the originating search page, chained through so Back returns to live results. */
   const backQuery = $derived(page.url.searchParams.get("back"));
-  /** Concept (dev only): `?layout=preview` renders the preview-and-decide review layout with the same controls. */
-  const previewLayout = $derived(dev && page.url.searchParams.get("layout") === "preview");
   const backHref = $derived(backQuery ? `/request?${backQuery}` : "/request");
   const nsfw = useNsfw();
   const session = useSession();
@@ -715,7 +711,6 @@
     />
     {/snippet}
 
-    {#if previewLayout}
     <ProposalReviewLayout
       proposal={activeProposal ?? proposal}
       title={activeTitle}
@@ -737,34 +732,6 @@
       sidebar={requestOptions}
       disabled={submitting || !!pendingManagerCommit}
     />
-    {:else}
-    <div class="min-w-0 space-y-4">
-    <MetadataProposalReview
-      proposal={activeProposal ?? proposal}
-      title={activeTitle}
-      subtitle={review ? `${review.externalIdentity.namespace}:${review.externalIdentity.value}` : null}
-      kindLabel={displayNameForEntityKind((activeProposal ?? proposal).targetKind)}
-      posterUrl={activePosterUrl}
-      imageShape={activeImageShape}
-      selectedFields={activeSelectedFields}
-      selectedImages={activeSelectedImages}
-      selectedTags={activeSelectedTags}
-      currentValue={() => ""}
-      onFieldChange={setMetadataField}
-      onAllFields={setAllMetadataFields}
-      onImageChange={setMetadataImage}
-      onTagChange={setMetadataTag}
-      onProposalSelected={setMetadataProposal}
-      isProposalSelected={(proposalId) => selectedCascade[proposalId] !== false}
-      imageSelectionsForProposal={(proposalId) => selectedImagesByProposal[proposalId]}
-      onActivate={openProposal}
-      statusLabel={identifyingStatus}
-      sidebar={requestOptions}
-      disabled={submitting || !!pendingManagerCommit}
-      structure={reviewStructure}
-    />
-    </div>
-    {/if}
 
     {#snippet requestOptions()}
     <section class="space-y-3 rounded-sm border border-border-accent bg-surface-1 p-4">

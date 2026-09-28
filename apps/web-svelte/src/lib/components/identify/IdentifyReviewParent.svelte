@@ -8,12 +8,8 @@
     Layers,
     Loader2,
   } from "@lucide/svelte";
-  import { dev } from "$app/environment";
-  import { page } from "$app/state";
-  import MetadataProposalReview from "$lib/components/review/MetadataProposalReview.svelte";
   import ProposalReviewLayout from "$lib/components/review/ProposalReviewLayout.svelte";
   import ReviewSection from "$lib/components/review/ReviewSection.svelte";
-  import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import IdentifyChildrenGrid from "./IdentifyChildrenGrid.svelte";
   import IdentifyNewContainersGrid from "./IdentifyNewContainersGrid.svelte";
   import IdentifyRejectQueueActions from "./IdentifyRejectQueueActions.svelte";
@@ -40,7 +36,7 @@
   } from "./identify-review-helpers";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
-  import { ENTITY_KIND, displayNameForEntityKind } from "$lib/entities/entity-codes";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { aspectRatioForKind } from "$lib/entities/entity-thumbnail";
   import { useIdentifyStore } from "./identify-store.svelte";
 
@@ -53,8 +49,6 @@
   let { entity, proposal, detail = null }: Props = $props();
 
   const store = useIdentifyStore();
-  /** Concept (dev only): `?layout=preview` renders the preview-and-decide review layout with the same controls. */
-  const previewLayout = $derived(dev && page.url.searchParams.get("layout") === "preview");
 
   const DIFF_FIELD_KEYS = $derived(reviewBaseFieldKeys(proposal));
 
@@ -339,7 +333,6 @@
   </section>
 {/snippet}
 
-{#if previewLayout}
   <ProposalReviewLayout
     {proposal}
     title={contextTitle}
@@ -363,116 +356,6 @@
     structure={newContainers.length > 0 || remainingChildEntities.length > 0 ? childSections : undefined}
     sidebar={decision}
   />
-{:else}
-<div class="flex flex-col gap-4">
-  <!-- Preview of what we are identifying (collapsed by default) -->
-  <IdentifyTargetPreview {entity} />
-
-  <MetadataProposalReview
-    {proposal}
-    title={contextTitle}
-    subtitle={showEntitySubtitle ? entity.title : null}
-    kindLabel={displayNameForEntityKind(entity.kind)}
-    posterUrl={contextPosterUrl}
-    imageShape={coverIsSquare ? "square" : contextImageWide ? "wide" : "portrait"}
-    {detail}
-    {selectedFields}
-    {selectedImages}
-    {selectedTags}
-    currentValue={(field) => currentFieldValueForReview(entity, detail, field)}
-    onFieldChange={setFieldSelected}
-    onAllFields={setAllFields}
-    onImageChange={setImageSelected}
-    onTagChange={setTagSelected}
-    onProposalSelected={setRelationshipSelected}
-    isProposalSelected={(proposalId) => store.isReviewProposalSelected(proposalId)}
-    imageSelectionsForProposal={(proposalId) => store.getReviewImageSelections(proposalId)}
-    onActivate={walkChild}
-  />
-
-  {@render childSections()}
-
-  {@render applyProgress()}
-
-  <!-- Action footer -->
-  <div class="flex flex-col gap-2 py-2 md:flex-row md:items-center md:gap-3">
-    {#if store.queue.length > 1 && queueIndex >= 0}
-      <div class="flex items-center gap-1.5">
-        <Button variant="outline" size="sm"
-          type="button"
-          class="inline-flex h-8 w-8 items-center justify-center disabled:opacity-30 md:h-7 md:w-7"
-          disabled={!prevQueueNavItem}
-          onclick={() => prevQueueNavItem && store.reviewQueueItem(prevQueueNavItem)}
-          aria-label="Previous queue item"
-        >
-          <ChevronUp class="h-3.5 w-3.5" />
-        </Button>
-        <span class="font-mono text-[0.72rem] text-text-muted">
-          {queueIndex + 1}/{store.queue.length}
-        </span>
-        <Button variant="outline" size="sm"
-          type="button"
-          class="inline-flex h-8 w-8 items-center justify-center disabled:opacity-30 md:h-7 md:w-7"
-          disabled={!nextQueueNavItem}
-          onclick={() => nextQueueNavItem && store.reviewQueueItem(nextQueueNavItem)}
-          aria-label="Next queue item"
-        >
-          <ChevronDown class="h-3.5 w-3.5" />
-        </Button>
-      </div>
-    {/if}
-
-    <span class="hidden font-mono text-[0.7rem] text-text-muted md:inline">
-      {Object.values(selectedFields).filter(Boolean).length} fields
-      · {Object.values(selectedImages).filter(Boolean).length} imgs
-      · {selectedRelationshipCount} rels
-      · {selectedTagCount} tags
-      · {selectedChildCount} children
-    </span>
-    <div class="hidden flex-1 md:block"></div>
-
-    {#if cascadeRunning}
-      <span class="font-mono text-[0.7rem] text-text-muted">Identifying children… Accept unlocks when finished</span>
-    {/if}
-
-    <!-- Review actions: full-width stacked on mobile -->
-    <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-3" data-testid="identify-proposal-actions">
-      <IdentifyRejectQueueActions entityId={entity.id} showNext={Boolean(nextQueueItem)} disabled={store.applying} />
-      <div class="flex flex-col gap-2 md:flex-row md:gap-3">
-        <Button variant="default" size="sm"
-          type="button"
-          class="inline-flex h-10 items-center justify-center gap-1.5 px-3 text-[0.78rem] disabled:cursor-not-allowed disabled:opacity-40 md:h-9"
-          disabled={store.applying || cascadeRunning}
-          onclick={() => handleApply(false)}
-        >
-          {#if store.applying}
-            <Loader2 class="h-4 w-4 animate-spin" />
-          {:else}
-            <Check class="h-4 w-4" />
-          {/if}
-          Accept
-        </Button>
-        {#if nextQueueItem}
-          <Button variant="outline" size="sm"
-            type="button"
-            class="inline-flex h-10 items-center justify-center gap-1.5 px-3 text-[0.78rem] disabled:cursor-not-allowed disabled:opacity-40 md:h-9"
-
-            disabled={store.applying || cascadeRunning}
-            onclick={() => handleApply(true)}
-          >
-            {#if store.applying}
-              <Loader2 class="h-4 w-4 animate-spin" />
-            {:else}
-              <Check class="h-4 w-4" />
-            {/if}
-            Accept and Next
-          </Button>
-        {/if}
-      </div>
-    </div>
-  </div>
-</div>
-{/if}
 
 <style>
   .apply-progress-row {

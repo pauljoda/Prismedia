@@ -58,10 +58,10 @@ describe("RequestDiscover", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Reading collection Browse Books" }));
     await screen.findByText("Source books");
     expect(fetchConnectionCatalog).toHaveBeenCalledWith(connection.id, expect.objectContaining({ entityKind: ENTITY_KIND.book }));
-    expect(screen.queryByText("What would you like to find?")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Choose what to find" })).not.toBeInTheDocument();
     expect(searchRequestsByPlugin).not.toHaveBeenCalled();
-    await fireEvent.click(screen.getByRole("button", { name: "Back to Request" }));
-    expect(await screen.findByText("What would you like to find?")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "All media types" }));
+    expect(await screen.findByRole("group", { name: "Choose what to find" })).toBeInTheDocument();
   });
 
   it("offers only sources that can browse the selected kind", async () => {
@@ -78,15 +78,12 @@ describe("RequestDiscover", () => {
     await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
 
     await fireEvent.click(screen.getByRole("button", { name: "Artists" }));
-    expect(await screen.findByRole("button", { name: "Source" })).toBeInTheDocument();
+    const sources = await screen.findByRole("group", { name: "Source" });
     expect(screen.queryByText("No compatible provider")).not.toBeInTheDocument();
     expect(screen.getByText("Browse a compatible source")).toBeInTheDocument();
-    await fireEvent.keyDown(screen.getByRole("button", { name: "Source" }), { key: "ArrowDown" });
-
-    const listbox = await screen.findByRole("listbox");
-    expect(within(listbox).getByText("Artist catalog")).toBeInTheDocument();
-    expect(within(listbox).queryByText("Book catalog")).not.toBeInTheDocument();
-    expect(within(listbox).queryByText("Artist manager")).not.toBeInTheDocument();
+    expect(within(sources).getByRole("button", { name: "Artist catalog" })).toBeInTheDocument();
+    expect(within(sources).queryByRole("button", { name: "Book catalog" })).not.toBeInTheDocument();
+    expect(within(sources).queryByRole("button", { name: "Artist manager" })).not.toBeInTheDocument();
   });
 
   it("does not render a directly linked source that cannot browse the selected kind", async () => {
@@ -112,7 +109,7 @@ describe("RequestDiscover", () => {
 
     await view.rerender({ connections: [bookCatalog], initialConnectionId: null, initialKind: null });
 
-    expect(await screen.findByText("What would you like to find?")).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Choose what to find" })).toBeInTheDocument();
     expect(screen.queryByText("Source books")).not.toBeInTheDocument();
   });
 
@@ -122,17 +119,18 @@ describe("RequestDiscover", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Series" }));
     const title = await screen.findByLabelText("Series title");
     await fireEvent.input(title, { target: { value: "A planned search" } });
-    const selectedKind = screen.getByRole("radio", { name: "Series" });
-    await fireEvent.click(selectedKind);
+    const kindPicker = screen.getByRole("button", { name: "Media type" });
+    await fireEvent.keyDown(kindPicker, { key: "ArrowDown" });
+    await fireEvent.pointerUp(within(await screen.findByRole("listbox")).getByRole("option", { name: "Series" }));
     expect(title).toHaveValue("A planned search");
-    expect(selectedKind).toHaveAttribute("aria-checked", "true");
+    expect(kindPicker).toHaveTextContent("Series");
     expect(searchRequestsByPlugin).not.toHaveBeenCalled();
   });
 
   it("requires a kind, filters its providers, and swaps to the selected provider's schema", async () => {
     render(RequestDiscoverHarness);
 
-    expect(screen.queryByRole("button", { name: "Source" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Source" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "All" })).not.toBeInTheDocument();
     await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
 
@@ -142,13 +140,9 @@ describe("RequestDiscover", () => {
     expect(screen.queryByLabelText("Year")).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "More filters" }));
     expect(screen.getByLabelText("Year")).toBeInTheDocument();
-    const providerTrigger = screen.getByRole("button", { name: "Source" });
-    await fireEvent.keyDown(providerTrigger, { key: "ArrowDown" });
-
-    const listbox = await screen.findByRole("listbox");
-    expect(within(listbox).getByText("Beta TV Database")).toBeInTheDocument();
-    expect(within(listbox).queryByText("Open Library")).not.toBeInTheDocument();
-    await fireEvent.pointerUp(within(listbox).getByRole("option", { name: /beta tv database/i }));
+    const sources = screen.getByRole("group", { name: "Source" });
+    expect(within(sources).queryByRole("button", { name: "Open Library" })).not.toBeInTheDocument();
+    await fireEvent.click(within(sources).getByRole("button", { name: "Beta TV Database" }));
 
     expect(await screen.findByLabelText("Show name")).toBeInTheDocument();
     expect(screen.getByLabelText("Episode title")).toBeInTheDocument();
@@ -168,8 +162,8 @@ describe("RequestDiscover", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Series" }));
 
-    expect(await screen.findByRole("button", { name: "Source" }))
-      .toBeInTheDocument();
+    const sources = await screen.findByRole("group", { name: "Source" });
+    expect(within(sources).getByRole("button", { name: "Beta TV Database" })).toHaveAttribute("aria-pressed", "true");
     expect(await screen.findByLabelText("Show name")).toBeInTheDocument();
   });
 
@@ -243,7 +237,7 @@ describe("RequestDiscover", () => {
     await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
     await fireEvent.click(screen.getByRole("button", { name: "Audiobooks" }));
 
-    expect(await screen.findByRole("button", { name: "Source" })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Source" })).toBeInTheDocument();
     await fireEvent.input(screen.getByLabelText("Book title"), {
       target: { value: "  Project Hail Mary  " },
     });
@@ -273,7 +267,7 @@ describe("RequestDiscover", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Books" }));
 
     expect(await screen.findByText("No compatible provider")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Source" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Source" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
   });
 
@@ -325,7 +319,7 @@ describe("RequestDiscover", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Show NSFW" }));
 
-    expect(await screen.findByRole("button", { name: "Source" })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Source" })).toBeInTheDocument();
     expect(screen.queryByText("Old boundary result")).not.toBeInTheDocument();
     expect(screen.queryByText("1 found")).not.toBeInTheDocument();
     expect(await screen.findByLabelText("Adult series title")).toHaveValue("");
