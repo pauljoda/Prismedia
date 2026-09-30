@@ -20,6 +20,34 @@ public sealed class WorkAlignmentTests {
     private static readonly DateTimeOffset RecordedAt = DateTimeOffset.Parse("2026-09-24T12:00:00Z");
 
     [Theory]
+    [InlineData(5_270, "read:Text/one.xhtml", 595d)]
+    [InlineData(5_271, "read:Text/two.xhtml", 600d)]
+    [InlineData(5_272, "read:Text/two.xhtml", 600d)]
+    public void RoundedReadingChapterStartsStayInTheirChapter(int index, string rowId, double offset) {
+        const double boundary = 0.527122641509434;
+        var original = LinkedAlignment();
+        var alignment = new WorkAlignment(
+            BookId,
+            hasReadableRendition: true,
+            [
+                Chapter("Text/one.xhtml", "Chapter One", 0, boundary),
+                Chapter("Text/two.xhtml", "Chapter Two", boundary, 1)
+            ],
+            original.Audio,
+            [
+                new ChapterPairing("Text/one.xhtml", MarkedTrackId, ChapterOneMarkerId, BookChapterMappingOrigin.Auto),
+                new ChapterPairing("Text/two.xhtml", MarkedTrackId, ChapterTwoMarkerId, BookChapterMappingOrigin.Auto)
+            ]);
+
+        var reading = Reading(index);
+        var target = alignment.Switch(reading, ReaderMode.Paged);
+
+        Assert.Equal(rowId, alignment.Continue(reading).RowId);
+        Assert.Equal(rowId, target.RowId);
+        Assert.Equal(offset, target.Listening!.OffsetSeconds, precision: 0);
+    }
+
+    [Theory]
     // Reading → listening: φ = 0.5 inside [0, 0.4) lands at 300 s minus the 5 s runway.
     [InlineData(false, 2_000d, AlignmentBasis.Interpolated, null, null, 295d, null)]
     // The runway never crosses the start of the paired window.

@@ -230,9 +230,9 @@ public sealed partial class WorkAlignment {
         checkpoint.Definition.AddressesByOffset ? LocateListening(checkpoint) : LocateReading(checkpoint);
 
     /// <summary>
-    /// A paged checkpoint belongs to the chapter it names. An EPUB checkpoint's whole-work fraction
-    /// belongs to the containing chapter with the greatest start, then the greatest depth, then the
-    /// later order, so a shared boundary opens the later chapter.
+    /// A paged checkpoint belongs to the chapter it names. An EPUB checkpoint's normalized position
+    /// belongs to the containing chapter at the checkpoint's integer precision, with the greatest
+    /// start, then the greatest depth, then the later order, so a shared boundary opens the later chapter.
     /// </summary>
     private AnchoredPosition LocateReading(ProgressCheckpoint reading) {
         var readableRows = Rows.Where(row => row.Readable is not null).ToArray();
@@ -248,9 +248,8 @@ public sealed partial class WorkAlignment {
             return AnchoredPosition.Missing(AlignmentGapReason.PositionOutsideChapters);
         }
 
-        var fraction = reading.Index / (double)reading.Total;
         var holder = readableRows
-            .Where(row => row.Readable!.ContainsFraction(fraction))
+            .Where(row => row.Readable!.Contains(reading))
             .OrderByDescending(row => row.Readable!.StartFraction)
             .ThenByDescending(row => row.Readable!.Depth)
             .ThenByDescending(row => row.Order)

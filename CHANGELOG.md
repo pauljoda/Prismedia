@@ -209,6 +209,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Switching from reading to listening at the beginning of an EPUB chapter keeps the correct chapter even when its saved percentage rounds down.
+
 - Request, Identify, and Files pages inside the iOS app now scroll as one page from anywhere, including drags that start on buttons, and render every row. Content stays clear of the status bar and tab bar, toolbars pin below the status bar, and Files fills the space between the bars.
 - Accepting an Identify proposal keeps the review and its progress on screen until the next page opens, instead of briefly showing the search view or a loader.
 

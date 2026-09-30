@@ -37,9 +37,16 @@ public sealed record ReadableChapterWindow(
     /// <summary>Whether positions inside the chapter can be expressed relative to its bounds.</summary>
     public bool IsWindowed() => HasFractionBounds() || HasPageBounds();
 
-    /// <summary>Whether the whole-work fraction <paramref name="fraction"/> falls inside the chapter.</summary>
-    public bool ContainsFraction(double fraction) =>
-        HasFractionBounds() && fraction >= StartFraction!.Value && fraction <= EndFraction!.Value;
+    /// <summary>
+    /// Whether the normalized reading position falls inside this chapter. Chapter bounds use the
+    /// checkpoint's integer precision: the first representable index at a chapter's start belongs
+    /// to that chapter even when converting its exact fraction to an integer rounded down.
+    /// </summary>
+    /// <param name="reading">Whole-work reading checkpoint with a positive position total.</param>
+    public bool Contains(ProgressCheckpoint reading) =>
+        HasFractionBounds() && reading.Total > 0 &&
+        reading.Index >= Math.Floor(StartFraction!.Value * reading.Total) &&
+        reading.Index <= Math.Floor(EndFraction!.Value * reading.Total);
 
     #endregion
 
