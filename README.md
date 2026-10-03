@@ -170,3 +170,10 @@ See [CHANGELOG.md](CHANGELOG.md) for user-facing release notes.
 ## License
 
 See [LICENSE](LICENSE).
+
+## AI Usage
+AI tools assist with Crest's development, audits, testing, documentation, and project maintenance. Maintainers direct product design and architecture, review generated changes, and remain responsible for everything that ships.
+
+Contributors are welcome to use AI tools. You must understand, review, and validate what you submit, explain your decisions, and address feedback. The same quality standards apply regardless of how a contribution was produced.
+
+Submit only work you can stand behind. AI-generated code, test results, and claims need verification before they become part of a contribution.
