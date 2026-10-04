@@ -10,6 +10,10 @@ public sealed class VideoPayloadProfileValidationTests {
 
     [Theory]
     [InlineData(1920, 804, 1080)]
+    [InlineData(1440, 1080, 1080)]
+    [InlineData(1080, 1440, 1080)]
+    [InlineData(960, 720, 720)]
+    [InlineData(2880, 2160, 2160)]
     [InlineData(3840, 1608, 2160)]
     [InlineData(1280, 536, 720)]
     [InlineData(720, 576, 480)]

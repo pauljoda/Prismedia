@@ -199,17 +199,21 @@ public sealed class ScanAudioJobHandler(
             pair => pair.Value,
             FileSystemPathComparison.Comparer);
         if (acquisitionHints is not null) {
-            foreach (var track in trackItems) {
-                var targetEntityId = normalizedRequestedTrackIdsByPath?.GetValueOrDefault(
-                    Path.GetFullPath(track.FilePath));
-                var reconciliation = await acquisitionHints.ReconcileWantedAudioTrackAsync(
+            for (var index = 0; index < trackItems.Count; index++) {
+                var track = trackItems[index];
+                var targetEntityId = normalizedRequestedTrackIdsByPath is not null
+                    && normalizedRequestedTrackIdsByPath.TryGetValue(Path.GetFullPath(track.FilePath), out var mappedId)
+                    ? mappedId : (Guid?)null;
+                _ = await acquisitionHints.ReconcileWantedAudioTrackAsync(
                     track.AudioLibraryId!.Value,
                     track.FilePath,
                     track.Title,
                     track.SortOrder,
                     cancellationToken,
                     targetEntityId);
-                _ = reconciliation;
+                if (targetEntityId is not null) {
+                    trackItems[index] = track with { PreserveRequestedMetadata = true };
+                }
             }
         }
 

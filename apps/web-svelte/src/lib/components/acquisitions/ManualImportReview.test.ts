@@ -14,7 +14,35 @@ describe("manual import presentation", () => {
     expect(screen.getByText(failure)).toBeVisible();
     expect(screen.getByText("Verification failed; retrying will verify this file again.")).toBeVisible();
     expect(screen.queryByText("Unsafe file blocked")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Import mapped episodes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Accept and import" })).toBeDisabled();
+  });
+
+  it("lets a reviewed movie be accepted despite its quality warning", async () => {
+    const onImport = vi.fn();
+    render(ManualImportReview, {
+      review: { available: true, targets: [{ entityId: "movie", title: "Requested Movie" }],
+        files: [{ sourceRelativePath: "chosen.mkv", name: "chosen.mkv", sizeBytes: 1000, canMap: true }] },
+      statusMessage: "The video file's measured resolution is lower than the release's claimed quality.",
+      assignments: { movie: "chosen.mkv" }, onAssignmentChange: vi.fn(), onImport, onReject: vi.fn(),
+    });
+    expect(screen.getByRole("button", { name: "Downloaded file for Requested Movie" })).toBeEnabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Import needs attention");
+    expect(screen.queryByText("Unsafe file blocked")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Accept and import" }));
+    expect(onImport).toHaveBeenCalledOnce();
+  });
+
+  it("offers requested track mappings and prevents acceptance until a file is chosen", async () => {
+    const onAssignmentChange = vi.fn();
+    render(ManualImportReview, {
+      review: { available: true, targets: [{ entityId: "track", title: "Expected Song", position: 1 }],
+        files: [{ sourceRelativePath: "unknown.flac", name: "unknown.flac", sizeBytes: 1000, canMap: true }] },
+      assignments: {}, onAssignmentChange, onImport: vi.fn(), onReject: vi.fn(),
+    });
+    expect(screen.getByRole("button", { name: "Accept and import" })).toBeDisabled();
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Downloaded file for 01 · Expected Song" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(await screen.findByRole("option", { name: /unknown.flac/ }));
+    expect(onAssignmentChange).toHaveBeenCalledWith("track", "unknown.flac");
   });
 
   it("explains an unsupported mapping once without calling a movie an episode", () => {
@@ -25,8 +53,8 @@ describe("manual import presentation", () => {
     });
     expect(screen.getByRole("region", { name: "Downloaded file review" })).toBeInTheDocument();
     expect(screen.getAllByText(message)).toHaveLength(1);
-    expect(screen.queryByText("Map expected episodes")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Import mapped episodes" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Choose files to import")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Accept and import" })).not.toBeInTheDocument();
   });
 
   it("keeps the safety warning visible and the full file audit available on demand", async () => {

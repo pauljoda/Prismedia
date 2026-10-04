@@ -48,7 +48,7 @@ public sealed partial class AcquisitionService {
     }
 
     /// <summary>
-    /// Builds a file-to-Entity mapping review for a television acquisition held for manual import.
+    /// Builds a file-to-Entity mapping review for an acquisition held for manual import.
     /// Automatic numbering and title matches are suggestions only; ambiguous rows stay unselected.
     /// </summary>
     public async Task<AcquisitionManualImportReview> GetManualImportReviewAsync(
@@ -84,6 +84,10 @@ public sealed partial class AcquisitionService {
         var importedSources = ledger?.Files.Where(file => file.Status == AcquisitionImportFileStatus.Imported)
             .Select(file => file.SourceRelativePath).ToHashSet(FileSystemPathComparison.Comparer) ?? [];
         var visibleFiles = ToReviewFiles(payload, canMapVideos: false, ledger);
+
+        if (import.Kind is EntityKind.Movie or EntityKind.AudioLibrary or EntityKind.AudioTrack) {
+            return await GetMediaImportReviewAsync(import, payload, ledger, cancellationToken);
+        }
 
         if (import.CheckpointProtocol != AcquisitionCheckpointProtocol.Television) {
             return Unavailable(
@@ -177,8 +181,8 @@ public sealed partial class AcquisitionService {
     }
 
     /// <summary>
-    /// Validates an explicit file mapping against the current payload and season graph, then queues the
-    /// ordinary crash-safe TV importer with those choices captured in its durable job payload.
+    /// Validates explicit file mappings against the current payload and targets, then queues the
+    /// ordinary crash-safe importer with those choices captured in its durable job payload.
     /// </summary>
     public async Task<AcquisitionDetail?> SubmitManualImportAsync(
         Guid id,
@@ -196,7 +200,8 @@ public sealed partial class AcquisitionService {
 
         var import = await store.GetImportContextAsync(id, cancellationToken)
             ?? throw InvalidManualMapping("The acquisition import context is no longer available.");
-        if (import.SeasonNumber is not { } seasonNumber) {
+        var television = import.CheckpointProtocol == AcquisitionCheckpointProtocol.Television;
+        if (television && import.SeasonNumber is null) {
             throw InvalidManualMapping("The acquisition no longer identifies a season.");
         }
 
@@ -205,29 +210,36 @@ public sealed partial class AcquisitionService {
             .ToDictionary(file => file.SourceRelativePath, FileSystemPathComparison.Comparer);
         var targets = review.Targets.ToDictionary(target => target.EntityId);
         var usedTargets = new HashSet<Guid>();
+        var usedSources = new HashSet<string>(FileSystemPathComparison.Comparer);
         var mappings = new List<ManualImportFileMapping>(selections.Count);
         foreach (var selection in selections) {
             if (!files.TryGetValue(selection.SourceRelativePath, out var file)) {
                 throw InvalidManualMapping("One or more selected files are not available in this download.");
             }
             if (!targets.TryGetValue(selection.TargetEntityId, out var target)
-                || target.Position is not { } episodeNumber
+                || (television && target.Position is null)
                 || !usedTargets.Add(selection.TargetEntityId)) {
-                throw InvalidManualMapping("Each episode may be mapped only once and must belong to this season.");
+                throw InvalidManualMapping("Each target may be mapped only once and must belong to this request.");
+            }
+            if (!television && !usedSources.Add(file.SourceRelativePath)) {
+                throw InvalidManualMapping("Each downloaded file may be assigned to only one target.");
             }
             mappings.Add(new ManualImportFileMapping(
                 file.SourceRelativePath,
                 selection.TargetEntityId,
-                seasonNumber,
-                episodeNumber));
+                import.SeasonNumber ?? 0,
+                television ? target.Position!.Value : 0));
         }
 
         // Reviewed mappings must create a new plan instead of silently resuming the rejected one.
         // The existing lifecycle guard checks real source/target/recovery files under the scan gate,
         // then clears only the exact held checkpoint. Partially applied plans retain their evidence.
-        if (!await TvImportCheckpointLifecycle.TryAbandonAsync(store, import, cancellationToken, scanGate)) {
+        if (television && !await TvImportCheckpointLifecycle.TryAbandonAsync(store, import, cancellationToken, scanGate)) {
             throw InvalidManualMapping(
                 "The saved import plan changed or already placed files. Finish its recovery before changing episode mappings.");
+        }
+        if (!television && import.ImportPlacementCheckpoint is not null) {
+            throw InvalidManualMapping("This import already has a saved placement plan. Retry its recovery before changing file mappings.");
         }
 
         var importJob = await queue.EnqueueAsync(

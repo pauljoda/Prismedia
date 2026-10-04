@@ -6,6 +6,38 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class MediaProbeServiceTests {
     [Fact]
+    public async Task VideoProbeSkipsCoverArtAndUsesTheDefaultPlayableStream() {
+        var process = new JsonProcessExecutor("""
+            { "format": { "duration": "1200" }, "streams": [
+                { "index": 0, "codec_type": "video", "codec_name": "mjpeg", "width": 600, "height": 600,
+                  "disposition": { "attached_pic": 1, "default": 1 } },
+                { "index": 1, "codec_type": "video", "codec_name": "h264", "width": 640, "height": 360 },
+                { "index": 2, "codec_type": "video", "codec_name": "hevc", "width": 1920, "height": 804,
+                  "disposition": { "default": 1 } }
+            ] }
+            """);
+        var video = await new MediaProbeService(process).ProbeVideoAsync("/media/movie.mkv", default);
+        Assert.Equal(1920, video!.Width);
+        Assert.Equal(804, video.Height);
+        Assert.Equal(2, video.Streams!.Count);
+        Assert.DoesNotContain(video.Streams, stream => stream.StreamIndex == 0);
+        Assert.Contains("attached_pic", string.Join(' ', process.LastArguments));
+    }
+
+    [Fact]
+    public async Task CoverArtAloneCannotPassAsVideo() {
+        var process = new JsonProcessExecutor("""
+            { "format": { "duration": "1200" }, "streams": [
+                { "index": 0, "codec_type": "video", "width": 1920, "height": 1080,
+                  "disposition": { "attached_pic": 1 } }
+            ] }
+            """);
+        var video = await new MediaProbeService(process).ProbeVideoAsync("/media/audio.m4a", default);
+        Assert.Null(video!.Width);
+        Assert.Empty(video.Streams!);
+    }
+
+    [Fact]
     public async Task VideoProbeIncludesOnlyUsableTextSubtitleStreamsFromItsCompleteInventory() {
         var process = new JsonProcessExecutor("""
             { "format": { "duration": "1200" }, "streams": [

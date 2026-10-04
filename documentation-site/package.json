@@ -1,6 +1,6 @@
 {
   "name": "@prismedia/documentation-site",
-  "version": "3.8.1",
+  "version": "3.8.2",
   "private": true,
   "scripts": {
     "docusaurus": "docusaurus",

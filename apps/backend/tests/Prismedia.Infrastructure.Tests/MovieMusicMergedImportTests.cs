@@ -55,6 +55,64 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
     }
 
     [Fact]
+    public async Task ReviewedMovieOverridesQualityHoldButStillVerifiesItsExactFile() {
+        await using var db = CreateContext();
+        var world = await MovieWorldAsync(db, "owned.mkv", "chosen.mkv", "Film 2020 2160p WEB");
+        await world.Engine.ImportAsync(world.Context, world.Import, default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, world.Import.Id));
+        var hold = (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == world.Import.Id)).StatusMessage;
+        Assert.Contains("chosen.mkv (1920", hold);
+        Assert.True(File.Exists(Path.Combine(world.Import.ContentPath!, "chosen.mkv")));
+
+        // Remove this fixture's old ownership so this tests an initial import, not upgrade policy.
+        db.EntityFiles.RemoveRange(await db.EntityFiles.Where(file => file.EntityId == world.Import.EntityId).ToArrayAsync());
+        await db.SaveChangesAsync();
+        await AcquisitionTestFactory.Store(db).SetStatusAsync(world.Import.Id, AcquisitionStatus.Importing, null, default);
+        var acquisition = await db.Acquisitions.SingleAsync(row => row.Id == world.Import.Id);
+        await db.Entry(acquisition).ReloadAsync();
+        acquisition.ImportClaimJobId = world.Context.Job.Id;
+        await db.SaveChangesAsync();
+        var reviewed = world.Import with { ManualFileMappings = [new("chosen.mkv", world.Import.EntityId!.Value, 0, 0)] };
+        await world.Engine.ImportAsync(world.Context, reviewed, default);
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, world.Import.Id));
+        var checkpoint = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(world.Import.Id, default))!.ImportPlacementCheckpoint;
+        var unit = Assert.Single(checkpoint!.Units, unit => unit.IsMedia);
+        Assert.Equal("chosen.mkv", unit.SourceRelativePath);
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(unit.FinalPath!));
+    }
+
+    [Fact]
+    public async Task ReviewedMovieStillHoldsWhenTheSelectedVideoFailsDecoding() {
+        await using var db = CreateContext();
+        var verifier = new TestVideoPayloadVerifier("The selected video failed decoding.");
+        var world = await MovieWorldAsync(db, "owned.mkv", "chosen.mkv", "Film 2020 2160p WEB", verifier);
+        await world.Engine.ImportAsync(world.Context, world.Import with {
+            ManualFileMappings = [new("chosen.mkv", world.Import.EntityId!.Value, 0, 0)]
+        }, default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, world.Import.Id));
+        Assert.Equal(Path.Combine(world.Import.ContentPath!, "chosen.mkv"), Assert.Single(verifier.Paths));
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(world.OwnedFilePath));
+        Assert.True(File.Exists(Path.Combine(world.Import.ContentPath!, "chosen.mkv")));
+    }
+
+    [Fact]
+    public async Task ReviewedMusicImportsOnlyMappedAudioWithTheRequestedIdentity() {
+        await using var db = CreateContext();
+        var world = await MusicWorldAsync(db, [], ["unknown.flac", "bonus.flac"]);
+        var requested = await db.Entities.SingleAsync(entity => entity.ParentEntityId == world.Import.EntityId && entity.Title == "unknown");
+        requested.Title = "Expected Song";
+        await db.SaveChangesAsync();
+        await world.Engine.ImportAsync(world.Context, world.Import with {
+            ManualFileMappings = [new("unknown.flac", requested.Id, 0, 0)]
+        }, default);
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, world.Import.Id));
+        Assert.True(File.Exists(Path.Combine(world.AlbumFolder, "unknown.flac")));
+        Assert.False(File.Exists(Path.Combine(world.AlbumFolder, "bonus.flac")));
+        var checkpoint = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(world.Import.Id, default))!.ImportPlacementCheckpoint;
+        Assert.Equal(requested.Id, Assert.Single(checkpoint!.Units, unit => unit.IsMedia).TargetEntityId);
+    }
+
+    [Fact]
     public async Task AlbumMergeAddsOnlyMissingTracksIntoTheExistingFolder() {
         await using var db = CreateContext();
         var world = await MusicWorldAsync(db, ownedTracks: ["01 - One.flac"], payloadTracks: ["01 - One.flac", "02 - Two.flac"]);
@@ -141,7 +199,7 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
 
     private sealed record MusicWorld(MusicAcquisitionImportEngine Engine, JobContext Context, AcquisitionImportContext Import, string LibraryRoot, string AlbumFolder);
 
-    private async Task<MovieWorld> MovieWorldAsync(PrismediaDbContext db, string ownedFileName, string payloadFile, string releaseTitle) {
+    private async Task<MovieWorld> MovieWorldAsync(PrismediaDbContext db, string ownedFileName, string payloadFile, string releaseTitle, TestVideoPayloadVerifier? verifier = null) {
         var libraryRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "movies")).FullName;
         var movieFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "Film (2020) [existing]")).FullName;
         var ownedFilePath = Path.Combine(movieFolder, ownedFileName);
@@ -169,7 +227,7 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
             new EfAcquisitionHistoryStore(db),
             new ExistingReadyMaterializer(),
             new MergedImportTestSupport.VideoProbe(),
-            NullLogger<MovieAcquisitionImportEngine>.Instance, new TestVideoPayloadVerifier());
+            NullLogger<MovieAcquisitionImportEngine>.Instance, verifier ?? new TestVideoPayloadVerifier());
 
         var import = new AcquisitionImportContext(
             acquisitionId, "Film", Author: null, Series: null, Year: 2020, PosterUrl: null,

@@ -211,14 +211,16 @@ public sealed partial class LibraryScanPersistenceService {
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
             if (tracked is not null) {
                 var shouldMarkAncestors = ShouldMarkAutoIdentifyAncestors(tracked, audioLibraryId);
-                if (!tracked.IsOrganized
+                if (!item.PreserveRequestedMetadata && !tracked.IsOrganized
                     && !await _db.EntityExternalIds.AsNoTracking().AnyAsync(
                         row => row.EntityId == tracked.Id,
                         cancellationToken)) {
                     tracked.Title = title;
                 }
                 tracked.ParentEntityId = audioLibraryId;
-                tracked.SortOrder = audioLibraryId is null ? null : sortOrder;
+                if (!item.PreserveRequestedMetadata) {
+                    tracked.SortOrder = audioLibraryId is null ? null : sortOrder;
+                }
                 tracked.UpdatedAt = updatedAt;
                 if (isNsfw) tracked.IsNsfw = true;
                 if (shouldMarkAncestors) {

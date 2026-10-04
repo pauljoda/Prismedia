@@ -222,9 +222,9 @@ describe("AcquisitionPanel", () => {
     const view = render(AcquisitionPanel, { acquisitionId: "acquisition-1", detail: held });
 
     expect(await view.findByRole("heading", { name: "Import blocked" })).toBeInTheDocument();
-    expect(await view.findByText("Map expected episodes")).toBeInTheDocument();
-    expect(await view.findByText("Episode 01 · First Day")).toBeInTheDocument();
-    expect(view.getByText("Episode 02 · Second Day")).toBeInTheDocument();
+    expect(await view.findByText("Choose files to import")).toBeInTheDocument();
+    expect(await view.findByText("01 · First Day")).toBeInTheDocument();
+    expect(view.getByText("02 · Second Day")).toBeInTheDocument();
     expect((await view.findAllByText("pack/video-a.mp4")).length).toBeGreaterThan(0);
     expect(view.getAllByText("pack/video-b.mp4").length).toBeGreaterThan(0);
     expect(view.getByText("pack/poster.jpg")).toBeInTheDocument();
@@ -234,7 +234,7 @@ describe("AcquisitionPanel", () => {
     expect(view.queryByRole("button", { name: "Import anyway" })).toBeNull();
     expect(view.queryByRole("button", { name: "Search again" })).toBeNull();
 
-    await fireEvent.keyDown(view.getByRole("button", { name: "Downloaded file for Episode 02 · Second Day" }), { key: "ArrowDown" });
+    await fireEvent.keyDown(view.getByRole("button", { name: "Downloaded file for 02 · Second Day" }), { key: "ArrowDown" });
     const fileMenu = view.getByRole("listbox");
     expect(document.body).toContainElement(fileMenu);
     expect(view.container).not.toContainElement(fileMenu);
@@ -242,11 +242,11 @@ describe("AcquisitionPanel", () => {
     const alreadyMappedFile = await view.findByRole("option", { name: "pack/video-a.mp4 Mapped" });
     expect(alreadyMappedFile).not.toHaveAttribute("data-disabled");
     await fireEvent.pointerUp(alreadyMappedFile);
-    await fireEvent.click(view.getByRole("button", { name: "Import mapped episodes" }));
+    await fireEvent.click(view.getByRole("button", { name: "Accept and import" }));
 
     expect(mocks.submitAcquisitionManualImport).not.toHaveBeenCalled();
     expect(view.getByRole("dialog", { name: "Import from this potentially unsafe download?" })).toBeInTheDocument();
-    await fireEvent.click(view.getByRole("button", { name: "Confirm Import mapped episodes" }));
+    await fireEvent.click(view.getByRole("button", { name: "Confirm Accept and import" }));
 
     expect(mocks.submitAcquisitionManualImport).toHaveBeenCalledWith("acquisition-1", [
       { sourceRelativePath: "pack/video-a.mp4", targetEntityId: "episode-1" },

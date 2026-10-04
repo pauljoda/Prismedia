@@ -9,6 +9,32 @@ public sealed class MovieImportPlanBuilderTests {
 
     private static ImportCandidateFile File(string path, long size) => new(path, size);
 
+    [Fact]
+    public void ReviewedMovieUsesOnlyTheChosenFileAndChecksItsTarget() {
+        var id = Guid.NewGuid();
+        ImportCandidateFile[] files = [new("other.mkv", 9000), new("chosen.mkv", 1000), new("unsafe.exe", 100)];
+        var plan = MovieImportPlanBuilder.PlanReviewed(files, [new("chosen.mkv", id, 0, 0)], id, Context());
+        Assert.Equal("chosen.mkv", Assert.Single(plan.Items).SourceRelativePath);
+        Assert.True(MovieImportPlanBuilder.PlanReviewed(files, [new("unsafe.exe", id, 0, 0)], id, Context()).Blocked);
+        Assert.True(MovieImportPlanBuilder.PlanReviewed(files, [new("chosen.mkv", Guid.NewGuid(), 0, 0)], id, Context()).Blocked);
+        Assert.True(MovieImportPlanBuilder.PlanReviewed(files, [new("missing.mkv", id, 0, 0)], id, Context()).Blocked);
+    }
+
+    [Fact]
+    public void ReviewedAudioMapsUnknownNamesToExactRequestedTracksAndLeavesOtherFilesBehind() {
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        ImportCandidateFile[] files = [new("disc/file-a.flac", 1000), new("disc/file-b.flac", 1000), new("bonus.flac", 1000), new("cover.jpg", 100)];
+        RequestedAudioTrack[] tracks = [new(first, "First Song", 0), new(second, "Second Song", 1)];
+        var plan = MusicImportPlanBuilder.PlanReviewed(files, [new("disc/file-b.flac", first, 0, 0), new("disc/file-a.flac", second, 0, 0)], tracks, "Artist", "Album");
+        Assert.False(plan.Blocked);
+        Assert.Equal(2, plan.Items.Count);
+        Assert.Equal(second, plan.Items.Single(item => item.SourceRelativePath == "disc/file-a.flac").TargetEntityId);
+        Assert.Equal(first, plan.Items.Single(item => item.SourceRelativePath == "disc/file-b.flac").TargetEntityId);
+        Assert.True(MusicImportPlanBuilder.PlanReviewed(files, [new("disc/file-a.flac", first, 0, 0), new("disc/file-a.flac", second, 0, 0)], tracks, "Artist", "Album").Blocked);
+        Assert.True(MusicImportPlanBuilder.PlanReviewed(files, [new("disc/file-a.flac", Guid.NewGuid(), 0, 0)], tracks, "Artist", "Album").Blocked);
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, true)]

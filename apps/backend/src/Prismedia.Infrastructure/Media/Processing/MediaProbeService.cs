@@ -27,7 +27,7 @@ public sealed class MediaProbeService {
         string? ffprobePath = null) {
         var result = await RunFfprobeAsync(
             ["-v", "error",
-             "-show_entries", "format=duration,size,bit_rate,format_name:stream=index,codec_type,codec_name,pix_fmt,width,height,avg_frame_rate,bit_rate,sample_rate,channels,color_range,color_space,color_transfer,color_primaries:stream_side_data=side_data_type,dv_profile,dv_level,rpu_present_flag,el_present_flag,bl_present_flag,dv_bl_signal_compatibility_id:stream_tags=language,title:stream_disposition=default,forced",
+             "-show_entries", "format=duration,size,bit_rate,format_name:stream=index,codec_type,codec_name,pix_fmt,width,height,avg_frame_rate,bit_rate,sample_rate,channels,color_range,color_space,color_transfer,color_primaries:stream_side_data=side_data_type,dv_profile,dv_level,rpu_present_flag,el_present_flag,bl_present_flag,dv_bl_signal_compatibility_id:stream_tags=language,title:stream_disposition=default,forced,attached_pic",
              "-of", "json",
              filePath],
             cancellationToken,
@@ -47,7 +47,13 @@ public sealed class MediaProbeService {
             foreach (var stream in streams.EnumerateArray()) {
                 // prism-vocab: external — ffprobe codec_type values decoded at this boundary only.
                 var codecType = stream.GetStringOrDefault("codec_type");
-                if (codecType == "video" && videoStream is null)
+                var disposition = stream.GetPropertyOrDefault("disposition");
+                // prism-vocab: external — attached artwork is not a playable video stream.
+                if (codecType == "video" && disposition.GetIntOrDefault("attached_pic") == 1)
+                    continue;
+                if (codecType == "video" && (videoStream is null
+                    || (disposition.GetIntOrDefault("default") == 1
+                        && videoStream.Value.GetPropertyOrDefault("disposition").GetIntOrDefault("default") != 1)))
                     videoStream = stream;
                 else if (codecType == "audio" && audioStream is null)
                     audioStream = stream;
@@ -56,7 +62,6 @@ public sealed class MediaProbeService {
                     continue;
 
                 var tags = stream.GetPropertyOrDefault("tags");
-                var disposition = stream.GetPropertyOrDefault("disposition");
                 var sideData = ParseVideoSideData(stream);
                 var pixelFormat = stream.GetStringOrDefault("pix_fmt");
                 streamResults.Add(new MediaStreamProbeResult(

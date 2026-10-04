@@ -1861,6 +1861,39 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Theory]
+    [InlineData(EntityKind.Movie, "chosen.mkv")]
+    [InlineData(EntityKind.AudioLibrary, "unknown.flac")]
+    [InlineData(EntityKind.AudioTrack, "unknown.mp3")]
+    public async Task MovieAndMusicHoldsOfferValidatedDurableFileMappings(EntityKind kind, string fileName) {
+        var targetId = kind == EntityKind.Movie ? WantedEntityId : Guid.NewGuid();
+        var payloads = new FixedDownloadPayloadReader(new DownloadPayload("/downloads/review", [
+            new(fileName, 1000), new("unsafe.exe", 50), new("cover.jpg", 50)
+        ]));
+        var targets = new FixedImportTargetIndex([]) { AudioTracks = [new(targetId, "Requested Track", 0)] };
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired),
+            manualImportPayloads: payloads, manualImportTargets: targets);
+        harness.Store.ImportContext = new AcquisitionImportContext(AcquisitionId, "Requested Item", null, null,
+            2020, null, null, null, "/downloads/review", ClientItemId, RecordedClientId, kind, EntityId: WantedEntityId);
+
+        var review = await harness.Service.GetManualImportReviewAsync(AcquisitionId, default);
+        Assert.True(review.Available);
+        Assert.Equal(targetId, Assert.Single(review.Targets).EntityId);
+        Assert.True(review.Files.Single(file => file.SourceRelativePath == fileName).CanMap);
+        Assert.False(review.Files.Single(file => file.SourceRelativePath == "unsafe.exe").CanMap);
+        Assert.False(review.Files.Single(file => file.SourceRelativePath == "cover.jpg").CanMap);
+        await Assert.ThrowsAsync<AcquisitionConfigurationException>(() => harness.Service.SubmitManualImportAsync(
+            AcquisitionId, new([new("unsafe.exe", targetId)]), default));
+        await Assert.ThrowsAsync<AcquisitionConfigurationException>(() => harness.Service.SubmitManualImportAsync(
+            AcquisitionId, new([new(fileName, Guid.NewGuid())]), default));
+        Assert.Empty(harness.Queue.Requests);
+
+        await harness.Service.SubmitManualImportAsync(AcquisitionId, new([new(fileName, targetId)]), default);
+        var queued = AcquisitionJobPayload.Parse(Assert.Single(harness.Queue.Requests).PayloadJson!);
+        Assert.True(queued.ManualRetry);
+        Assert.Equal(new ManualImportFileMapping(fileName, targetId, 0, 0), Assert.Single(queued.ManualFileMappings!));
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]
@@ -2855,6 +2888,10 @@ public sealed class AcquisitionServiceTests {
     }
 
     private sealed class FixedImportTargetIndex(IReadOnlyList<TvEpisodeTitle> episodes) : IImportTargetIndex {
+        public IReadOnlyList<RequestedAudioTrack> AudioTracks { get; set; } = [];
+        public Task<IReadOnlyList<RequestedAudioTrack>> GetRequestedAudioTracksAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(AudioTracks);
+
         public IReadOnlyList<TvSeasonEpisodeCatalog> Catalog { get; set; } = [];
         public Task<IReadOnlyList<TvSeasonEpisodeCatalog>> GetSeriesEpisodeCatalogAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult(Catalog);

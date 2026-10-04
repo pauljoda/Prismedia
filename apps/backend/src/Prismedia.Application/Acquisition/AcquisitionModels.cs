@@ -849,7 +849,8 @@ public sealed record AcquisitionImportContext(
 
 /// <summary>
 /// Queue-safe structural form of one reviewed file mapping. The target Entity id is retained for audit and
-/// the season/episode coordinates are captured at submission so the import job never guesses from a filename.
+/// TV coordinates are captured at submission so the import job never guesses from a filename.
+/// Movie and music mappings use the target identity directly and leave both TV coordinates at zero.
 /// </summary>
 public sealed record ManualImportFileMapping(
     string SourceRelativePath,

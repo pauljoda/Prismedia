@@ -102,7 +102,10 @@ public sealed partial class MusicAcquisitionImportEngine(
         if (import.UpgradeOfAcquisitionId is null && import.EntityId is { } requestedEntityId) {
             requestedTracks = await targets.GetRequestedAudioTracksAsync(requestedEntityId, cancellationToken);
         }
-        var rawPlan = MusicImportPlanBuilder.Plan(
+        var rawPlan = import.ManualFileMappings is { Count: > 0 } mappings
+            ? MusicImportPlanBuilder.PlanReviewed(payload.Files, mappings, requestedTracks ?? [], artist,
+                albumTitle, profile?.PathTemplate, import.Year)
+            : MusicImportPlanBuilder.Plan(
             payload.Files,
             artist,
             albumTitle,

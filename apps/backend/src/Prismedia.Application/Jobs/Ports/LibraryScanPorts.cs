@@ -837,7 +837,10 @@ public sealed record AudioTrackUpsertItem(
     int SortOrder,
     string? SectionLabel,
     int SectionOrder,
-    bool IsNsfw);
+    bool IsNsfw) {
+    /// <summary>Keep the requested track's title and album position after an exact acquisition mapping.</summary>
+    public bool PreserveRequestedMetadata { get; init; }
+}
 
 /// <summary>
 /// Album folder discovered during an audio scan.

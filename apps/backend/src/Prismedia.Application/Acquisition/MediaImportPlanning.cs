@@ -155,7 +155,7 @@ public static partial class MovieImportPlanBuilder {
 /// outside the library. Only the album FOLDER is templated — track files keep their release names and
 /// inner disc structure, so track renaming is intentionally out of scope.
 /// </summary>
-public static class MusicImportPlanBuilder {
+public static partial class MusicImportPlanBuilder {
     /// <summary>Audio extensions the music importer accepts. Mirrors scan discovery's audio set.</summary>
     private static readonly IReadOnlySet<string> AudioExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".m4b", ".wma", ".opus",

@@ -209,6 +209,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Held movie imports now let you choose and accept a video file, and held album or track imports let you map downloaded audio to the requested tracks while retaining their titles and order. Reviewed choices survive worker retries. Video quality checks ignore attached cover art, honor the default video stream, and recognize full-height narrow video; warnings identify the checked file and its dimensions.
+
 - Switching from reading to listening at the beginning of an EPUB chapter keeps the correct chapter even when its saved percentage rounds down.
 
 - Request, Identify, and Files pages inside the iOS app now scroll as one page from anywhere, including drags that start on buttons, and render every row. Content stays clear of the status bar and tab bar, toolbars pin below the status bar, and Files fills the space between the bars.

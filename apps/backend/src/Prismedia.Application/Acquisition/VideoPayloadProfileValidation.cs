@@ -9,13 +9,16 @@ public static class VideoPayloadProfileValidation {
     /// <summary>Minimum retained runtime for an automatic replacement; shorter editions require review.</summary>
     public const double MinimumAutomaticRuntimeRatio = 0.8;
 
-    /// <summary>Resolution tier measured from the long edge, allowing the normal letterbox crop of theatrical releases.</summary>
+    /// <summary>Resolution tier allowing both letterbox cropping and full-height narrow or anamorphic video.</summary>
     public static int? ResolutionTier(VideoProbeData? video) => ResolutionTier(video?.Width, video?.Height);
 
     /// <summary>Maps measured stream dimensions to the same cropped-video resolution tier used during import.</summary>
     public static int? ResolutionTier(int? width, int? height) => width is > 0 && height is > 0
-        ? Math.Max(width.Value, height.Value) switch {
-            >= 3_000 => 2160, >= 1_600 => 1080, >= 1_100 => 720, _ => 480
+        ? (Math.Max(width.Value, height.Value), Math.Min(width.Value, height.Value)) switch {
+            (>= 3_000, _) or (_, >= 2_160) => 2160,
+            (>= 1_600, _) or (_, >= 1_080) => 1080,
+            (>= 1_100, _) or (_, >= 720) => 720,
+            _ => 480
         } : null;
 
     /// <summary>Uses each file's quality claim, falling back to its selected release only when the file has none.</summary>

@@ -771,7 +771,11 @@ public sealed partial class MovieAcquisitionImportEngine(
         }
 
         var templateContext = new ImportTemplateContext(import.Title, import.Author, import.Year);
-        var primaryPlan = MovieImportPlanBuilder.Plan(payload.Files, templateContext, profile?.PathTemplate, ownedMediaQuality);
+        var reviewed = import.ManualFileMappings is { Count: > 0 };
+        var primaryPlan = reviewed
+            ? MovieImportPlanBuilder.PlanReviewed(payload.Files, import.ManualFileMappings!, import.EntityId,
+                templateContext, profile?.PathTemplate, ownedMediaQuality)
+            : MovieImportPlanBuilder.Plan(payload.Files, templateContext, profile?.PathTemplate, ownedMediaQuality);
         if (primaryPlan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(primaryPlan.BlockReason), cancellationToken);
             return;
@@ -786,10 +790,11 @@ public sealed partial class MovieAcquisitionImportEngine(
             return;
         }
 
-        if (selected is not { ManualPick: true }
+        if (!reviewed && selected is not { ManualPick: true }
             && VideoPayloadProfileValidation.Validate(video, ownedMediaQuality,
                 await profiles.GetRulesAsync(import.ProfileId, EntityKind.Movie, cancellationToken)) is { } profileHold) {
-            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, profileHold, cancellationToken);
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired,
+                $"{Path.GetFileName(primaryPath)} ({video.Width} × {video.Height}): {profileHold}", cancellationToken);
             return;
         }
 

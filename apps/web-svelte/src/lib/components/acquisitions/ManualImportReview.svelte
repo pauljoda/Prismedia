@@ -23,9 +23,9 @@
     onReject: () => void;
   } = $props();
 
-  const mappedEpisodeCount = $derived(Object.values(assignments).filter(Boolean).length);
+  const mappedTargetCount = $derived(Object.values(assignments).filter(Boolean).length);
   const warning = $derived(review?.warning || statusMessage);
-  const unsafe = $derived(Boolean(review?.warning || review?.files.some(file => file.isDangerous)));
+  const unsafe = $derived(Boolean(review?.files.some(file => file.isDangerous)));
   const mappedSourcePaths = $derived(new Set(Object.values(assignments).filter(Boolean)));
   const sourceOptions = $derived<SelectOption[]>([
     { value: "", label: "No file selected" },
@@ -35,12 +35,12 @@
         value: file.sourceRelativePath,
         label: file.sourceRelativePath,
         annotation: file.verificationFailure ? "Verification failed"
-          : mappedSourcePaths.has(file.sourceRelativePath) ? "Mapped" : undefined,
+          : mappedSourcePaths.has(file.sourceRelativePath) ? "Mapped" : formatBytes(Number(file.sizeBytes)),
       })),
   ]);
 
   function targetLabel(position: string | number | null | undefined, title: string): string {
-    const prefix = position != null ? `Episode ${String(position).padStart(2, "0")} · ` : "";
+    const prefix = position != null ? `${String(position).padStart(2, "0")} · ` : "";
     return `${prefix}${title}`;
   }
 
@@ -59,13 +59,13 @@
   {#if review?.available}
     <div class="flex flex-col gap-1.5">
       <h2 id="manual-import-heading" class="font-heading text-base font-semibold text-foreground">
-        Map expected episodes
+        Choose files to import
       </h2>
       {#if review.message && review.message !== warning}
         <p class="max-w-prose text-sm leading-relaxed text-muted-foreground">{review.message}</p>
       {/if}
     </div>
-  {:else if review?.message && !warning}
+  {:else if review?.message && review.message !== warning}
     <p class="max-w-prose text-sm leading-relaxed text-muted-foreground">{review.message}</p>
   {/if}
 
@@ -84,7 +84,7 @@
   {#if review?.available}
     <div class="overflow-visible rounded-sm border border-border-subtle bg-surface-1">
       <div class="hidden grid-cols-[minmax(0,1fr)_minmax(16rem,0.72fr)] gap-4 rounded-t-sm border-b border-border-subtle bg-surface-2 px-4 py-3 text-sm font-medium text-text-secondary md:grid">
-        <span>Expected episode</span>
+        <span>Requested item</span>
         <span>Downloaded file</span>
       </div>
       {#each review.targets as target (target.entityId)}
@@ -116,14 +116,14 @@
       <div class="min-w-0">
         <p class="text-sm font-medium text-foreground">
           {#if review.available}
-            {mappedEpisodeCount} of {review.targets.length} {review.targets.length === 1 ? "episode" : "episodes"} mapped
+            {mappedTargetCount} of {review.targets.length} {review.targets.length === 1 ? "item" : "items"} mapped
           {:else}
-            Choose a safer release
+            Choose another release
           {/if}
         </p>
         <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
           {review.available
-            ? "A downloaded file can satisfy more than one episode."
+            ? "Review the selected files before accepting this import."
             : "Prismedia will remove this download, block the exact release, and search again."}
         </p>
       </div>
@@ -137,11 +137,11 @@
             type="button"
             variant="primary"
             class="gap-1.5"
-            disabled={busy || mappedEpisodeCount === 0}
+            disabled={busy || mappedTargetCount === 0}
             onclick={onImport}
           >
             <Check data-icon="inline-start" />
-            Import mapped episodes
+            Accept and import
           </Button>
         {/if}
       </div>

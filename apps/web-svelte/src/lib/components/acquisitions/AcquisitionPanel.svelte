@@ -105,6 +105,7 @@
   const canRetryImport = $derived(
     status === ACQUISITION_STATUS.downloaded ||
       (hasResumableImport && (
+        status === ACQUISITION_STATUS.manualImportRequired ||
         status === ACQUISITION_STATUS.awaitingSelection ||
         status === ACQUISITION_STATUS.failed ||
         status === ACQUISITION_STATUS.cancelled
@@ -799,8 +800,8 @@
 <ConfirmDialog
   open={unsafeImportConfirmOpen}
   title="Import from this potentially unsafe download?"
-  message={`${manualImportWarning ?? "This payload contains a potentially dangerous file."} Only the episode files you mapped will be imported. Confirm only after verifying that those media files are expected.`}
-  confirmLabel="Import mapped episodes"
+  message={`${manualImportWarning ?? "This payload contains a potentially dangerous file."} Only the media files you mapped will be imported. Confirm only after verifying that those media files are expected.`}
+  confirmLabel="Accept and import"
   danger
   onConfirm={importMappedFiles}
   onClose={() => (unsafeImportConfirmOpen = false)}
