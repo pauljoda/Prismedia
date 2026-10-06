@@ -7,6 +7,14 @@ import {
   type MusicPlayerRepeatModeCode,
 } from "$lib/api/generated/codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
+import {
+  audioChapterSpanAt,
+  audioChapterSpans,
+  audioEntryPosition,
+  CHAPTER_RESTART_THRESHOLD_SECONDS,
+  lastAudioChapterStart,
+  type AudioChapterSpan,
+} from "$lib/player/audio-chapters";
 import { createOptionalContext } from "$lib/utils/context";
 
 export type RepeatMode = MusicPlayerRepeatModeCode;
@@ -42,6 +50,16 @@ export interface PlaybackController {
   toggle: () => void;
   seek: (seconds: number) => void;
   playTrack: (track: AudioTrackListItemDto) => void;
+}
+
+/** One entry the transport steps through: an embedded chapter of a file, or a whole file. */
+export interface AudioQueueEntry {
+  key: string;
+  track: AudioTrackListItemDto;
+  /** Index into the play order of the entry's file. */
+  orderIndex: number;
+  /** The chapter this entry plays, or null when the file plays whole. */
+  chapter: AudioChapterSpan | null;
 }
 
 export interface PlayOptions {
@@ -145,14 +163,100 @@ export class AudioPlaybackStore {
     this.order.slice(this.position + 1).map((index) => this.queue[index]!).filter(Boolean),
   );
 
-  readonly hasNext = $derived(
-    this.position >= 0 &&
-      (this.position < this.order.length - 1 || (this.repeat === MUSIC_PLAYER_REPEAT_MODE.all && this.order.length > 0)),
+  /**
+   * Whether each file's embedded chapters play as their own entries. Only queues whose source order
+   * carries meaning (audiobooks) split their files; music plays every file whole.
+   */
+  readonly playsChapters = $derived(this.context?.preservesQueueOrder === true);
+
+  /** Embedded chapter spans of the current file, measured against its loaded duration. */
+  readonly currentChapters = $derived(
+    this.playsChapters ? audioChapterSpans(this.currentTrack, this.duration) : [],
   );
-  readonly hasPrev = $derived(this.position > 0 || (this.repeat === MUSIC_PLAYER_REPEAT_MODE.all && this.order.length > 1));
+
+  /** The chapter playing now, or null when the current file plays whole. */
+  readonly currentChapter = $derived(audioChapterSpanAt(this.currentChapters, this.currentTime));
+
+  /** The current file's chapter after the one playing, when there is one. */
+  readonly nextChapter = $derived(
+    this.currentChapter ? (this.currentChapters[this.currentChapter.index + 1] ?? null) : null,
+  );
+
+  /** The current file's chapter before the one playing, when there is one. */
+  readonly previousChapter = $derived(
+    this.currentChapter ? (this.currentChapters[this.currentChapter.index - 1] ?? null) : null,
+  );
+
+  /** Title of the entry playing: its chapter, else its file. */
+  readonly entryTitle = $derived(this.currentChapter?.title ?? this.currentTrack?.title ?? null);
+
+  /** Where the entry playing begins in its file, its length (0 while unknown), and the position inside it. */
+  readonly #entry = $derived(audioEntryPosition(this.currentChapters, this.currentTime, this.duration));
+  readonly entryStart = $derived(this.#entry.start);
+  readonly entryDuration = $derived(this.#entry.duration);
+  readonly entryTime = $derived(this.#entry.position);
+
+  /** Entries queued after the one playing, in play order: the current file's later chapters first. */
+  readonly upNextEntries = $derived.by(() => {
+    const entries: AudioQueueEntry[] = [];
+    const current = this.currentTrack;
+    if (current && this.currentChapter) {
+      for (const chapter of this.currentChapters.slice(this.currentChapter.index + 1)) {
+        entries.push(queueEntry(current, this.position, chapter));
+      }
+    }
+    for (let orderIndex = this.position + 1; orderIndex < this.order.length; orderIndex++) {
+      const track = this.queue[this.order[orderIndex]!];
+      if (!track) continue;
+      const chapters = this.playsChapters ? audioChapterSpans(track) : [];
+      if (chapters.length === 0) entries.push(queueEntry(track, orderIndex, null));
+      for (const chapter of chapters) entries.push(queueEntry(track, orderIndex, chapter));
+    }
+    return entries;
+  });
+
+  readonly hasNext = $derived(
+    this.nextChapter !== null ||
+      (this.position >= 0 &&
+        (this.position < this.order.length - 1 ||
+          (this.repeat === MUSIC_PLAYER_REPEAT_MODE.all && this.order.length > 0))),
+  );
+  readonly hasPrev = $derived(
+    this.previousChapter !== null ||
+      this.position > 0 ||
+      (this.repeat === MUSIC_PLAYER_REPEAT_MODE.all && this.order.length > 1),
+  );
 
   isCurrent(trackId: string): boolean {
     return this.currentTrack?.id === trackId;
+  }
+
+  /** Where `track` begins when Previous steps back into it: its last chapter when it plays as chapters. */
+  steppingBackStart(track: AudioTrackListItemDto | null | undefined): number {
+    return this.playsChapters ? lastAudioChapterStart(track) : 0;
+  }
+
+  /**
+   * Where Previous lands inside the current file from its position `fileSeconds`: the chapter
+   * playing restarts once it has played past the restart threshold, otherwise the previous chapter
+   * starts. Null when Previous leaves the file, or the file plays whole.
+   */
+  previousChapterStart(fileSeconds: number): number | null {
+    const chapter = audioChapterSpanAt(this.currentChapters, fileSeconds);
+    if (!chapter) return null;
+    if (fileSeconds - chapter.startSeconds > CHAPTER_RESTART_THRESHOLD_SECONDS) return chapter.startSeconds;
+    return this.currentChapters[chapter.index - 1]?.startSeconds ?? null;
+  }
+
+  /**
+   * Repeat-one replays the chapter playing: once playback reaches `fileSeconds` at or past its end,
+   * the chapter's start; otherwise null. Seeks move the store's position first, so only playback
+   * itself runs past a chapter's end.
+   */
+  repeatedChapterStart(fileSeconds: number): number | null {
+    const chapter = this.currentChapter;
+    if (this.repeat !== MUSIC_PLAYER_REPEAT_MODE.one || chapter?.endSeconds == null) return null;
+    return fileSeconds >= chapter.endSeconds ? chapter.startSeconds : null;
   }
 
   /**
@@ -340,6 +444,14 @@ export class AudioPlaybackStore {
   seek(seconds: number) {
     this.#controller?.seek(seconds);
   }
+}
+
+function queueEntry(
+  track: AudioTrackListItemDto,
+  orderIndex: number,
+  chapter: AudioChapterSpan | null,
+): AudioQueueEntry {
+  return { key: `${orderIndex}:${chapter?.markerId ?? "whole"}`, track, orderIndex, chapter };
 }
 
 const ctx = createOptionalContext<AudioPlaybackStore | null>("AudioPlayback", null);

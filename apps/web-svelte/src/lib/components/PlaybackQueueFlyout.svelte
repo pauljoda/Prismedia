@@ -5,11 +5,12 @@
     resolveAudioArtist,
     resolveAudioArtwork,
     useAudioPlayback,
+    type AudioQueueEntry,
   } from "$lib/stores/audio-playback.svelte";
 
   interface Props {
     onClose: () => void;
-    onJumpTo?: (orderIndex: number) => void;
+    onJumpTo?: (entry: AudioQueueEntry) => void;
   }
 
   let { onClose, onJumpTo }: Props = $props();
@@ -17,16 +18,16 @@
   const playback = useAudioPlayback()!;
 
   const current = $derived(playback.currentTrack);
-  const upNext = $derived(playback.upNext);
+  const upNext = $derived(playback.upNextEntries);
   const cover = $derived(resolveAudioArtwork(current, playback.context));
   const currentArtist = $derived(resolveAudioArtist(current, playback.context).name);
 
-  function jumpToTrack(orderIndex: number) {
+  function jumpToEntry(entry: AudioQueueEntry) {
     if (onJumpTo) {
-      onJumpTo(orderIndex);
+      onJumpTo(entry);
       return;
     }
-    playback.jumpTo(orderIndex);
+    playback.jumpTo(entry.orderIndex);
   }
 </script>
 
@@ -62,7 +63,7 @@
             {/if}
           </div>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-[0.76rem] font-medium text-text-primary">{current.title}</p>
+            <p class="truncate text-[0.76rem] font-medium text-text-primary">{playback.entryTitle}</p>
             <p class="truncate text-[0.66rem] text-text-muted">
               {currentArtist ?? "Unknown artist"}
             </p>
@@ -75,20 +76,21 @@
       <div class="px-3 pb-2 pt-2.5">
         <p class="text-kicker">Next up · {upNext.length}</p>
         <ul class="mt-1 flex flex-col">
-          {#each upNext as track, i (track.id + ":" + i)}
+          {#each upNext as entry (entry.key)}
+            {@const track = entry.track}
             <li>
               <Button variant="ghost"
                 type="button"
-                onclick={() => { jumpToTrack(playback.position + 1 + i); }}
+                onclick={() => { jumpToEntry(entry); }}
                 class="group flex h-auto w-full justify-start whitespace-normal items-center gap-2.5 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-surface-2"
               >
                 <span class="w-5 shrink-0 text-right font-mono text-[0.64rem] text-text-disabled group-hover:hidden">
-                  {(track.trackNumber ?? track.sortOrder + 1)}
+                  {entry.chapter ? entry.chapter.index + 1 : (track.trackNumber ?? track.sortOrder + 1)}
                 </span>
                 <span class="hidden w-5 shrink-0 justify-end group-hover:flex"><Music class="h-3 w-3 text-text-accent" /></span>
                 <span class="min-w-0 flex-1">
-                  <span class="block truncate text-[0.74rem] text-text-secondary group-hover:text-text-primary">{track.title}</span>
-                  {#if track.embeddedArtist}
+                  <span class="block truncate text-[0.74rem] text-text-secondary group-hover:text-text-primary">{entry.chapter?.title ?? track.title}</span>
+                  {#if track.embeddedArtist && !entry.chapter}
                     <span class="block truncate text-[0.62rem] text-text-disabled">{track.embeddedArtist}</span>
                   {/if}
                 </span>

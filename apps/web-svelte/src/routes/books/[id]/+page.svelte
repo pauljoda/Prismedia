@@ -55,7 +55,7 @@
     type BookReaderChapter,
   } from "$lib/entities/book-entity-reader";
   import { bookReaderHref } from "$lib/entities/book-reader-route";
-  import { audiobookTrackItems } from "$lib/entities/audiobook-playback";
+  import { audiobookTrackItems, withAudiobookChapters } from "$lib/entities/audiobook-playback";
   import {
     fetchOrderedEntityThumbnails,
     hydrateStandardRelationshipCards,
@@ -682,7 +682,10 @@
   function playAudiobookTrack(trackId: string, startSeconds: number) {
     const context = audiobookPlaybackContext();
     if (!context) return;
-    playback.play(audiobookTracks, trackId, context, { shuffle: false, startSeconds });
+    playback.play(withAudiobookChapters(audiobookTracks, alignment), trackId, context, {
+      shuffle: false,
+      startSeconds,
+    });
   }
 
   function openChapterRow(row: BookChapterRow) {

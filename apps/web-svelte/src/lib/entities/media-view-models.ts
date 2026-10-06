@@ -94,6 +94,17 @@ export interface AudioTrackListItemDto {
   accessCount: number;
   lastActiveAt: string | null;
   createdAt: string;
+  /** Chapters embedded in the source file, in playback order; absent or empty when it declares none. */
+  chapters?: AudioTrackChapter[];
+}
+
+/** One chapter embedded in an audio file, as a window of the file's own timeline. */
+export interface AudioTrackChapter {
+  markerId: string;
+  title: string;
+  startSeconds: number;
+  /** Chapter end inside the file; null when the server could not bound it. */
+  endSeconds: number | null;
 }
 
 export interface ImageListItemDto {

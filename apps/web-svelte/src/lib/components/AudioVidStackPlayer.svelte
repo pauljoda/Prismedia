@@ -33,7 +33,9 @@
     resolveAudioArtist,
     resolveAudioArtwork,
     useAudioPlayback,
+    type AudioQueueEntry,
   } from "$lib/stores/audio-playback.svelte";
+  import { audioEntryPosition } from "$lib/player/audio-chapters";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import {
     AUDIO_PLAYBACK_DIAGNOSTIC_EVENT,
@@ -104,8 +106,9 @@
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
-  const currentTime = $derived(playback.currentTime);
   const duration = $derived(playback.duration);
+  // The transport presents the entry playing: an embedded chapter of the file, or the whole file.
+  const entryDuration = $derived(playback.entryDuration);
   const playing = $derived(playback.playing);
   const volume = $derived(playback.volume);
   const muted = $derived(playback.muted);
@@ -121,7 +124,7 @@
       : undefined,
   );
   const progress = $derived(
-    duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
+    entryDuration > 0 ? Math.max(0, Math.min(100, (playback.entryTime / entryDuration) * 100)) : 0,
   );
   const artist = $derived(resolveAudioArtist(activeTrack, ctx));
   const artistName = $derived(artist.name);
@@ -139,7 +142,7 @@
   const displayTitle = $derived(ctx?.playbackOwnerTitle ?? activeTrack?.title ?? null);
   const albumLabel = $derived(
     ctx?.supportsPlaybackRate === true
-      ? activeTrack?.title ?? null
+      ? playback.entryTitle
       : ctx?.albumTitle ?? activeTrack?.embeddedAlbum ?? null,
   );
 
@@ -419,6 +422,12 @@
     window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
   }
 
+  /** Publishes the OS scrubber for the entry playing, so a chapter shows its own elapsed and length. */
+  function publishMediaSessionPosition(audio: HTMLAudioElement) {
+    const entry = audioEntryPosition(playback.currentChapters, audio.currentTime, audio.duration);
+    setMediaSessionPosition(entry.duration, entry.position, audio.playbackRate);
+  }
+
   function toggleMute() {
     if (!audioEl) return;
     audioEl.muted = !audioEl.muted;
@@ -465,18 +474,30 @@
     );
   }
 
-  function jumpToQueuedTrack(orderIndex: number) {
+  /** Plays a queued entry: a chapter of the file playing seeks; anything else loads its file. */
+  function jumpToQueuedEntry(entry: AudioQueueEntry) {
     const skippedTrack = activeTrack;
-    if (orderIndex === playback.position) return;
+    if (entry.orderIndex === playback.position) {
+      if (entry.chapter) handleSeek(entry.chapter.startSeconds);
+      return;
+    }
     saveMappedProgress({ completed: false });
-    playback.jumpTo(orderIndex);
-    if (playback.position !== orderIndex) return;
+    playback.jumpTo(entry.orderIndex);
+    if (playback.position !== entry.orderIndex) return;
     recordCurrentTrackSkip(skippedTrack);
     resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
+    // The source effect loads the new file at the store's position.
+    if (entry.chapter) playback.currentTime = entry.chapter.startSeconds;
     window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
   }
 
   function handleNext() {
+    // A later chapter of the same file is a seek; the file keeps playing without reloading.
+    const nextChapter = playback.nextChapter;
+    if (nextChapter) {
+      handleSeek(nextChapter.startSeconds);
+      return;
+    }
     // The Next button advances even in repeat-one; the play position effect loads the new track.
     const skippedTrack = activeTrack;
     saveMappedProgress({ completed: false });
@@ -488,6 +509,11 @@
   }
 
   function handlePrev() {
+    const chapterStart = audioEl ? playback.previousChapterStart(audioEl.currentTime) : null;
+    if (chapterStart !== null) {
+      handleSeek(chapterStart);
+      return;
+    }
     saveMappedProgress({ completed: false });
     if (audioEl && audioEl.currentTime > 3) {
       resetPlaybackPosition(duration);
@@ -496,13 +522,18 @@
     }
     if (playback.prev()) {
       resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
+      // Stepping back into a chaptered file starts its last chapter, like the previous track.
+      playback.currentTime = playback.steppingBackStart(playback.currentTrack);
       window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
     }
   }
 
   function handleTrackEnd() {
     if (playback.repeat === MUSIC_PLAYER_REPEAT_MODE.one) {
-      resetPlaybackPosition(duration);
+      // A file that ended inside its last chapter replays that chapter, not the whole file.
+      const chapterStart = audioEl ? playback.repeatedChapterStart(audioEl.currentTime) : null;
+      if (chapterStart !== null && audioEl) audioEl.currentTime = playback.currentTime = chapterStart;
+      else resetPlaybackPosition(duration);
       requestPlay();
       return;
     }
@@ -765,20 +796,21 @@
     tabCoordinator = coordinator;
 
     const handleTimeUpdate = () => {
+      const replayFrom = audio.paused || timelineDraggingRef ? null : playback.repeatedChapterStart(audio.currentTime);
+      if (replayFrom !== null) audio.currentTime = replayFrom;
       if (!timelineDraggingRef) playback.currentTime = audio.currentTime;
       // Only playback advances the listening checkpoint. Loading or restoring a paused player seeks
       // to its saved spot and fires timeupdate; saving then would overwrite newer progress recorded
       // on another device. Seeks and pauses save explicitly.
       if (!audio.paused) saveMappedProgress({ completed: false, periodic: true });
-      setMediaSessionPosition(audio.duration, audio.currentTime, audio.playbackRate);
+      publishMediaSessionPosition(audio);
     };
     const handleDurationChange = () => {
       if (Number.isFinite(audio.duration)) {
         playback.duration = audio.duration;
-        const track = activeTrack;
       }
       applyPendingInitialSeek(audio);
-      setMediaSessionPosition(audio.duration, audio.currentTime, audio.playbackRate);
+      publishMediaSessionPosition(audio);
       resumePendingAutoplay();
     };
     const handlePlay = () => {
@@ -870,7 +902,8 @@
       pause: () => pauseAudio(AUDIO_PLAYBACK_PAUSE_SOURCE.mediaSession),
       previoustrack: handlePrev,
       nexttrack: handleNext,
-      seekto: handleSeek,
+      // The OS scrubber shows the entry playing, so its positions are entry offsets.
+      seekto: (time) => handleSeek(playback.entryStart + Math.max(0, time)),
       stop: dismiss,
     });
 
@@ -1059,7 +1092,7 @@
 
     <span class="shrink-0 font-mono tabular-nums text-[0.65rem] text-text-disabled">
       {#if activeTrack}
-        {formatDuration(currentTime) ?? "0:00"} / {formatDuration(duration) ?? "0:00"}
+        {formatDuration(playback.entryTime) ?? "0:00"} / {formatDuration(entryDuration) ?? "0:00"}
       {:else}
         --:--
       {/if}
@@ -1077,26 +1110,26 @@
   </div>
 
   <!-- Progress scrubber -->
-  {#if activeTrack && duration > 0}
+  {#if activeTrack && entryDuration > 0}
     <div class="mb-1 px-3">
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="video-progress-track group/track overflow-hidden"
         data-dragging={timelineDragging}
         onpointerdown={(event) => {
-          if (duration <= 0) return;
+          if (entryDuration <= 0) return;
           timelineDraggingRef = true;
           timelineDragging = true;
           (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
           const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
           const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-          handleSeek(nextPercent * duration);
+          handleSeek(playback.entryStart + nextPercent * entryDuration);
         }}
         onpointermove={(event) => {
-          if (!timelineDraggingRef || duration <= 0) return;
+          if (!timelineDraggingRef || entryDuration <= 0) return;
           const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
           const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-          handleSeek(nextPercent * duration);
+          handleSeek(playback.entryStart + nextPercent * entryDuration);
         }}
         onpointerup={(event) => {
           (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
@@ -1115,7 +1148,7 @@
   {/if}
 
   <!-- Waveform (only when data available) -->
-  {#if activeTrack && ctx?.supportsPlaybackRate !== true && waveformData && duration > 0}
+  {#if activeTrack && ctx?.supportsPlaybackRate !== true && !playback.currentChapter && waveformData && duration > 0}
     <div class="waveform-shell overflow-hidden border-t">
       <AudioWaveformFilmstrip
         peaks={waveformData}
@@ -1217,7 +1250,7 @@
         <Popover.Trigger aria-label="Queue" title="Queue" class={cn(buttonVariants({ variant: "ghost", size: "icon" }), queueOpen && "bg-accent text-accent-foreground")}>
           <ListMusic class="h-3.5 w-3.5" />
         </Popover.Trigger>
-        <PlaybackQueueFlyout onClose={() => (queueOpen = false)} onJumpTo={jumpToQueuedTrack} />
+        <PlaybackQueueFlyout onClose={() => (queueOpen = false)} onJumpTo={jumpToQueuedEntry} />
       </Popover.Root>
     </div>
   </div>

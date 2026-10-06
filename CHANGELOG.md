@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Audiobook files with embedded chapters, such as M4B, play chapter by chapter, like a book with one file per chapter. Next and Previous move between chapters; the timeline, elapsed time, and lock-screen controls cover the current chapter; Up Next lists the remaining chapters; and repeat-one repeats the current chapter. Listening progress and resume positions work as before.
+
 - Plugins can provide metadata, discovery, acquisition, download, and external-library capabilities independently. Connections support multiple instances of a plugin with separate credentials, health checks, and packaged provider logos, and open in focused editors that explain their supported features and separate API connectivity from linked library folders. Enabled connections test automatically after saving, a failed test keeps the saved configuration, and Request and connection pages offer only the search, request, library, and import actions a connection supports for each media type.
 
 - Saved metadata-plugin and OpenSubtitles credentials are encrypted with persistent application keys. Each Connection passes a plugin only the credentials its current version declares; retired encrypted fields stay recoverable and cannot block a run when their old values are unreadable.

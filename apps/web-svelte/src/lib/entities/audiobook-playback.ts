@@ -1,5 +1,5 @@
-import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
-import type { EntityCard } from "$lib/api/generated/model";
+import type { AudioTrackChapter, AudioTrackListItemDto } from "$lib/entities/media-view-models";
+import type { BookAlignmentResponse, EntityCard } from "$lib/api/generated/model";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import { entityThumbnailToTrackItem } from "$lib/entities/audio-track-items";
 import { orderedBookChildren } from "$lib/entities/book-entity-reader";
@@ -29,6 +29,40 @@ export function audiobookTrackItems(
     .map((thumbnail) =>
       entityThumbnailToTrackItem(thumbnail, book.id, { libraryId: book.id }),
     );
+}
+
+function finiteSeconds(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Attaches each part's embedded chapters from the server alignment, whose audio windows are the
+ * chapters the shared player steps through. Parts without embedded chapters play whole.
+ */
+export function withAudiobookChapters(
+  tracks: readonly AudioTrackListItemDto[],
+  alignment: Pick<BookAlignmentResponse, "rows"> | null | undefined,
+): AudioTrackListItemDto[] {
+  const chaptersByTrack = new Map<string, AudioTrackChapter[]>();
+  for (const row of alignment?.rows ?? []) {
+    const audio = row.audio;
+    const startSeconds = finiteSeconds(audio?.startSeconds);
+    if (!audio?.markerId || startSeconds === null) continue;
+    const chapters = chaptersByTrack.get(audio.trackEntityId) ?? [];
+    chapters.push({
+      markerId: audio.markerId,
+      title: audio.title,
+      startSeconds,
+      endSeconds: finiteSeconds(audio.endSeconds),
+    });
+    chaptersByTrack.set(audio.trackEntityId, chapters);
+  }
+  return tracks.map((track) => {
+    const chapters = chaptersByTrack.get(track.id);
+    return chapters ? { ...track, chapters } : track;
+  });
 }
 
 /** Total known runtime, including browser-learned durations for parts awaiting a probe. */

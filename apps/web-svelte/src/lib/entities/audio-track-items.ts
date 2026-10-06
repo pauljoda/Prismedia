@@ -1,8 +1,13 @@
-import type { AudioPlaybackItem, EntityCard, EntityThumbnail } from "$lib/api/generated/model";
+import type {
+  AudioPlaybackChapter,
+  AudioPlaybackItem,
+  EntityCard,
+  EntityThumbnail,
+} from "$lib/api/generated/model";
 import { getCapability, getEmbeddedAudioMetadataCapability } from "$lib/api/capabilities";
 import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/entities/entity-codes";
-import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
+import type { AudioTrackChapter, AudioTrackListItemDto } from "$lib/entities/media-view-models";
 
 export interface EntityThumbnailTrackItemOptions {
   sectionLabel?: string | null;
@@ -28,6 +33,20 @@ function toNumber(value: number | string | null | undefined): number | null {
   if (value == null) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function trackChapters(chapters: readonly AudioPlaybackChapter[] | undefined): AudioTrackChapter[] {
+  return (chapters ?? []).flatMap((chapter) => {
+    const startSeconds = toNumber(chapter.startSeconds);
+    return startSeconds === null
+      ? []
+      : [{
+          markerId: chapter.markerId,
+          title: chapter.title,
+          startSeconds,
+          endSeconds: toNumber(chapter.endSeconds),
+        }];
+  });
 }
 
 /** Builds the shared player view model from its exact compact server projection. */
@@ -63,6 +82,7 @@ export function audioPlaybackItemToTrackItem(item: AudioPlaybackItem): AudioTrac
     accessCount: toNumber(item.accessCount) ?? 0,
     lastActiveAt: item.lastActiveAt,
     createdAt: item.createdAt,
+    chapters: trackChapters(item.chapters),
   };
 }
 

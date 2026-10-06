@@ -296,7 +296,7 @@
 {#snippet combinedAudioControls()}
   <div class="combined-audio-controls" aria-label="Companion audiobook controls">
     <Headphones class="h-3.5 w-3.5 shrink-0" />
-    <span class="combined-track-title">{playback.currentTrack?.title ?? "Audiobook"}</span>
+    <span class="combined-track-title">{playback.entryTitle ?? "Audiobook"}</span>
     <Button
       variant="ghost"
       size="icon"

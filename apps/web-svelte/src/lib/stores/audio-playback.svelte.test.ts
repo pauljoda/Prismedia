@@ -19,6 +19,25 @@ function tracks(count: number): AudioTrackListItemDto[] {
   }) as unknown as AudioTrackListItemDto);
 }
 
+/** One 600-second file with chapters at 0, 200 and 450 seconds (declared ends leave small gaps). */
+function chapteredFile(id: string): AudioTrackListItemDto {
+  return {
+    id,
+    title: `${id} file`,
+    duration: 600,
+    embeddedArtist: null,
+    embeddedAlbum: null,
+    waveformPath: null,
+    chapters: [
+      { markerId: `${id}-c3`, title: "Three", startSeconds: 450, endSeconds: null },
+      { markerId: `${id}-c1`, title: "One", startSeconds: 2, endSeconds: 195 },
+      { markerId: `${id}-c2`, title: "Two", startSeconds: 200, endSeconds: 440 },
+    ],
+  } as unknown as AudioTrackListItemDto;
+}
+
+const audiobook = { playbackOwnerEntityId: "book-1", preservesQueueOrder: true, supportsPlaybackRate: true };
+
 const ids = (store: AudioPlaybackStore) => store.order.map((i) => store.queue[i]!.id);
 const upNextIds = (store: AudioPlaybackStore) => store.upNext.map((t) => t.id);
 
@@ -240,6 +259,64 @@ describe("AudioPlaybackStore", () => {
 
     expect(store.currentTrack?.id).toBe("t2");
     expect(store.currentTime).toBe(37);
+  });
+
+  it("presents an ordered queue's embedded chapters as contiguous entries of their file", () => {
+    const store = new AudioPlaybackStore();
+    store.play([chapteredFile("a"), chapteredFile("b")], "a", audiobook, { startSeconds: 197 });
+
+    // The gap after a declared end belongs to the chapter before it; the first chapter starts the file.
+    expect(store.currentChapter?.title).toBe("One");
+    expect(store.entryStart).toBe(0);
+    expect(store.entryDuration).toBe(200);
+    expect(store.entryTime).toBe(197);
+    expect(store.nextChapter?.title).toBe("Two");
+    expect(store.previousChapter).toBeNull();
+
+    store.currentTime = 500;
+    expect(store.entryTitle).toBe("Three");
+    expect(store.entryTime).toBe(50);
+    expect(store.entryDuration).toBe(150);
+    expect(store.nextChapter).toBeNull();
+    expect(store.hasNext).toBe(true);
+    expect(store.upNextEntries.map((entry) => `${entry.track.id}:${entry.chapter?.title}`))
+      .toEqual(["b:One", "b:Two", "b:Three"]);
+
+    store.currentTime = 250;
+    expect(store.upNextEntries.map((entry) => `${entry.track.id}:${entry.chapter?.title}`))
+      .toEqual(["a:Three", "b:One", "b:Two", "b:Three"]);
+    expect(store.steppingBackStart(store.queue[1])).toBe(450);
+  });
+
+  it("decides where Previous and repeat-one land inside a chaptered file", () => {
+    const store = new AudioPlaybackStore();
+    store.play([chapteredFile("a"), chapteredFile("b")], "b", audiobook, { startSeconds: 260 });
+
+    // Past the restart threshold the chapter restarts; inside it Previous steps back a chapter.
+    expect(store.previousChapterStart(260)).toBe(200);
+    expect(store.previousChapterStart(202)).toBe(0);
+    // From the first chapter, Previous leaves the file.
+    expect(store.previousChapterStart(1)).toBeNull();
+
+    expect(store.repeatedChapterStart(450)).toBeNull();
+    store.repeat = MUSIC_PLAYER_REPEAT_MODE.one;
+    expect(store.repeatedChapterStart(449)).toBeNull();
+    expect(store.repeatedChapterStart(450)).toBe(200);
+  });
+
+  it("keeps a single-chapter file and every music queue playing whole", () => {
+    const store = new AudioPlaybackStore();
+    store.play([chapteredFile("a")], "a", null, { startSeconds: 300 });
+
+    expect(store.currentChapter).toBeNull();
+    expect(store.entryTitle).toBe("a file");
+    expect(store.entryDuration).toBe(600);
+    expect(store.upNextEntries).toEqual([]);
+
+    const single = { ...chapteredFile("s"), chapters: [chapteredFile("s").chapters![0]!] };
+    store.play([single], "s", audiobook);
+    expect(store.currentChapter).toBeNull();
+    expect(store.steppingBackStart(single)).toBe(0);
   });
 
   it("clears the queue without resetting browser audio output preferences", () => {
