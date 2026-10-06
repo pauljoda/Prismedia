@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media.Books;
 
 namespace Prismedia.Infrastructure.Entities;
 
@@ -67,10 +68,60 @@ public sealed partial class EfEntityReadService {
                 userState == null ? null : userState.RatingValue,
                 userState == null ? 0 : userState.AccessCount,
                 userState == null ? null : userState.LastActiveAt,
-                entity.CreatedAt))
+                entity.CreatedAt,
+                Array.Empty<AudioPlaybackChapter>()))
             .ToArrayAsync(cancellationToken);
 
+        var chapters = await LoadEmbeddedChaptersAsync(rows, cancellationToken);
         var byId = rows.ToDictionary(item => item.Id);
-        return ids.Where(byId.ContainsKey).Select(id => byId[id]).ToArray();
+        return ids
+            .Where(byId.ContainsKey)
+            .Select(id => chapters.TryGetValue(id, out var itemChapters)
+                ? byId[id] with { Chapters = itemChapters }
+                : byId[id])
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Embedded chapters of the given items, windowed by the same rule the audiobook alignment uses.
+    /// Only source-owned markers imported from the container count; user timeline markers never split
+    /// an item.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<AudioPlaybackChapter>>> LoadEmbeddedChaptersAsync(
+        IReadOnlyList<AudioPlaybackItem> items,
+        CancellationToken cancellationToken) {
+        var itemIds = items.Select(item => item.Id).ToArray();
+        var markers = (await _db.EntityMarkers.AsNoTracking()
+                .Where(marker => itemIds.Contains(marker.EntityId) && marker.SourceIndex != null)
+                .Select(marker => new {
+                    marker.EntityId,
+                    marker.Id,
+                    marker.Title,
+                    marker.Seconds,
+                    marker.EndSeconds,
+                    marker.Untitled
+                })
+                .ToArrayAsync(cancellationToken))
+            .ToLookup(
+                marker => marker.EntityId,
+                marker => new SourceChapterMarker(marker.Id, marker.Title, marker.Seconds, marker.EndSeconds, marker.Untitled));
+
+        return items
+            .Where(item => markers.Contains(item.Id))
+            .ToDictionary(
+                item => item.Id,
+                IReadOnlyList<AudioPlaybackChapter> (item) => new AudioTrackSpan(
+                        item.Id,
+                        item.Title,
+                        item.DurationSeconds,
+                        markers[item.Id].ToArray())
+                    .ChapterWindows()
+                    .Where(window => window.MarkerId is not null)
+                    .Select(window => new AudioPlaybackChapter(
+                        window.MarkerId!.Value,
+                        window.Title,
+                        window.StartSeconds,
+                        window.EndSeconds))
+                    .ToArray());
     }
 }

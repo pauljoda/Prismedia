@@ -491,7 +491,8 @@ public sealed class MusicPlayerStateServiceTests {
                         null,
                         0,
                         null,
-                        DateTimeOffset.UnixEpoch);
+                        DateTimeOffset.UnixEpoch,
+                        []);
                 })
                 .ToArray();
             return Task.FromResult<IReadOnlyList<AudioPlaybackItem>>(items);

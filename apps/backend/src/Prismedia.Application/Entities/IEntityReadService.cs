@@ -206,7 +206,8 @@ public interface IEntityReadService {
                 rating?.Value,
                 consumption?.AccessCount ?? 0,
                 consumption?.LastActiveAt,
-                DateTimeOffset.MinValue));
+                DateTimeOffset.MinValue,
+                []));
         }
 
         return items;

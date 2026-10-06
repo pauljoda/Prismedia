@@ -56,6 +56,10 @@ public sealed record PlaybackProgressMapping(
 /// <param name="AccessCount">Current user's access count.</param>
 /// <param name="LastActiveAt">Current user's latest activity timestamp.</param>
 /// <param name="CreatedAt">Library creation timestamp.</param>
+/// <param name="Chapters">
+/// Chapters embedded in the source file, in playback order; empty when the file declares none. Each
+/// chapter is a window of this item's physical timeline, so progress stays the item plus its offset.
+/// </param>
 public sealed record AudioPlaybackItem(
     Guid Id,
     string Title,
@@ -77,7 +81,25 @@ public sealed record AudioPlaybackItem(
     int? Rating,
     int AccessCount,
     DateTimeOffset? LastActiveAt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<AudioPlaybackChapter> Chapters);
+
+/// <summary>
+/// One chapter embedded in a shared-player queue item's source file. Queues whose order carries
+/// meaning present each chapter as its own entry over the item's physical timeline.
+/// </summary>
+/// <param name="MarkerId">Persisted embedded chapter marker.</param>
+/// <param name="Title">Chapter label; a "Chapter N" placeholder when the container left it untitled.</param>
+/// <param name="StartSeconds">Chapter start inside the item.</param>
+/// <param name="EndSeconds">
+/// Chapter end inside the item: the declared end, else the next chapter's start or the item's
+/// duration; null only for a final chapter of an item whose duration is unknown.
+/// </param>
+public sealed record AudioPlaybackChapter(
+    Guid MarkerId,
+    string Title,
+    double StartSeconds,
+    double? EndSeconds);
 
 /// <summary>
 /// Context labels and artwork fallbacks used by the global music player.

@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { AudioPlaybackChapter } from './audioPlaybackChapter';
 
 export interface AudioPlaybackItem {
   id: string;
@@ -59,4 +60,5 @@ export interface AudioPlaybackItem {
   /** @nullable */
   lastActiveAt: string | null;
   createdAt: string;
+  chapters: AudioPlaybackChapter[];
 }

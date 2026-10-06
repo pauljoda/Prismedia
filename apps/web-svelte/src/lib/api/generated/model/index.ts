@@ -53,6 +53,7 @@ export * from './applyIdentifyQueueItemRequestSelectedImages';
 export * from './attachExistingExternalLibraryMountRequest';
 export * from './audiobookStructure';
 export * from './audioChapterWindow';
+export * from './audioPlaybackChapter';
 export * from './audioPlaybackDiagnosticEvent';
 export * from './audioPlaybackDiagnosticRequest';
 export * from './audioPlaybackItem';

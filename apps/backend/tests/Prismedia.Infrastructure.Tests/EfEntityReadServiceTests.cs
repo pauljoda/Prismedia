@@ -1059,6 +1059,37 @@ public sealed class EfEntityReadServiceTests {
             LastActiveAt = now,
             UpdatedAt = now
         });
+        var openingId = Guid.NewGuid();
+        var closingId = Guid.NewGuid();
+        db.EntityMarkers.AddRange(
+            new EntityMarkerRow {
+                Id = closingId,
+                EntityId = firstId,
+                Title = "Closing",
+                Seconds = 1_800,
+                SourceIndex = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityMarkerRow {
+                Id = openingId,
+                EntityId = firstId,
+                Title = "Opening",
+                Seconds = 0,
+                EndSeconds = 1_790,
+                SourceIndex = 0,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            // A user timeline marker never splits the item into chapters.
+            new EntityMarkerRow {
+                Id = Guid.NewGuid(),
+                EntityId = firstId,
+                Title = "Favorite line",
+                Seconds = 900,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
         await db.SaveChangesAsync();
         var repository = new EfEntityRepository(
             db,
@@ -1087,6 +1118,12 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal("/assets/audio/part-one.json", first.WaveformPath);
         Assert.Equal(4, first.Rating);
         Assert.Equal(3, first.AccessCount);
+        Assert.Equal(
+            new[] {
+                new AudioPlaybackChapter(openingId, "Opening", 0, 1_790),
+                new AudioPlaybackChapter(closingId, "Closing", 1_800, 3_723.75)
+            },
+            first.Chapters);
     }
 
     [Fact]
