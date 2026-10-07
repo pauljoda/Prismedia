@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Books;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
@@ -23,19 +24,23 @@ public sealed class MusicPlayerStateService {
     private readonly IEntityReadService _entities;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<MusicPlayerStateService>? _logger;
+    private readonly IWorkAlignmentReader? _alignments;
 
     /// <summary>
-    /// Creates the service over browser-session persistence and entity read ports.
+    /// Creates the service over browser-session persistence and entity read ports, and the work
+    /// alignment port that titles a restored audiobook queue.
     /// </summary>
     public MusicPlayerStateService(
         IBrowserSessionPersistence sessions,
         IEntityReadService entities,
         TimeProvider? timeProvider = null,
-        ILogger<MusicPlayerStateService>? logger = null) {
+        ILogger<MusicPlayerStateService>? logger = null,
+        IWorkAlignmentReader? alignments = null) {
         _sessions = sessions;
         _entities = entities;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
+        _alignments = alignments;
     }
 
     /// <summary>
@@ -178,6 +183,7 @@ public sealed class MusicPlayerStateService {
             return Empty(output);
         }
 
+        tracks = await WithListeningTitlesAsync(stored.Context, tracks, cancellationToken);
         var order = stored.Order
             .Where(oldToNewIndex.ContainsKey)
             .Select(index => oldToNewIndex[index])
@@ -207,6 +213,37 @@ public sealed class MusicPlayerStateService {
             output.Collapsed,
             DecodeOrDefault(output.CollapsedSide, MusicPlayerMiniSide.Left),
             stored.Context);
+    }
+
+    /// <summary>
+    /// An ordered queue owned by a work plays under the listening titles its alignment projects: each
+    /// embedded chapter, and each file that is a single window, takes the title its window plays under,
+    /// else the owner's title.
+    /// </summary>
+    private async Task<List<AudioPlaybackItem>> WithListeningTitlesAsync(
+        MusicPlayerContext? context,
+        List<AudioPlaybackItem> tracks,
+        CancellationToken cancellationToken) {
+        if (_alignments is null ||
+            context is not { PreservesQueueOrder: true, PlaybackOwnerEntityId: { } ownerId } ||
+            await _alignments.LoadAsync(ownerId, cancellationToken) is not { } alignment) {
+            return tracks;
+        }
+
+        string? Title(Guid trackId, Guid? markerId) =>
+            alignment.ListeningTitle(trackId, markerId) ?? context.PlaybackOwnerTitle;
+
+        return tracks
+            .Select(item => {
+                var windows = alignment.Audio.Windows.Where(window => window.TrackEntityId == item.Id).ToArray();
+                return item with {
+                    Title = (windows.Length == 1 ? Title(item.Id, windows[0].MarkerId) : null) ?? item.Title,
+                    Chapters = item.Chapters
+                        .Select(chapter => chapter with { Title = Title(item.Id, chapter.MarkerId) ?? chapter.Title })
+                        .ToArray()
+                };
+            })
+            .ToList();
     }
 
     private StoredMusicPlayerOutput LoadOutput(IReadOnlyDictionary<string, string> settings) {

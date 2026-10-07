@@ -7,11 +7,46 @@ import {
   audiobookDuration,
   audiobookTrackItems,
   resolveAudiobookResume,
+  withAudiobookChapters,
 } from "./audiobook-playback";
 
 function part(id: string, duration: number | null): AudioTrackListItemDto {
   return { id, title: id, duration } as AudioTrackListItemDto;
 }
+
+describe("audiobook listening titles", () => {
+  const audioRow = (
+    trackEntityId: string,
+    markerId: string | null,
+    title: string,
+    startSeconds: number,
+    listeningTitle: string | null,
+  ) => ({ audio: { trackEntityId, markerId, title, startSeconds, endSeconds: null }, listeningTitle });
+
+  it("plays chapters and single-window parts under the alignment's listening titles", () => {
+    const alignment = {
+      rows: [
+        audioRow("chaptered", "m1", "004", 0, "Jon"),
+        audioRow("chaptered", "m2", "005", 60, "005"),
+        audioRow("whole", null, "006", 0, "Moira"),
+        // A server that predates listening titles still sends the mapped ebook chapter.
+        { ...audioRow("older", null, "007", 0, null), readable: { title: "Bran" } },
+      ],
+    } as unknown as Parameters<typeof withAudiobookChapters>[1];
+
+    const [chaptered, whole, untouched, older] = withAudiobookChapters(
+      [part("chaptered", 120), part("whole", 90), part("other", 30), part("older", 60)],
+      alignment,
+    );
+
+    expect(chaptered!.title).toBe("chaptered");
+    expect(chaptered!.chapters!.map((chapter) => chapter.title)).toEqual(["Jon", "005"]);
+    expect(whole!.title).toBe("Moira");
+    expect(whole!.chapters).toEqual([]);
+    expect(untouched!.title).toBe("other");
+    expect(older!.title).toBe("Bran");
+  });
+});
 
 describe("audiobook playback positions", () => {
   const parts = [part("part-1", 100), part("part-2", 80), part("part-3", 120)];

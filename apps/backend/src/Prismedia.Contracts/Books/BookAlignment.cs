@@ -48,13 +48,19 @@ public sealed record BookLinkProjection(
 /// <param name="Provenance">Whether a person (by hand or a reviewed in-order fill) or the matcher paired the row, for paired rows.</param>
 /// <param name="Readable">Readable chapter side, when present.</param>
 /// <param name="Audio">Audio chapter side, when present.</param>
+/// <param name="ListeningTitle">
+/// Title the shared player presents while the row's audio plays: the paired readable chapter's title,
+/// else the title the file declares (an embedded chapter title or its title tag), else the Book's
+/// title. Null for rows without audio.
+/// </param>
 public sealed record BookAlignmentRow(
     string RowId,
     int Order,
     AlignmentMatchState MatchState,
     BookChapterMappingOrigin? Provenance,
     ReadableChapterWindow? Readable,
-    AudioChapterWindow? Audio);
+    AudioChapterWindow? Audio,
+    string? ListeningTitle);
 
 /// <summary>
 /// Where the current user can resume a Book. Exact targets are the recorded positions; switch

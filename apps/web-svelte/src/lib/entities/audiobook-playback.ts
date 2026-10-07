@@ -37,31 +37,43 @@ function finiteSeconds(value: number | string | null | undefined): number | null
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** One audio window of a part, under the title the alignment says it plays under. */
+interface TitledAudioWindow {
+  markerId: string | null;
+  title: string;
+  startSeconds: number;
+  endSeconds: number | null;
+}
+
 /**
- * Attaches each part's embedded chapters from the server alignment, whose audio windows are the
- * chapters the shared player steps through. Parts without embedded chapters play whole.
+ * Applies the server alignment to a Book's parts: each embedded chapter, and each part that is a single
+ * window, takes the title the alignment says it plays under (the mapped ebook chapter's title, else the
+ * file's own title, else the Book's). Parts without embedded chapters play whole.
  */
 export function withAudiobookChapters(
   tracks: readonly AudioTrackListItemDto[],
   alignment: Pick<BookAlignmentResponse, "rows"> | null | undefined,
 ): AudioTrackListItemDto[] {
-  const chaptersByTrack = new Map<string, AudioTrackChapter[]>();
+  const windowsByTrack = new Map<string, TitledAudioWindow[]>();
   for (const row of alignment?.rows ?? []) {
     const audio = row.audio;
     const startSeconds = finiteSeconds(audio?.startSeconds);
-    if (!audio?.markerId || startSeconds === null) continue;
-    const chapters = chaptersByTrack.get(audio.trackEntityId) ?? [];
-    chapters.push({
-      markerId: audio.markerId,
-      title: audio.title,
+    if (!audio || startSeconds === null) continue;
+    const windows = windowsByTrack.get(audio.trackEntityId) ?? [];
+    windows.push({
+      markerId: audio.markerId ?? null,
+      title: row.listeningTitle ?? row.readable?.title ?? audio.title,
       startSeconds,
       endSeconds: finiteSeconds(audio.endSeconds),
     });
-    chaptersByTrack.set(audio.trackEntityId, chapters);
+    windowsByTrack.set(audio.trackEntityId, windows);
   }
   return tracks.map((track) => {
-    const chapters = chaptersByTrack.get(track.id);
-    return chapters ? { ...track, chapters } : track;
+    const windows = windowsByTrack.get(track.id);
+    if (!windows) return track;
+    const chapters = windows.flatMap(({ markerId, title, startSeconds, endSeconds }): AudioTrackChapter[] =>
+      markerId ? [{ markerId, title, startSeconds, endSeconds }] : []);
+    return { ...track, title: windows.length === 1 ? windows[0]!.title : track.title, chapters };
   });
 }
 

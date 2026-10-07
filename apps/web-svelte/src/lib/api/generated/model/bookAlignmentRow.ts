@@ -17,4 +17,6 @@ export interface BookAlignmentRow {
   provenance: null | BookChapterMappingOrigin;
   readable: null | ReadableChapterWindow;
   audio: null | AudioChapterWindow;
+  /** @nullable */
+  listeningTitle: string | null;
 }

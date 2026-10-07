@@ -229,6 +229,34 @@ public sealed class WorkAlignmentTests {
         Assert.False(audioOnly.KeepsProgressSeparate);
     }
 
+    [Fact]
+    public void ListeningTitlesPreferTheMappedChapterThenTheFilesOwnTitle() {
+        var chaptered = new AudioTrackSpan(
+            MarkedTrackId,
+            "Book",
+            1_800,
+            [
+                new SourceChapterMarker(ChapterOneMarkerId, "Track 01", 0, 600),
+                new SourceChapterMarker(ChapterTwoMarkerId, "Chapter 2", 600, 1_200, Untitled: true),
+                new SourceChapterMarker(InterludeMarkerId, "Interlude", 1_200, 1_800)
+            ]);
+        var tagged = new AudioTrackSpan(UnprobedTrackId, "Book - Part 2", 600, TitleTag: "Epilogue");
+        var alignment = new WorkAlignment(
+            BookId,
+            true,
+            [Chapter("Text/one.xhtml", "The Arrival", 0, 1)],
+            new AudiobookRendition([chaptered, tagged]),
+            [new ChapterPairing("Text/one.xhtml", MarkedTrackId, ChapterOneMarkerId, BookChapterMappingOrigin.Manual)]);
+
+        Assert.Equal("The Arrival", alignment.ListeningTitle(MarkedTrackId, ChapterOneMarkerId));
+        // An untitled chapter's placeholder is not a title, so the player falls back to the Book.
+        Assert.Null(alignment.ListeningTitle(MarkedTrackId, ChapterTwoMarkerId));
+        Assert.Equal("Interlude", alignment.ListeningTitle(MarkedTrackId, InterludeMarkerId));
+        Assert.Equal("Epilogue", alignment.ListeningTitle(UnprobedTrackId, null));
+        Assert.Null(new WorkAlignment(BookId, false, [], new AudiobookRendition([tagged with { TitleTag = null }]), [])
+            .ListeningTitle(UnprobedTrackId, null));
+    }
+
     [Theory]
     [InlineData(AudiobookStructure.Unstructured, new[] { "/b/Book.mp3" }, new double[] { 36_000 })]
     [InlineData(AudiobookStructure.Parts, new[] { "/b/Book - Part 01.mp3", "/b/Book - Part 02.mp3", "/b/Book - Part 03.mp3" }, new double[] { 3_600, 900, 60 })]

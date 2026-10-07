@@ -74,7 +74,10 @@ public sealed class BookAlignmentService {
                     row.MatchState,
                     row.Provenance,
                     row.Readable,
-                    row.Audio))
+                    row.Audio,
+                    row.Audio is { } audio
+                        ? alignment.ListeningTitle(audio.TrackEntityId, audio.MarkerId) ?? work.Title
+                        : null))
                 .ToArray(),
             alignment.Coverage,
             available.Length > 0 ? Resume(alignment, work.Progress) : null,

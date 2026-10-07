@@ -1,9 +1,11 @@
+using Prismedia.Application.Books;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Playback;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media.Books;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -175,6 +177,49 @@ public sealed class MusicPlayerStateServiceTests {
     }
 
     [Fact]
+    public async Task RestoredAudiobookQueuePlaysUnderTheBooksListeningTitles() {
+        var browserSessionId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        var mappedId = Guid.NewGuid();
+        var untitledId = Guid.NewGuid();
+        var alignment = new WorkAlignment(
+            bookId,
+            true,
+            [new ReadableChapterWindow("Text/jon.xhtml", "Jon", 0, "Text/jon.xhtml", null, 0, 0.5, null)],
+            new AudiobookRendition([
+                new AudioTrackSpan(mappedId, "004", 100, SourcePath: "/b/004.mp3", TitleTag: "004"),
+                new AudioTrackSpan(untitledId, "005", 100, SourcePath: "/b/005.mp3")
+            ]),
+            [new ChapterPairing("Text/jon.xhtml", mappedId, null, BookChapterMappingOrigin.Manual)]);
+        var settings = new InMemoryBrowserSessionPersistence();
+        var service = new MusicPlayerStateService(
+            settings,
+            new FakeEntityReadService(mappedId, untitledId),
+            alignments: new FixedWorkAlignmentReader(alignment));
+        var context = new MusicPlayerContext(
+            AlbumId: null,
+            AlbumTitle: null,
+            ArtistId: null,
+            ArtistName: null,
+            CoverUrl: null,
+            AlbumCoverUrls: null,
+            PlaybackOwnerEntityId: bookId,
+            PlaybackOwnerTitle: "Dune",
+            PlaybackOwnerEntityKind: EntityKind.Book,
+            PreservesQueueOrder: true,
+            SupportsPlaybackRate: true);
+
+        await service.SaveAsync(
+            browserSessionId,
+            Request(mappedId, 1) with { QueueTrackIds = [mappedId, untitledId], Order = [0, 1], Context = context },
+            CancellationToken.None);
+        var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
+
+        // The mapped ebook chapter titles its audio; an untitled file plays under the Book's title.
+        Assert.Equal(["Jon", "Dune"], loaded.Tracks.Select(track => track.Title));
+    }
+
+    [Fact]
     public async Task LegacyBookProgressMappingsAreUpgradedOnRestore() {
         var browserSessionId = Guid.NewGuid();
         var ownerId = Guid.NewGuid();
@@ -295,6 +340,11 @@ public sealed class MusicPlayerStateServiceTests {
             Collapsed: false,
             CollapsedSide: MusicPlayerMiniSide.Left,
             Context: null);
+
+    private sealed class FixedWorkAlignmentReader(WorkAlignment alignment) : IWorkAlignmentReader {
+        public Task<WorkAlignment?> LoadAsync(Guid workId, CancellationToken cancellationToken) =>
+            Task.FromResult(workId == alignment.WorkId ? alignment : null);
+    }
 
     private sealed class InMemoryBrowserSessionPersistence : IBrowserSessionPersistence {
         private readonly Dictionary<Guid, Dictionary<string, string>> _values = new();
