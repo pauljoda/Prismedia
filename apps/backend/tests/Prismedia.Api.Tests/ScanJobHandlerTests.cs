@@ -3986,12 +3986,6 @@ public sealed class ScanJobHandlerTests {
             Task.FromResult<IReadOnlyList<AutoIdentifyRootTarget>>(
                 AutoIdentifyRootTargets ?? entityIds.Distinct().Select(id => new AutoIdentifyRootTarget(id, "video", "video.mkv")).ToList());
 
-        public Task<IReadOnlyList<AutoIdentifyRootTarget>> ResolveAutoIdentifyRootsForLibraryRootAsync(
-            Guid libraryRootId,
-            IReadOnlyList<MediaCategory> scanCategories,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<AutoIdentifyRootTarget>>(AutoIdentifyRootTargets ?? []);
-
         public Task<bool> HasEntityTechnicalAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult(HasTechnical);
 

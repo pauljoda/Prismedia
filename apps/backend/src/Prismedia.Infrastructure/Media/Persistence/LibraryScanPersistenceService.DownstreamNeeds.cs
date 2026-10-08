@@ -346,50 +346,6 @@ public sealed partial class LibraryScanPersistenceService {
         return targets.Values.ToList();
     }
 
-    public async Task<IReadOnlyList<AutoIdentifyRootTarget>> ResolveAutoIdentifyRootsForLibraryRootAsync(
-        Guid libraryRootId,
-        IReadOnlyList<MediaCategory> scanCategories,
-        CancellationToken cancellationToken) {
-        if (scanCategories.Count == 0) return [];
-
-        var categories = scanCategories.ToHashSet();
-        var entityIds = new List<Guid>();
-
-        if (categories.Contains(MediaCategory.Video)) {
-            var playableVideoKindCodes = EntityKindRegistry.All
-                .OfType<IPlayableVideoKindDefinition>()
-                .Select(definition => definition.Kind.ToCode())
-                .ToArray();
-            entityIds.AddRange(await DirectRootedKindIdsAsync(
-                libraryRootId,
-                playableVideoKindCodes,
-                cancellationToken));
-        }
-
-        if (categories.Contains(MediaCategory.Image)) {
-            var galleryIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.Gallery, cancellationToken);
-            entityIds.AddRange(galleryIds);
-        }
-
-        if (categories.Contains(MediaCategory.Audio)) {
-            // Preserve the full-scan queue ordering: artists first, then albums. When an artist
-            // identifies successfully, later album jobs can use the saved artist external IDs as
-            // provider context.
-            var artistIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.MusicArtist, cancellationToken);
-            entityIds.AddRange(artistIds);
-
-            var albumIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.AudioLibrary, cancellationToken);
-            entityIds.AddRange(albumIds);
-        }
-
-        if (categories.Contains(MediaCategory.ComicArchive) || categories.Contains(MediaCategory.Book)) {
-            var bookIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.Book, cancellationToken);
-            entityIds.AddRange(bookIds);
-        }
-
-        return await ResolveAutoIdentifyRootsAsync(entityIds.Distinct().ToList(), cancellationToken);
-    }
-
     public async Task<IReadOnlyList<AutoIdentifyRootTarget>> ResolveAutoIdentifyRootsAsync(
         IReadOnlyList<Guid> entityIds,
         CancellationToken cancellationToken) =>
@@ -459,19 +415,6 @@ public sealed partial class LibraryScanPersistenceService {
             .Where(root => root.LibraryRootId == libraryRootId)
             .Join(
                 _db.Entities.AsNoTracking().Where(entity => entity.KindCode == kind.ToCode()),
-                root => root.EntityId,
-                entity => entity.Id,
-                (root, entity) => entity.Id)
-            .ToListAsync(cancellationToken);
-
-    private Task<List<Guid>> DirectRootedKindIdsAsync(
-        Guid libraryRootId,
-        IReadOnlyCollection<string> kindCodes,
-        CancellationToken cancellationToken) =>
-        _db.EntityLibraryRoots.AsNoTracking()
-            .Where(root => root.LibraryRootId == libraryRootId)
-            .Join(
-                _db.Entities.AsNoTracking().Where(entity => kindCodes.Contains(entity.KindCode)),
                 root => root.EntityId,
                 entity => entity.Id,
                 (root, entity) => entity.Id)

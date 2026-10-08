@@ -440,20 +440,6 @@ public interface IDownstreamNeedsPersistence {
         IReadOnlyList<Guid> entityIds,
         CancellationToken cancellationToken) =>
         ResolveAutoIdentifyRootsAsync(entityIds, cancellationToken);
-
-    /// <summary>
-    /// Resolves auto-identify roots already persisted under a library root for a no-file-change scan.
-    /// This lets scans enqueue metadata work that was previously skipped or enabled after the first
-    /// scan without re-running the full media upsert pipeline.
-    /// </summary>
-    /// <param name="libraryRootId">Library root whose existing media should be considered.</param>
-    /// <param name="scanCategories">Media categories covered by the current scan handler.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task<IReadOnlyList<AutoIdentifyRootTarget>> ResolveAutoIdentifyRootsForLibraryRootAsync(
-        Guid libraryRootId,
-        IReadOnlyList<MediaCategory> scanCategories,
-        CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<AutoIdentifyRootTarget>>([]);
 }
 
 /// <summary>
