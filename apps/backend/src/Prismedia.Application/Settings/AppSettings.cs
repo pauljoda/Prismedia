@@ -149,7 +149,8 @@ public static class AppSettings {
             "installed plugin and can noticeably increase library scan times.", false, 10);
         public static readonly SettingDefinition<IReadOnlyList<string>> Providers = List(
             Group, "autoIdentify.providers", "Enabled plugins",
-            "Plugins tried in order during auto identify. The first one that returns a confident match wins.",
+            "Plugins tried in order during auto identify. The first one that returns a confident match wins. " +
+            "With none selected, each kind uses its default metadata provider.",
             [], 20);
         public static readonly SettingDefinition<IReadOnlyList<string>> EntityKinds = List(
             Group, "autoIdentify.entityKinds", "Identify these kinds",

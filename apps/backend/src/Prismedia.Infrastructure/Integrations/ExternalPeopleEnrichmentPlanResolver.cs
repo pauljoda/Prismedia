@@ -148,10 +148,17 @@ internal sealed class ExternalPeopleEnrichmentPlanResolver(
             IdentifyAction.LookupId,
             identities,
             cancellationToken);
-        var available = (await providers.ListProvidersAsync(kind.ToCode(), cancellationToken))
+        var compatible = await providers.ListProvidersAsync(kind.ToCode(), cancellationToken);
+        var available = compatible
             .Where(provider => provider is { Installed: true, Enabled: true, MissingAuthKeys.Count: 0 })
             .ToDictionary(provider => provider.Id, StringComparer.OrdinalIgnoreCase);
         var providerIds = available.Keys.ToArray();
+        var selectedProviders = AutoIdentifyProviderSelection.Select(
+            configuredProviders,
+            compatible,
+            kind.ToCode(),
+            await settings.GetIdentifyProviderSettingsAsync(cancellationToken),
+            provider => available.ContainsKey(provider.Id));
         var configurationRevisions = await db.ProviderConfigs.AsNoTracking()
             .Where(config => providerIds.Contains(config.ProviderCode))
             .ToDictionaryAsync(
@@ -160,7 +167,7 @@ internal sealed class ExternalPeopleEnrichmentPlanResolver(
                 StringComparer.OrdinalIgnoreCase,
                 cancellationToken);
         var result = new List<(PluginIdentityRoute, PluginProvider, long)>();
-        foreach (var providerId in configuredProviders.Distinct(StringComparer.OrdinalIgnoreCase)) {
+        foreach (var providerId in selectedProviders) {
             if (!available.TryGetValue(providerId, out var provider)
                 || !configurationRevisions.TryGetValue(providerId, out var configurationRevision)) {
                 continue;

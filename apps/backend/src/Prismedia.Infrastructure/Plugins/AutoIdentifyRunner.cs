@@ -39,10 +39,6 @@ public sealed class AutoIdentifyRunner(
             return new AutoIdentifyResult(false, SkipReason: "auto identify disabled");
         }
 
-        if (config.Providers.Count == 0) {
-            return new AutoIdentifyResult(false, SkipReason: "no providers configured");
-        }
-
         var entity = await db.Entities
             .FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
         if (entity is null) {
@@ -87,17 +83,17 @@ public sealed class AutoIdentifyRunner(
         }
 
         // Restrict to user-selected providers that are installed, enabled, and capable of this kind,
-        // preserving the user's configured priority order. Capability is checked against the entity's
-        // concrete kind code (e.g. audio-library), not the settings selector (e.g. audio) — provider
-        // manifests declare concrete kinds, and the identify call itself gates on the concrete kind.
-        var capable = (await identify.ListProvidersAsync(entity.KindCode, cancellationToken))
-            .Where(provider => provider.Installed && provider.Enabled)
-            .Select(provider => provider.Id)
-            .ToHashSet(StringComparer.Ordinal);
-        var providerIds = config.Providers
-            .Where(capable.Contains)
-            .ToArray();
-        if (providerIds.Length == 0) {
+        // preserving the user's configured priority order; with none selected, the kind's default
+        // metadata provider runs. Capability is checked against the entity's concrete kind code
+        // (e.g. audio-library), not the settings selector (e.g. audio) — provider manifests declare
+        // concrete kinds, and the identify call itself gates on the concrete kind.
+        var providerIds = AutoIdentifyProviderSelection.Select(
+            config.Providers,
+            await identify.ListProvidersAsync(entity.KindCode, cancellationToken),
+            entity.KindCode,
+            await settings.GetIdentifyProviderSettingsAsync(cancellationToken),
+            provider => provider.Installed && provider.Enabled);
+        if (providerIds.Count == 0) {
             return new AutoIdentifyResult(false, SkipReason: "no capable provider");
         }
 

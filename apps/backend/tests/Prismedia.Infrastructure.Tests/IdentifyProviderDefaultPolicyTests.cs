@@ -91,6 +91,32 @@ public sealed class IdentifyProviderDefaultPolicyTests {
         Assert.Equal("alpha", ordered[0].Id);
     }
 
+    [Fact]
+    public void AutoIdentifyWithNoSelectedPluginsUsesTheKindDefaultAndNeverAnImplicitNsfwProvider() {
+        var kind = EntityKind.Movie.ToCode();
+        var adult = Provider("adult", "Alpha", kind) with { IsNsfw = true };
+        var unauthenticated = Provider("keyless", "Bravo", kind) with { MissingAuthKeys = ["token"] };
+        var tmdb = Provider("tmdb", "TMDB", kind);
+        var other = Provider("other", "Zulu", kind);
+        var catalog = new[] { adult, unauthenticated, other, tmdb };
+        var noDefaults = new IdentifyProviderSettings(new Dictionary<string, string>());
+        var tmdbDefault = new IdentifyProviderSettings(new Dictionary<string, string> { [kind] = tmdb.Id });
+        var adultDefault = new IdentifyProviderSettings(new Dictionary<string, string> { [kind] = adult.Id });
+
+        string[] Select(IdentifyProviderSettings settings, params string[] configured) =>
+            AutoIdentifyProviderSelection.Select(
+                configured,
+                IdentifyProviderDefaultPolicy.Order(catalog, kind, settings),
+                kind,
+                settings,
+                provider => provider.Installed && provider.Enabled).ToArray();
+
+        Assert.Equal(["other"], Select(noDefaults));
+        Assert.Equal(["tmdb"], Select(tmdbDefault));
+        Assert.Equal(["adult"], Select(adultDefault));
+        Assert.Equal(["tmdb", "adult"], Select(tmdbDefault, "tmdb", "missing", "adult"));
+    }
+
     private static PluginProvider Provider(string id, string name, string entityKind) =>
         new(
             id,

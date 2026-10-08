@@ -339,6 +339,8 @@
             Enabled plugins
             {#if selectedProviders.length > 0}
               <span class="text-text-disabled">· tried in order</span>
+            {:else}
+              <span class="text-text-disabled">· none selected, using each kind's default</span>
             {/if}
           </div>
         </div>

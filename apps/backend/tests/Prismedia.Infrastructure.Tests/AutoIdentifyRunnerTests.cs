@@ -857,6 +857,29 @@ public sealed class AutoIdentifyRunnerTests {
     }
 
     [Fact]
+    public async Task UsesTheKindDefaultProviderWhenNoPluginsAreSelected() {
+        await using var db = CreateContext();
+        var entityId = await SeedVideoAsync(db, organized: false);
+        var settings = await ConfigureAsync(db, enabled: true, providers: [], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = {
+                ["tmdb"] = Proposal("tmdb", confidence: 0.95m, title: "The Matrix"),
+            },
+        };
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(entityId, CancellationToken.None);
+
+        Assert.True(result.Applied);
+        Assert.Equal("tmdb", result.Provider);
+    }
+
+    [Fact]
     public async Task SkipsWhenDisabled() {
         await using var db = CreateContext();
         var entityId = await SeedVideoAsync(db, organized: false);
