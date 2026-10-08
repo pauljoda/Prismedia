@@ -79,9 +79,12 @@ Queuing a batch adds every selected item to the review queue up front and return
 Auto Identify runs scanned media through your chosen plugins **during library scans** and applies the first match that meets a confidence threshold (90% by default) or is an exact match — applying the full proposal exactly like a manual identify, including children, relationships, and artwork, then marking the item organized.
 
 - Off by default; opt in from **Settings**.
-- Pick which installed plugins to trust, in what order, and which kinds to cover (video, galleries, images, audio, books).
+- Pick which installed plugins to trust, in what order, and which kinds to cover (video, galleries, images, audio, books). With no plugins selected, each kind uses its **default metadata provider**, the one Identify opens with; an NSFW provider only runs this way when it is that kind's chosen default.
 - Only touches **un-organized** items by default; an option re-identifies already-organized ones.
 - Each watched root has its own toggle, so you can exclude specific libraries.
+- Movies and series whose folder carries a provider ID tag, such as `{tmdb-949}`, are looked up by that ID instead of a title search. See [Provider ID tags](../library/videos.md#provider-id-tags).
+
+Auto Identify runs for items a scan adds or changes. To apply it to a library that is already scanned, for example after turning it on or changing its plugins, open **Files**, select the library's root folder, and choose **Rescan**.
 
 Identifying everything automatically makes scans take longer; enable it deliberately.
 

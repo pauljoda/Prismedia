@@ -85,6 +85,24 @@ The separator before the token can be a space, `.`, `_`, `-`, `(`, or `[`. Other
 
 A sub-folder under the root that holds **two or more** videos with no season folders and no episode tokens becomes a series named after the folder, with each video an episode ordered alphabetically by filename. (A single video in such a folder is a movie instead.)
 
+## Provider ID tags
+
+A provider ID in a movie folder name, a movie file name, or a series folder name tells
+[Identify](../using/identify.md) exactly which title it is, so it looks the title up by ID instead of
+searching by name. Radarr, Sonarr, Plex, Jellyfin, and Emby naming styles are all read:
+
+```text
+Movies/Heat (1995) {tmdb-949}/Heat (1995) - Bluray-1080p.mkv
+Movies/Heat (1995) [tmdbid-949]/Heat (1995).mkv
+TV/The Wire (2002) {tvdb-79126}/Season 01/The Wire - S01E01.mkv
+TV/The Wire (2002) [tmdbid=1438]/Season 01/The Wire - S01E01.mkv
+```
+
+`tmdb`, `tvdb`, and `imdb` tags are recognized, in braces or brackets, with an optional `id` suffix
+and a `-` or `=` separator. The TMDB plugin uses `tmdb` tags; TheTVDB and IMDb tags are passed to
+plugins that support them. Tags on season folders and episode files are not read, an ID already
+saved on the item wins over a tag, and a folder and file that tag different values are ignored.
+
 ## Sidecar metadata
 
 Beside a video, the scanner imports metadata from:
@@ -128,4 +146,5 @@ imports do not yet move subtitle companion files from a download into the librar
 
 - Put each movie in its **own folder** under the root so it lands in Movies; loose files at the root stay in Videos.
 - For TV, prefer `Series/Season NN/SxxEyy.ext` for unambiguous results.
+- For libraries managed by Radarr or Sonarr, add `{tmdb-{TmdbId}}` to the folder format so each movie and series identifies by its TMDB ID.
 - If a show is misclassified, re-read the rules above, fix the layout, and rescan — classification is idempotent on file paths.

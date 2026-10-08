@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Movie and series folders, and movie file names, tagged with a provider ID in Radarr, Sonarr, Plex, Jellyfin, or Emby style, such as `{tmdb-603}`, `[tmdbid-603]`, or `{tvdb-81189}`, identify by that exact ID instead of a title search, in Auto Identify and in Identify. TMDB reads `tmdb` tags; TheTVDB and IMDb tags go to plugins that support them. IDs already saved on an item take precedence, and contradictory tags are ignored.
+
 - Audiobook files with embedded chapters, such as M4B, play chapter by chapter, like a book with one file per chapter. Next and Previous move between chapters; the timeline, elapsed time, and lock-screen controls cover the current chapter; Up Next lists the remaining chapters; and repeat-one repeats the current chapter. Each chapter plays under its mapped ebook chapter's title, falling back to the title in the audio file and then the Book's title. Listening progress and resume positions work as before.
 
 - Plugins can provide metadata, discovery, acquisition, download, and external-library capabilities independently. Connections support multiple instances of a plugin with separate credentials, health checks, and packaged provider logos, and open in focused editors that explain their supported features and separate API connectivity from linked library folders. Enabled connections test automatically after saving, a failed test keeps the saved configuration, and Request and connection pages offer only the search, request, library, and import actions a connection supports for each media type.

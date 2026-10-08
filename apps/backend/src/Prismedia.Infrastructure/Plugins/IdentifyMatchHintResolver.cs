@@ -23,7 +23,8 @@ public sealed partial class IdentifyMatchHintResolver {
 
     /// <summary>
     /// Resolves provider IDs, URLs, title, and source file path for an entity.
-    /// Existing external IDs win over IDs parsed from URLs.
+    /// Existing external IDs win over IDs parsed from URLs, and both win over provider IDs tagged in
+    /// the entity's own folder or file names for kinds that read them.
     /// </summary>
     /// <param name="entityId">Entity to identify.</param>
     /// <param name="provider">Provider key, such as tmdb.</param>
@@ -33,13 +34,13 @@ public sealed partial class IdentifyMatchHintResolver {
         Guid entityId,
         string provider,
         CancellationToken cancellationToken) {
-        var title = await _db.Entities
+        var entity = await _db.Entities
             .AsNoTracking()
-            .Where(entity => entity.Id == entityId)
-            .Select(entity => entity.Title)
+            .Where(row => row.Id == entityId)
+            .Select(row => new { row.Title, row.KindCode })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (title is null) {
+        if (entity is null) {
             return new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null);
         }
 
@@ -59,14 +60,44 @@ public sealed partial class IdentifyMatchHintResolver {
             externalIds[provider] = parsedId;
         }
 
-        var filePath = await _db.EntityFiles
+        var sourcePaths = await _db.EntityFiles
             .AsNoTracking()
             .Where(row => row.EntityId == entityId && row.Role == EntityFileRole.Source)
             .OrderBy(row => row.CreatedAt)
             .Select(row => row.Path)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToArrayAsync(cancellationToken);
 
-        return new IdentifyMatchHints(externalIds, urls, IdentifyQueryNormalizer.NormalizeForSearch(title), filePath);
+        if (EntityKindRegistry.TryDescribe(entity.KindCode, out var definition) &&
+            definition.Identification.ReadsPathIdentityTags) {
+            foreach (var (namespaceKey, value) in await ResolvePathIdentityTagsAsync(entityId, sourcePaths, cancellationToken)) {
+                externalIds.TryAdd(namespaceKey, value);
+            }
+        }
+
+        return new IdentifyMatchHints(
+            externalIds,
+            urls,
+            IdentifyQueryNormalizer.NormalizeForSearch(entity.Title),
+            sourcePaths.FirstOrDefault());
+    }
+
+    /// <summary>
+    /// Reads provider IDs tagged in the entity's scan folder name and its source file names.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>> ResolvePathIdentityTagsAsync(
+        Guid entityId,
+        IReadOnlyList<string> sourcePaths,
+        CancellationToken cancellationToken) {
+        var folderCode = EntitySourceCode.Folder.ToCode();
+        var folders = await _db.EntitySources
+            .AsNoTracking()
+            .Where(row => row.EntityId == entityId && row.Code == folderCode)
+            .Select(row => row.Value)
+            .ToArrayAsync(cancellationToken);
+
+        return PathIdentityTags.Parse(folders
+            .Select(folder => Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)))
+            .Concat(sourcePaths.Select(Path.GetFileNameWithoutExtension)));
     }
 
     private static bool TryParseProviderId(string provider, IReadOnlyList<string> urls, out string id) {

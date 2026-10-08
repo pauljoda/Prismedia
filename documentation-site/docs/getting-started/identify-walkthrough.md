@@ -71,7 +71,7 @@ On Accept, Prismedia walks the proposal tree and applies your selections: it cre
 
 To skip manual review for confident matches, turn on **Auto Identify** in Settings. It runs scanned media through your chosen plugins during library scans and applies the first match that meets a confidence threshold (90% by default) — applying the full proposal exactly like a manual identify, including children, relationships, and artwork.
 
-- Pick which installed plugins to trust and in what order.
+- Pick which installed plugins to trust and in what order. With none selected, each kind uses its default metadata provider.
 - Choose which kinds it covers (video, galleries, images, audio, books).
 - It only touches **un-organized** items by default and is **off** until you enable it.
 - Each watched root has its own toggle, so you can exclude specific libraries.

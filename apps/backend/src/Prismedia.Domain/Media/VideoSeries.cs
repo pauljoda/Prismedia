@@ -26,7 +26,7 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     new EntityKindNavigation(EntityKind.VideoSeries, "series", "/series", "/series/{id}"),
     new EntityKindSearch(1),
     new EntityKindBehavior(
-        identification: new(AutoIdentifySelectorKind.Video, enumeratesChildren: true),
+        identification: new(AutoIdentifySelectorKind.Video, enumeratesChildren: true, readsPathIdentityTags: true),
         engagement: new(EntityEngagementMode.Playback),
         libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.VideoEpisode, 2),
         supportsFileDeletion: true,

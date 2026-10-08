@@ -23,7 +23,8 @@ public sealed class MovieEntityKindDefinition() : PlayableVideoEntityKindDefinit
     static root => new Movie(root.Id, root.Title),
     identification: new(
         AutoIdentifySelectorKind.Video,
-        pluginFallbackKind: EntityKind.Video),
+        pluginFallbackKind: EntityKind.Video,
+        readsPathIdentityTags: true),
     manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
     libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
     additionalDefaultCapabilities: static () =>

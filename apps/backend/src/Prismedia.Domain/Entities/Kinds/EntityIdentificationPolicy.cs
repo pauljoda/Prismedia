@@ -24,6 +24,10 @@ public sealed record EntityIdentificationPolicy {
     /// Whether this kind may be a direct or structural target of provider metadata. Scanner-derived
     /// resources can disable this without changing their ordinary Entity or capability behavior.
     /// </param>
+    /// <param name="readsPathIdentityTags">
+    /// Whether identify hints include provider IDs tagged in this entity's own folder or source file
+    /// names, such as <c>{tmdb-603}</c> or <c>[tvdbid-81189]</c> from Radarr and Sonarr naming.
+    /// </param>
     public EntityIdentificationPolicy(
         AutoIdentifySelectorKind? autoIdentifySelector = null,
         bool enumeratesChildren = false,
@@ -33,7 +37,8 @@ public sealed record EntityIdentificationPolicy {
         bool usesParentExternalIdentityContext = false,
         bool allowsDirectReconcileChildTarget = false,
         bool stopsDescendantAutoIdentifyRootTraversal = false,
-        bool allowsProviderMetadata = true) {
+        bool allowsProviderMetadata = true,
+        bool readsPathIdentityTags = false) {
         if (autoIdentifySelector is null &&
             (allowsParentedAutoIdentifyRoot ||
              cascadeChildrenAutomatically is not null ||
@@ -60,6 +65,7 @@ public sealed record EntityIdentificationPolicy {
         AllowsDirectReconcileChildTarget = allowsDirectReconcileChildTarget;
         StopsDescendantAutoIdentifyRootTraversal = stopsDescendantAutoIdentifyRootTraversal;
         AllowsProviderMetadata = allowsProviderMetadata;
+        ReadsPathIdentityTags = readsPathIdentityTags;
     }
 
     /// <summary>User-facing automatic-identification selector family, when supported.</summary>
@@ -90,4 +96,11 @@ public sealed record EntityIdentificationPolicy {
 
     /// <summary>Whether plugins may bind identities or apply metadata to this Entity kind.</summary>
     public bool AllowsProviderMetadata { get; }
+
+    /// <summary>
+    /// Whether identify hints include provider IDs tagged in this entity's own folder or source file
+    /// names. The tags name the entity itself, so only kinds whose folder is the work (a movie or a
+    /// series) opt in; a season or episode folder would carry its series' IDs.
+    /// </summary>
+    public bool ReadsPathIdentityTags { get; }
 }
