@@ -1,6 +1,19 @@
 import { PLUGIN_SEARCH_FIELD_TYPE } from "$lib/api/generated/codes";
 import type { PluginSearchField } from "$lib/api/generated/model";
 
+/** Default single-field title search used when a provider does not declare custom search fields. */
+export function defaultPluginSearchFields(): PluginSearchField[] {
+  return [
+    {
+      key: "title",
+      label: "Title",
+      type: PLUGIN_SEARCH_FIELD_TYPE.text,
+      required: true,
+      placeholder: "Search title",
+    },
+  ];
+}
+
 /**
  * Creates a complete value map for a plugin search form. Existing values survive schema refreshes;
  * otherwise the first text field receives the caller's natural title so both legacy `title` forms

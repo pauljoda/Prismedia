@@ -213,6 +213,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Candidate review in Identify now displays search input fields and enables manual query refinement when an entity relies on a fallback kind, such as identifying a movie with a generic video provider. Providers that do not declare custom search fields default to an editable title query prefilled with the entity's title.
+
 - Auto identify with no plugins selected under Enabled plugins now uses each kind's default metadata provider instead of skipping every item. An NSFW provider runs this way only when it is that kind's chosen default.
 
 - Held movie imports now let you choose and accept a video file, and held album or track imports let you map downloaded audio to the requested tracks while retaining their titles and order. Reviewed choices survive worker retries. Video quality checks ignore attached cover art, honor the default video stream, and recognize full-height narrow video; warnings identify the checked file and its dimensions.

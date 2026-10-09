@@ -1,5 +1,7 @@
 import { ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
-import type { PluginProvider } from "$lib/api/identify-types";
+import type { PluginEntitySupport, PluginProvider } from "$lib/api/identify-types";
+import type { PluginSearchField } from "$lib/api/generated/model";
+import { defaultPluginSearchFields } from "$lib/components/plugins/plugin-search-fields";
 import { isEntityKindCode } from "$lib/entities/entity-codes";
 
 /** Compares plugin IDs using the same case-insensitive policy as the backend catalog lookup. */
@@ -11,20 +13,48 @@ export function providerIdsEqual(
     providerId.localeCompare(configuredProviderId ?? "", undefined, { sensitivity: "accent" }) === 0;
 }
 
-/** Whether an installed provider is currently usable for an entity kind. */
-export function providerCanIdentifyKind(provider: PluginProvider, kind: string): boolean {
+/** Returns the declared or fallback entity support for a provider. */
+export function providerSupportForKind(
+  provider: PluginProvider | null | undefined,
+  kind: string,
+): PluginEntitySupport | null {
+  if (!provider) return null;
   const normalizedKind = kind.toLowerCase();
+  const direct = provider.supports.find(
+    (support) => support.entityKind.toLowerCase() === normalizedKind,
+  );
+  if (direct) return direct;
+
   const fallbackKind = isEntityKindCode(normalizedKind)
     ? ENTITY_KIND_DEFINITIONS[normalizedKind].identifyPluginFallbackKind
     : null;
+  if (!fallbackKind) return null;
+
+  const fallbackNormalized = fallbackKind.toLowerCase();
+  return provider.supports.find(
+    (support) => support.entityKind.toLowerCase() === fallbackNormalized,
+  ) ?? null;
+}
+
+/** Whether an installed provider is currently usable for an entity kind. */
+export function providerCanIdentifyKind(provider: PluginProvider, kind: string): boolean {
   return provider.installed &&
     provider.enabled &&
     provider.missingAuthKeys.length === 0 &&
-    provider.supports.some((support) => {
-      const supportedKind = support.entityKind.toLowerCase();
-      return supportedKind === normalizedKind ||
-        fallbackKind !== null && supportedKind === fallbackKind;
-    });
+    providerSupportForKind(provider, kind) !== null;
+}
+
+/** Returns the active search fields for a provider and kind, falling back to compatible kind or default title field. */
+export function providerSearchFieldsForKind(
+  provider: PluginProvider | null | undefined,
+  kind: string,
+): PluginSearchField[] {
+  const support = providerSupportForKind(provider, kind);
+  if (!support) return [];
+  if (support.search?.fields && support.search.fields.length > 0) {
+    return support.search.fields;
+  }
+  return defaultPluginSearchFields();
 }
 
 /** Orders a usable provider list with its configured default first, then alphabetically by name. */

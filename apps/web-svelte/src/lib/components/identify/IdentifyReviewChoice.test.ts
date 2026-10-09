@@ -97,6 +97,47 @@ describe("IdentifyReviewChoice", () => {
     expect(screen.getByText("Enter the provider-specific details above to find candidates.")).toBeInTheDocument();
   });
 
+  it("renders search fields when provider uses fallback entity kind (e.g. movie using video provider)", () => {
+    const videoProvider: PluginProvider = {
+      id: "stash-rule34video",
+      name: "Rule34Video",
+      version: "1.0.0",
+      installed: true,
+      enabled: true,
+      isNsfw: false,
+      supports: [
+        {
+          entityKind: ENTITY_KIND.video,
+          actions: ["search"],
+          identityNamespaces: ["r34v"],
+          search: {
+            fields: [
+              { key: "title", label: "Title", type: "text", required: true },
+            ],
+          },
+        },
+      ],
+      auth: [],
+      missingAuthKeys: [],
+    };
+    store.providersForKind.mockReturnValue([videoProvider]);
+
+    render(IdentifyReviewChoice, {
+      props: {
+        entity: entity({
+          id: "movie-1",
+          kind: ENTITY_KIND.movie,
+          title: "Big Buck Bunny",
+        }),
+        candidates: [],
+        hasSearched: false,
+      },
+    });
+
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Big Buck Bunny");
+    expect(screen.getByRole("button", { name: "Search" })).toBeEnabled();
+  });
+
   it("selects a candidate from the combined thumbnail and description card", async () => {
     const candidate = searchCandidate();
     const { container } = render(IdentifyReviewChoice, {
