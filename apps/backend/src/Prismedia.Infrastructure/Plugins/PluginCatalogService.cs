@@ -181,8 +181,24 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
 
     private static PluginDescriptor? SelectInstalledDescriptor(IEnumerable<PluginDescriptor> candidates, ProviderConfigRow? config) {
         var installed = config is null ? null : ReadInstalledSettings(config);
-        if (installed?.Version is not null)
-            return candidates.FirstOrDefault(item => item.Manifest.Version == installed.Version && item.ManifestPath == installed.ManifestPath && item.EntryPath == installed.EntryPath);
+        if (installed?.Version is not null) {
+            var exact = candidates.FirstOrDefault(item =>
+                item.Manifest.Version == installed.Version &&
+                item.ManifestPath == installed.ManifestPath &&
+                item.EntryPath == installed.EntryPath);
+            if (exact is not null) return exact;
+
+            if (!string.IsNullOrWhiteSpace(installed.ManifestPath) && !File.Exists(installed.ManifestPath)) {
+                var targetName = installed.ManifestPath.Replace('\\', '/').Split('/').Last();
+                var relocated = candidates.FirstOrDefault(item =>
+                    item.Manifest.Version == installed.Version &&
+                    Path.GetFileName(item.ManifestPath).Equals(targetName, StringComparison.OrdinalIgnoreCase));
+                if (relocated is not null) return relocated;
+            }
+
+            return null;
+        }
+
         return candidates.OrderByDescending(item => ParseVersion(item.Manifest.Version)).FirstOrDefault();
     }
 

@@ -16,6 +16,7 @@
   import type { EntityCard } from "$lib/api/entities";
   import type { UniversalLightboxEntity } from "$lib/components/universal-lightbox-media";
   import { supportedProviderId } from "./identify-provider-selection";
+  import { providerSearchFieldsForKind } from "$lib/identify/provider-selection";
   import { providerSeekOrder } from "./identify-provider-seek";
   import { useIdentifyStore, type IdentifyQueueItem } from "./identify-store.svelte";
   import {
@@ -67,7 +68,7 @@
     providerOptions.find((provider) => provider.id === activeProviderId) ?? null,
   );
   const activeSearchFields = $derived(
-    activeProvider?.supports.find((support) => support.entityKind === entity.kind)?.search?.fields ?? [],
+    providerSearchFieldsForKind(activeProvider, entity.kind),
   );
   const activeSearchFormKey = $derived(
     `${entity.id}:${activeProviderId}:${activeSearchFields.map((field) => field.key).join("|")}`,
