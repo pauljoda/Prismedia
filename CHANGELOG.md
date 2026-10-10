@@ -213,6 +213,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Installed plugins and Stash community scrapers remain available and discoverable when run from a relocated workspace or container whose recorded file paths point to a different absolute path.
+
 - Candidate review in Identify now displays search input fields and enables manual query refinement when an entity relies on a fallback kind, such as identifying a movie with a generic video provider.
 
 - Auto identify with no plugins selected under Enabled plugins now uses each kind's default metadata provider instead of skipping every item. An NSFW provider runs this way only when it is that kind's chosen default.

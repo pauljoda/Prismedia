@@ -1,8 +1,10 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
 using Prismedia.Infrastructure.StashCompat;
 using Prismedia.Infrastructure.StashCompat.Model;
@@ -708,6 +710,47 @@ public sealed class StashCompatTests {
 
             var config = db.ProviderConfigs.Single(row => row.ProviderCode == "stash-test-site");
             Assert.Equal(Prismedia.Domain.Entities.ProviderType.StashCompat, config.ProviderType);
+        } finally {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CatalogFindsAndActivatesScraperWhenRecordedPathPointsToRelocatedWorkspace() {
+        var root = Path.Combine(Path.GetTempPath(), $"stash-reloc-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "Rule34Video"));
+        var yamlPath = Path.Combine(root, "Rule34Video", "Rule34Video.yml");
+        await File.WriteAllTextAsync(yamlPath, SampleYaml);
+        try {
+            await using var db = CreateContext();
+            var nonExistentOldPath = @"C:\OldMachine\Prismedia\apps\backend\data\cache\scrapers\Rule34Video\Rule34Video.yml";
+            var oldSettings = JsonSerializer.Serialize(new {
+                version = "1.0.0",
+                manifestPath = nonExistentOldPath,
+                entryPath = nonExistentOldPath
+            });
+            db.ProviderConfigs.Add(new ProviderConfigRow {
+                Id = Guid.NewGuid(),
+                ProviderCode = "stash-rule34video",
+                DisplayName = "Rule34Video",
+                ProviderType = Prismedia.Domain.Entities.ProviderType.StashCompat,
+                SettingsJson = oldSettings,
+                Enabled = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([root], root, "1.0.0"));
+
+            var descriptor = await catalog.FindProviderAsync("stash-rule34video", "video", CancellationToken.None);
+            Assert.NotNull(descriptor);
+            Assert.Equal(yamlPath, descriptor!.ManifestPath);
+
+            var installed = await catalog.InstallAsync("stash-rule34video", CancellationToken.None);
+            Assert.NotNull(installed);
+            Assert.True(installed!.Installed);
+            Assert.True(installed.Enabled);
         } finally {
             Directory.Delete(root, recursive: true);
         }

@@ -54,6 +54,28 @@ public sealed class PluginInstalledVersionTests : IDisposable {
         Assert.Equal("2.0.0", (await catalog.FindProviderAsync(ProviderId, null, default))!.Manifest.Version);
     }
 
+    [Fact]
+    public async Task RelocatingInstalledArtifactWithSameVersionRemainsAvailable() {
+        await using var db = CreateContext();
+        var catalog = Catalog(db);
+        await WriteAsync("1.0.0");
+        await catalog.InstallAsync(ProviderId, default);
+
+        var oldDir = Path.Combine(root, "1.0.0");
+        var newDir = Path.Combine(root, "relocated-1.0.0");
+        Directory.Move(oldDir, newDir);
+
+        var descriptor = await catalog.FindProviderAsync(ProviderId, null, default);
+        Assert.NotNull(descriptor);
+        Assert.Equal("1.0.0", descriptor!.Manifest.Version);
+        Assert.Equal(Path.Combine(newDir, "manifest.json"), descriptor.ManifestPath);
+
+        var listed = Assert.Single(await catalog.ListInstalledProvidersAsync(default));
+        Assert.True(listed.Installed);
+        Assert.True(listed.Enabled);
+        Assert.Equal("1.0.0", listed.Version);
+    }
+
     [Theory]
     [InlineData(IntegrationTransferPhase.PendingSubmission)]
     [InlineData(IntegrationTransferPhase.SubmissionUncertain)]
