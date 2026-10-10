@@ -85,17 +85,9 @@ describe("providerSearchFieldsForKind", () => {
     expect(providerSearchFieldsForKind(provider, ENTITY_KIND.movie)).toEqual(fields);
   });
 
-  it("falls back to default title search field when support has no declared search fields", () => {
+  it("returns empty array when support has no declared search fields (lookup-only)", () => {
     const provider = providerFor(ENTITY_KIND.video);
-    expect(providerSearchFieldsForKind(provider, ENTITY_KIND.movie)).toEqual([
-      {
-        key: "title",
-        label: "Title",
-        type: PLUGIN_SEARCH_FIELD_TYPE.text,
-        required: true,
-        placeholder: "Search title",
-      },
-    ]);
+    expect(providerSearchFieldsForKind(provider, ENTITY_KIND.movie)).toEqual([]);
   });
 
   it("returns empty array when provider does not support kind or fallback", () => {
@@ -103,4 +95,3 @@ describe("providerSearchFieldsForKind", () => {
     expect(providerSearchFieldsForKind(provider, ENTITY_KIND.movie)).toEqual([]);
   });
 });
-

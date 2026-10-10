@@ -213,7 +213,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- Candidate review in Identify now displays search input fields and enables manual query refinement when an entity relies on a fallback kind, such as identifying a movie with a generic video provider. Providers that do not declare custom search fields default to an editable title query prefilled with the entity's title.
+- Candidate review in Identify now displays search input fields and enables manual query refinement when an entity relies on a fallback kind, such as identifying a movie with a generic video provider.
 
 - Auto identify with no plugins selected under Enabled plugins now uses each kind's default metadata provider instead of skipping every item. An NSFW provider runs this way only when it is that kind's chosen default.
 

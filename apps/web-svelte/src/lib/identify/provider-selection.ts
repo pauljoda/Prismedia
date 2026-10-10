@@ -1,7 +1,6 @@
 import { ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
 import type { PluginEntitySupport, PluginProvider } from "$lib/api/identify-types";
 import type { PluginSearchField } from "$lib/api/generated/model";
-import { defaultPluginSearchFields } from "$lib/components/plugins/plugin-search-fields";
 import { isEntityKindCode } from "$lib/entities/entity-codes";
 
 /** Compares plugin IDs using the same case-insensitive policy as the backend catalog lookup. */
@@ -44,17 +43,12 @@ export function providerCanIdentifyKind(provider: PluginProvider, kind: string):
     providerSupportForKind(provider, kind) !== null;
 }
 
-/** Returns the active search fields for a provider and kind, falling back to compatible kind or default title field. */
+/** Returns the active search fields for a provider and kind, falling back to compatible kind. */
 export function providerSearchFieldsForKind(
   provider: PluginProvider | null | undefined,
   kind: string,
 ): PluginSearchField[] {
-  const support = providerSupportForKind(provider, kind);
-  if (!support) return [];
-  if (support.search?.fields && support.search.fields.length > 0) {
-    return support.search.fields;
-  }
-  return defaultPluginSearchFields();
+  return providerSupportForKind(provider, kind)?.search?.fields ?? [];
 }
 
 /** Orders a usable provider list with its configured default first, then alphabetically by name. */
