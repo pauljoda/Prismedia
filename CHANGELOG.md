@@ -215,6 +215,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - The bulk selection bar stays available while you are selecting items, however far you scroll. Filter and selection rows that hide automatically on scroll return when you scroll back to the top.
 
+- Identify shows a provider's search fields when that provider supports a related kind, such as a video provider for a movie, so you can edit the query and search again.
+
 - Auto identify with no plugins selected under Enabled plugins now uses each kind's default metadata provider instead of skipping every item. An NSFW provider runs this way only when it is that kind's chosen default.
 
 - Held movie imports now let you choose and accept a video file, and held album or track imports let you map downloaded audio to the requested tracks while retaining their titles and order. Reviewed choices survive worker retries. Video quality checks ignore attached cover art, honor the default video stream, and recognize full-height narrow video; warnings identify the checked file and its dimensions.

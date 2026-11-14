@@ -1,5 +1,5 @@
 import { ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
-import type { PluginProvider } from "$lib/api/identify-types";
+import type { PluginEntitySupport, PluginProvider } from "$lib/api/identify-types";
 import { isEntityKindCode } from "$lib/entities/entity-codes";
 
 /** Compares plugin IDs using the same case-insensitive policy as the backend catalog lookup. */
@@ -11,20 +11,33 @@ export function providerIdsEqual(
     providerId.localeCompare(configuredProviderId ?? "", undefined, { sensitivity: "accent" }) === 0;
 }
 
-/** Whether an installed provider is currently usable for an entity kind. */
-export function providerCanIdentifyKind(provider: PluginProvider, kind: string): boolean {
+/**
+ * Returns the support entry a provider identifies an entity kind through: its direct entry for the
+ * kind when it declares one, otherwise its entry for the kind's definition-owned fallback (a
+ * `video` provider identifying a movie). Search fields and actions come from this entry.
+ */
+export function providerSupportForKind(
+  provider: Pick<PluginProvider, "supports">,
+  kind: string,
+): PluginEntitySupport | null {
   const normalizedKind = kind.toLowerCase();
+  const direct = provider.supports.find((support) => support.entityKind.toLowerCase() === normalizedKind);
+  if (direct) return direct;
+
   const fallbackKind = isEntityKindCode(normalizedKind)
     ? ENTITY_KIND_DEFINITIONS[normalizedKind].identifyPluginFallbackKind
     : null;
+  return fallbackKind === null
+    ? null
+    : provider.supports.find((support) => support.entityKind.toLowerCase() === fallbackKind) ?? null;
+}
+
+/** Whether an installed provider is currently usable for an entity kind. */
+export function providerCanIdentifyKind(provider: PluginProvider, kind: string): boolean {
   return provider.installed &&
     provider.enabled &&
     provider.missingAuthKeys.length === 0 &&
-    provider.supports.some((support) => {
-      const supportedKind = support.entityKind.toLowerCase();
-      return supportedKind === normalizedKind ||
-        fallbackKind !== null && supportedKind === fallbackKind;
-    });
+    providerSupportForKind(provider, kind) !== null;
 }
 
 /** Orders a usable provider list with its configured default first, then alphabetically by name. */
