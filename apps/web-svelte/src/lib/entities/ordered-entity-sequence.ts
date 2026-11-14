@@ -4,7 +4,12 @@ import {
 } from "$lib/entities/entity-codes";
 import { ENTITY_SEQUENCE_ROLE } from "$lib/api/generated/codes";
 import { getCapability } from "$lib/api/capabilities";
-import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+import {
+  completeEntityChildren,
+  fetchEntity,
+  fetchEntityWithChildren,
+  type EntityCardFull,
+} from "$lib/api/entities";
 import { getChildIds } from "$lib/entities/entity-children";
 import { fetchOrderedEntityThumbnails } from "$lib/entities/entity-relationship-thumbnails";
 import type { EntityThumbnail } from "$lib/api/generated/model";
@@ -35,6 +40,7 @@ export async function resolveOrderedEntitySequence(
     root = parent;
     parentId = parent.parentEntityId;
   }
+  root = await completeEntityChildren(root, options);
 
   if (selected.parentEntityId === root.id) {
     const items = await fetchOrderedEntityThumbnails(
@@ -49,7 +55,7 @@ export async function resolveOrderedEntitySequence(
     .filter((kind) => kind !== root.kind)
     .flatMap((kind) => getChildIds(root, kind));
   const nestedContainers = await Promise.all(
-    nestedContainerIds.map((id) => fetchEntity(id, options)),
+    nestedContainerIds.map((id) => fetchEntityWithChildren(id, options)),
   );
   nestedContainers.sort(compareSequenceItems);
 

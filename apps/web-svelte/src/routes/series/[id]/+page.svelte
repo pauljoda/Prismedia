@@ -8,7 +8,7 @@
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
-  import { fetchEntity, fetchEntityChildReferences, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntityChildReferences, fetchEntityWithChildren, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/consumption";
   import { getCapability } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
@@ -142,7 +142,7 @@
   });
 
   async function loadSeries(signal: AbortSignal): Promise<EntityCardFull> {
-    const nextSeries = await fetchEntity(page.params.id ?? "", { signal });
+    const nextSeries = await fetchEntityWithChildren(page.params.id ?? "", { signal });
     const hydration = await hydrateSeriesThumbnails(nextSeries, signal);
     const episodeState = await loadSeriesEpisodes(nextSeries, hydration.episodeCards, signal);
     signal.throwIfAborted();

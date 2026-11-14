@@ -34,6 +34,7 @@
   import {
     fetchEntity,
     fetchEntityChildReferences,
+    fetchEntityWithChildren,
     type EntityCardFull,
   } from "$lib/api/entities";
   import { getChildIds } from "$lib/entities/entity-children";
@@ -215,7 +216,7 @@
   ]);
 
   async function loadComicEntity(signal: AbortSignal): Promise<EntityCardFull> {
-    const nextEntity = await fetchEntity(entityId, { signal });
+    const nextEntity = await fetchEntityWithChildren(entityId, { signal });
     const nextPageSequence = getCapability(nextEntity.capabilities, CAPABILITY_KIND.pageSequence);
     const nextSeries = nextEntity.kind === ENTITY_KIND.comicSeries
       ? nextEntity

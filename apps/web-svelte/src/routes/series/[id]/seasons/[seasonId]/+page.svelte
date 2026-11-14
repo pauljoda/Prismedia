@@ -10,7 +10,7 @@
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntity, fetchEntityWithChildren, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/consumption";
   import { getCapability } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
@@ -54,7 +54,7 @@
     load: async ({ signal }) => {
       const [seriesDetail, seasonDetail] = await Promise.all([
         fetchEntity(seriesId, { signal }),
-        fetchEntity(seasonId, { signal }),
+        fetchEntityWithChildren(seasonId, { signal }),
       ]);
       const [episodes, relationships] = await Promise.all([
         loadEpisodeCards(seasonDetail, signal),

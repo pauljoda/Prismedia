@@ -2,7 +2,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { BookOpen, CloudDownload, Info, SlidersHorizontal } from "@lucide/svelte";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntity, fetchEntityWithChildren, type EntityCardFull } from "$lib/api/entities";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityDetail, {
@@ -30,7 +30,7 @@
     load: async ({ signal }) => {
       const [nextBook, nextVolume] = await Promise.all([
         fetchEntity(bookId, { signal }),
-        fetchEntity(volumeId, { signal }),
+        fetchEntityWithChildren(volumeId, { signal }),
       ]);
       signal.throwIfAborted();
       book = nextBook;

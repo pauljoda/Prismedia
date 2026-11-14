@@ -8,7 +8,7 @@
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntity, fetchEntityWithChildren, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityRating } from "$lib/api/entity-mutations";
   import {
     getCapability,
@@ -62,7 +62,7 @@
   const detail = useEntityDetailPage<EntityCardFull>({
     loadKey: () => currentGalleryId,
     load: async ({ signal }) => {
-      const nextGallery = await fetchEntity(currentGalleryId, { signal });
+      const nextGallery = await fetchEntityWithChildren(currentGalleryId, { signal });
       const [children, relationships] = await Promise.all([
         fetchOrderedEntityThumbnails(getAllChildIds(nextGallery), { signal }),
         hydrateStandardRelationshipCards(nextGallery, { signal }),

@@ -6,7 +6,7 @@
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntityWithChildren, type EntityCardFull } from "$lib/api/entities";
   import { assetUrl } from "$lib/api/orval-fetch";
   import { getCapability } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
@@ -41,7 +41,7 @@
   const detail = useEntityDetailPage<EntityCardFull>({
     loadKey: () => page.params.id ?? "",
     load: async ({ signal }) => {
-      const nextArtist = await fetchEntity(page.params.id ?? "", { signal });
+      const nextArtist = await fetchEntityWithChildren(page.params.id ?? "", { signal });
       const albumGroup = nextArtist.childrenByKind.find(
         (group) => group.kind === ENTITY_KIND.audioLibrary,
       );

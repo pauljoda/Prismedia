@@ -59,8 +59,10 @@ export class EntityGridPaginationController {
     return this.options.sourceCount() + (this.options.hasMore() ? 1 : 0);
   }
 
+  /** Whether the readout total is final: a server-reported total, or a source with nothing left to load. */
   get totalIsExact(): boolean {
-    return this.isLocallyFiltered ? !this.options.hasMore() : this.knownRemoteTotal != null;
+    if (this.isLocallyFiltered) return !this.options.hasMore();
+    return this.knownRemoteTotal != null || !this.options.hasMore();
   }
 
   get pageCount(): number {

@@ -8,7 +8,7 @@
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntityWithChildren, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityRating,
     updateEntityMetadata,
@@ -156,7 +156,7 @@
   ]);
 
   async function loadLibrary(signal: AbortSignal): Promise<EntityCardFull> {
-      const nextLibrary = await fetchEntity(page.params.id ?? "", { signal });
+      const nextLibrary = await fetchEntityWithChildren(page.params.id ?? "", { signal });
 
       // Separate track children from non-track children using the entity groups
       const trackGroup = nextLibrary.childrenByKind.find((g) => g.kind === ENTITY_KIND.audioTrack);

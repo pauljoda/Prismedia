@@ -6,7 +6,7 @@
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntityWithChildren, type EntityCardFull } from "$lib/api/entities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { CREDIT_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
@@ -34,7 +34,7 @@
   const detail = useEntityDetailPage<EntityCardFull>({
     loadKey: () => page.params.id ?? "",
     load: async ({ signal }) => {
-      const nextAuthor = await fetchEntity(page.params.id ?? "", { signal });
+      const nextAuthor = await fetchEntityWithChildren(page.params.id ?? "", { signal });
       const bookGroup = nextAuthor.childrenByKind.find((group) => group.kind === ENTITY_KIND.book);
       const bookIds = bookGroup?.entities.map((entity) => entity.id) ?? [];
       const [books, relationships] = await Promise.all([

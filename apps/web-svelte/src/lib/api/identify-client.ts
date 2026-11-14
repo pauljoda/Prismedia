@@ -28,7 +28,7 @@ import type {
 } from "$lib/api/generated/model";
 import { problemMessage, requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 import { apiPath, fetchApi } from "$lib/api/orval-fetch";
-import { fetchEntities, fetchEntity, type EntityCard, type EntityDetailCard, type EntityListResponse } from "$lib/api/entities";
+import { fetchEntities, fetchEntityWithChildren, type EntityCard, type EntityDetailCard, type EntityListResponse } from "$lib/api/entities";
 import type {
   IdentifyApplyProgress,
   EntityMetadataProposal,
@@ -259,7 +259,7 @@ export function saveIdentifyQueueProposal(
 }
 
 export function fetchIdentifyEntity(entityId: string, options?: RequestOptions): Promise<EntityDetailCard> {
-  return fetchEntity(entityId, options);
+  return fetchEntityWithChildren(entityId, options);
 }
 
 /**

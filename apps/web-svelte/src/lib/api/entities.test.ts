@@ -15,7 +15,13 @@ vi.mock("$lib/api/generated/prismedia", () => ({
   refreshEntity: vi.fn(),
 }));
 
-import { fetchEntity, fetchEntityChildReferences, fetchEntityChildren } from "$lib/api/entities";
+import { ENTITY_KIND } from "$lib/api/generated/codes";
+import {
+  fetchEntity,
+  fetchEntityChildReferences,
+  fetchEntityChildren,
+  fetchEntityWithChildren,
+} from "$lib/api/entities";
 
 describe("fetchEntityChildren", () => {
   beforeEach(() => {
@@ -91,5 +97,79 @@ describe("fetchEntityChildren", () => {
     expect(mocks.getEntityChildReferences.mock.calls[0]?.[0].parentIds).toHaveLength(250);
     expect(mocks.getEntityChildReferences.mock.calls[1]?.[0].parentIds).toEqual(["season-250"]);
     expect(groups[0]?.items[0]?.id).toBe("season-0-episode");
+  });
+});
+
+describe("fetchEntityWithChildren", () => {
+  beforeEach(() => {
+    mocks.getEntity.mockReset();
+    mocks.getEntityChildren.mockReset();
+  });
+
+  const child = (id: string, kind: string) => ({ id, kind });
+
+  it("replaces paged child groups with every child from the batch read", async () => {
+    const signal = new AbortController().signal;
+    mocks.getEntity.mockResolvedValue({
+      status: 200,
+      data: {
+        id: "gallery",
+        childrenByKind: [
+          { kind: ENTITY_KIND.gallery, label: "Galleries", entities: [child("sub", ENTITY_KIND.gallery)] },
+          {
+            kind: ENTITY_KIND.image,
+            label: "Images",
+            entities: [child("image-0", ENTITY_KIND.image)],
+            totalCount: 3,
+          },
+        ],
+      },
+    });
+    mocks.getEntityChildren.mockResolvedValue({
+      status: 200,
+      data: {
+        groups: [{
+          parentId: "gallery",
+          items: [
+            child("sub", ENTITY_KIND.gallery),
+            child("image-0", ENTITY_KIND.image),
+            child("image-1", ENTITY_KIND.image),
+            child("image-2", ENTITY_KIND.image),
+          ],
+        }],
+      },
+    });
+
+    const gallery = await fetchEntityWithChildren("gallery", { hideNsfw: true, signal });
+
+    expect(mocks.getEntityChildren).toHaveBeenCalledWith(
+      { parentIds: ["gallery"] },
+      { hideNsfw: true },
+      { signal },
+    );
+    expect(gallery.childrenByKind.map((group) => group.entities.map((entity) => entity.id))).toEqual([
+      ["sub"],
+      ["image-0", "image-1", "image-2"],
+    ]);
+    expect(gallery.childrenByKind[1]?.totalCount).toBeNull();
+  });
+
+  it("skips the batch read when every child group is complete", async () => {
+    mocks.getEntity.mockResolvedValue({
+      status: 200,
+      data: {
+        id: "album",
+        childrenByKind: [{
+          kind: ENTITY_KIND.audioTrack,
+          label: "Tracks",
+          entities: [child("track", ENTITY_KIND.audioTrack)],
+          totalCount: null,
+        }],
+      },
+    });
+
+    await fetchEntityWithChildren("album");
+
+    expect(mocks.getEntityChildren).not.toHaveBeenCalled();
   });
 });

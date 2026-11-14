@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("$lib/api/entities", () => ({
+  completeEntityChildren: async (entity: unknown) => entity,
   fetchEntity: mocks.fetchEntity,
+  fetchEntityWithChildren: (...args: unknown[]) => mocks.fetchEntity(...args),
 }));
 
 vi.mock("$lib/entities/entity-relationship-thumbnails", () => ({

@@ -160,6 +160,8 @@ describe("EntityGrid pagination", () => {
       expect(renderedCount).toBe(100);
       expect(container.querySelectorAll(".entity-thumbnail").length).toBe(100);
       expect(screen.getByText("Page 1 / 45")).toBeInTheDocument();
+      // A fully loaded local source reports its exact total, not an open-ended "4500+".
+      expect(container.querySelector(".readout-total")).toHaveTextContent(/^4500$/);
     });
   });
 

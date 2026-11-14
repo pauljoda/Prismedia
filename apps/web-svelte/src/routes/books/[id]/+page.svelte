@@ -43,7 +43,7 @@
     fetchBookContents,
     saveBookChapterMappings,
   } from "$lib/api/books";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntity, fetchEntityWithChildren, type EntityCardFull } from "$lib/api/entities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import {
@@ -415,7 +415,7 @@
 
   async function loadBook(targetBookId: string, signal: AbortSignal): Promise<EntityCardFull> {
     const [nextBook, nextAcquisitions, nextMonitors, nextMappingState, nextContents] = await Promise.all([
-      fetchEntity(targetBookId, { signal }),
+      fetchEntityWithChildren(targetBookId, { signal }),
       fetchAcquisitionsForEntity(targetBookId, { signal }).catch(() => {
         signal.throwIfAborted();
         return [];

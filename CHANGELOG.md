@@ -213,6 +213,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Gallery, series, season, album, artist, author, book, and comic pages list every item again instead of stopping at the first 250 of each kind. Next and previous in the reader, and Identify reviews of large series, include every item too.
+
 - The bulk selection bar stays available while you are selecting items, however far you scroll. Filter and selection rows that hide automatically on scroll return when you scroll back to the top.
 
 - Identify shows a provider's search fields when that provider supports a related kind, such as a video provider for a movie, so you can edit the query and search again.

@@ -139,10 +139,55 @@ export async function fetchEntityChildReferences(
     ).groups);
 }
 
+/**
+ * Loads an Entity detail document. Large containers arrive with only the first page of each child
+ * kind; callers that list, count, or sequence children use {@link fetchEntityWithChildren}.
+ */
 export function fetchEntity(id: string, options?: EntityVisibilityRequestOptions): Promise<EntityCardFull> {
   return getEntity(id, { hideNsfw: options?.hideNsfw }, requestInit(options)).then((r) =>
     unwrapGenerated(r, `Failed to fetch entity ${id}`),
   );
+}
+
+/** Loads an Entity detail document whose child groups hold every child, not just the first page. */
+export async function fetchEntityWithChildren(
+  id: string,
+  options?: EntityVisibilityRequestOptions,
+): Promise<EntityCardFull> {
+  return completeEntityChildren(await fetchEntity(id, options), options);
+}
+
+/**
+ * Completes the child groups an Entity detail read paged. Detail reads project at most one page of
+ * children per kind and report a larger group's full size in `totalCount`; this loads every child
+ * through the children batch read and replaces those groups in the same structural order. A
+ * detail whose groups are already complete is returned unchanged without a request.
+ */
+export async function completeEntityChildren<T extends Pick<EntityCardFull, "id" | "childrenByKind">>(
+  entity: T,
+  options?: EntityVisibilityRequestOptions,
+): Promise<T> {
+  if (!entity.childrenByKind.some(isPagedChildGroup)) return entity;
+
+  const [batch] = await fetchEntityChildren([entity.id], options);
+  const childrenByKind = new Map<string, EntityThumbnail[]>();
+  for (const child of batch?.items ?? []) {
+    const siblings = childrenByKind.get(child.kind);
+    if (siblings) siblings.push(child);
+    else childrenByKind.set(child.kind, [child]);
+  }
+  return {
+    ...entity,
+    childrenByKind: entity.childrenByKind.map((group) =>
+      isPagedChildGroup(group)
+        ? { ...group, entities: childrenByKind.get(group.kind) ?? group.entities, totalCount: null }
+        : group,
+    ),
+  };
+}
+
+function isPagedChildGroup(group: EntityChildGroup): boolean {
+  return group.totalCount != null && Number(group.totalCount) > group.entities.length;
 }
 
 export function refreshEntity(
