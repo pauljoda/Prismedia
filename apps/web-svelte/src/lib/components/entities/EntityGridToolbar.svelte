@@ -144,6 +144,12 @@
 
   onMount(() => collapse.connectScroll());
 
+  // Collapsing never hides the actions for a live selection: once selection mode is on or
+  // anything is selected, the bulk row stays reachable whatever the scroll position.
+  const showBulkSelectionBar = $derived(
+    selectable && (!collapse.barsCollapsed || selectionActive || selectedCount > 0),
+  );
+
 </script>
 
 <div class="toolbar-shell">
@@ -190,7 +196,7 @@
       />
     {/if}
 
-    {#if selectable && !collapse.barsCollapsed}
+    {#if showBulkSelectionBar}
       <BulkSelectionBar
         {allSelectedNsfw}
         {allSelectedWanted}

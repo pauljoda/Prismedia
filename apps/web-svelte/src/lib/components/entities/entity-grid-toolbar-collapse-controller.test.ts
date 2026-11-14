@@ -19,6 +19,35 @@ describe("EntityGridToolbarCollapseController", () => {
     scrollTarget.remove();
   });
 
+  it("expands untouched rows again when scrolled back to the top", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(1_000);
+    const controller = new EntityGridToolbarCollapseController(false, vi.fn());
+    const cleanup = controller.connectScroll();
+    const scrollTarget = document.createElement("div");
+    document.body.append(scrollTarget);
+    const scrollTo = (top: number) => {
+      scrollTarget.scrollTop = top;
+      scrollTarget.dispatchEvent(new Event("scroll", { bubbles: true }));
+    };
+
+    scrollTo(400);
+    expect(controller.barsCollapsed).toBe(true);
+
+    // Layout shifts while the rows slide away must not flip the toolbar straight back.
+    scrollTo(20);
+    expect(controller.barsCollapsed).toBe(true);
+
+    now.mockReturnValue(2_000);
+    scrollTo(300);
+    expect(controller.barsCollapsed).toBe(true);
+    scrollTo(0);
+    expect(controller.barsCollapsed).toBe(false);
+
+    cleanup();
+    scrollTarget.remove();
+    now.mockRestore();
+  });
+
   it("pins manual choices so later scroll events cannot change them", () => {
     const onManualChange = vi.fn();
     const controller = new EntityGridToolbarCollapseController(false, onManualChange);

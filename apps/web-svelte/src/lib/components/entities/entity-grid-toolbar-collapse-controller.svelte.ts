@@ -1,9 +1,20 @@
+/** Scroll offset inside which the page counts as "at the top" for auto-collapse decisions. */
+const TOP_ZONE_PX = 48;
+/** Smallest downward movement that compacts the toolbar, filtering out scroll jitter. */
+const COLLAPSE_DELTA_PX = 8;
+/**
+ * How long scroll events are ignored after an automatic change. The secondary rows slide for
+ * 200ms, and scroll anchoring can shift the scroll position while they do; acting on those shifts
+ * would flip the toolbar back and forth.
+ */
+const SETTLE_MS = 250;
+
 /**
  * Owns the toolbar's transient secondary-row collapse state.
  *
  * Manual toggles are persisted through the supplied callback and permanently pin
- * the current view for this mount. Scrolling only performs the one-way compacting
- * transition for an untouched toolbar.
+ * the current view for this mount. An untouched toolbar compacts after a meaningful
+ * downward scroll and expands again when scrolled back to the top.
  */
 export class EntityGridToolbarCollapseController {
   /** Whether the toolbar's filter and bulk-selection rows are currently hidden. */
@@ -29,22 +40,30 @@ export class EntityGridToolbarCollapseController {
   }
 
   /**
-   * Starts one-way scroll-driven collapsing and returns the listener cleanup.
+   * Starts scroll-driven collapsing and returns the listener cleanup.
    * It is invoked from the toolbar component's mount lifecycle, so it never
    * subscribes while rendering on the server.
    */
   connectScroll(): () => void {
     let lastY = window.scrollY;
+    let settleUntil = 0;
 
     const scrollTopOf = (target: EventTarget | null): number =>
       target instanceof HTMLElement ? target.scrollTop : window.scrollY;
 
     const onScroll = (event: Event) => {
-      if (this.#collapsePinned || this.barsCollapsed) return;
+      if (this.#collapsePinned) return;
       const y = scrollTopOf(event.target);
       const delta = y - lastY;
       lastY = y;
-      if (delta > 8 && y > 48) this.barsCollapsed = true;
+      if (performance.now() < settleUntil) return;
+
+      const next = this.barsCollapsed
+        ? !(delta < 0 && y <= TOP_ZONE_PX)
+        : delta > COLLAPSE_DELTA_PX && y > TOP_ZONE_PX;
+      if (next === this.barsCollapsed) return;
+      this.barsCollapsed = next;
+      settleUntil = performance.now() + SETTLE_MS;
     };
 
     window.addEventListener("scroll", onScroll, { capture: true, passive: true });

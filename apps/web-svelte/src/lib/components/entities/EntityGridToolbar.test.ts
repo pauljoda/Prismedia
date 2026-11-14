@@ -29,4 +29,16 @@ describe("EntityGridToolbar", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Show filter and selection rows" }));
     expect(onBarsCollapsedChange).toHaveBeenLastCalledWith(false);
   });
+
+  it("keeps the selection row available while selecting, even when collapsed", async () => {
+    render(EntityGridToolbar, { props: { canClearFilters: false } });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Hide filter and selection rows" }));
+    const selectionRow = screen.getByRole("status");
+    expect(within(selectionRow).getByText("0 selected")).toBeInTheDocument();
+
+    await fireEvent.click(within(selectionRow).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("button", { name: "Select" })).not.toBeInTheDocument();
+  });
 });
