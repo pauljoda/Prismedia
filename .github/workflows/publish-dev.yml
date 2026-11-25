@@ -53,6 +53,7 @@ jobs:
           context: .
           file: infra/docker/unified.Dockerfile
           push: true
+          sbom: true
           platforms: linux/amd64
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
